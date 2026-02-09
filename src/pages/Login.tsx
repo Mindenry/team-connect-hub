@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Video, Eye, EyeOff } from "lucide-react";
@@ -6,16 +6,51 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
+import { auth } from "@/lib/auth";
+
+const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
 
 export default function Login() {
   const navigate = useNavigate();
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleLogin = (e: React.FormEvent) => {
+  useEffect(() => {
+    if (auth.isAuthenticated()) {
+      navigate("/", { replace: true });
+    }
+  }, [navigate]);
+
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    navigate("/");
+    setLoading(true);
+    setError(null);
+
+    try {
+      const users = await fetch(`${API_BASE}/users`).then((r) => r.json());
+      const user = users.find((u: any) => u.email === email);
+      
+      if (!user) {
+        setError("Invalid email or password");
+        setLoading(false);
+        return;
+      }
+
+      auth.setUser({
+        id: user.id,
+        email: user.email,
+        name: user.name,
+      });
+      
+      navigate("/", { replace: true });
+    } catch (err: any) {
+      setError(err.message ?? "Login failed");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -65,7 +100,14 @@ export default function Login() {
                   </button>
                 </div>
               </div>
-              <Button type="submit" className="w-full">Sign In</Button>
+              {error && (
+                <div className="text-sm text-destructive bg-destructive/10 p-2 rounded">
+                  {error}
+                </div>
+              )}
+              <Button type="submit" className="w-full" disabled={loading}>
+                {loading ? "Signing in..." : "Sign In"}
+              </Button>
             </motion.form>
 
             <p className="text-xs text-sidebar-muted text-center mt-6">

@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
-  Monitor, Coffee, Video, Headphones, MessageSquare, Phone,
-  Wifi, WifiOff, Plus, Settings, MapPin,
+  Monitor, Coffee, Video, Headphones, Phone,
+  Wifi, WifiOff, Plus, MapPin,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -10,15 +10,18 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import StatusIndicator from "@/components/shared/StatusIndicator";
+import { auth } from "@/lib/auth";
+import { getSocket } from "@/lib/websocket";
+
+const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
 
 interface Person {
   id: string;
   name: string;
   initials: string;
   status: "online" | "busy" | "away" | "offline";
-  room: string;
+  currentRoom: string | null;
   activity: string;
-  avatar?: string;
 }
 
 interface Room {
@@ -40,18 +43,6 @@ const rooms: Room[] = [
   { id: "phone", name: "📞 Phone Booth", icon: Phone, description: "Private calls", color: "text-destructive", bgColor: "bg-destructive/5 border-destructive/20" },
 ];
 
-const people: Person[] = [
-  { id: "1", name: "สมชาย K.", initials: "SK", status: "online", room: "meeting-1", activity: "In Sprint Planning" },
-  { id: "2", name: "อริสา P.", initials: "AP", status: "online", room: "workspace", activity: "Working on designs" },
-  { id: "3", name: "จิรวัฒน์ W.", initials: "JW", status: "busy", room: "meeting-1", activity: "In Sprint Planning" },
-  { id: "4", name: "พิมพ์ L.", initials: "PL", status: "away", room: "lounge", activity: "On break ☕" },
-  { id: "5", name: "ธนา S.", initials: "TS", status: "online", room: "workspace", activity: "Coding — API v2" },
-  { id: "6", name: "นภา M.", initials: "NM", status: "online", room: "huddle", activity: "Pair programming" },
-  { id: "7", name: "กิตติ R.", initials: "KR", status: "online", room: "workspace", activity: "Reviewing docs" },
-  { id: "8", name: "ปรียา S.", initials: "PS", status: "online", room: "phone", activity: "Client call" },
-  { id: "9", name: "วิภา T.", initials: "VT", status: "offline", room: "workspace", activity: "Offline" },
-];
-
 const container = {
   animate: { transition: { staggerChildren: 0.06 } },
 };
@@ -62,10 +53,86 @@ const item = {
 };
 
 export default function VirtualOffice() {
+  const currentUser = auth.getUser();
   const [selectedRoom, setSelectedRoom] = useState<string | null>(null);
+  const [people, setPeople] = useState<Person[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [moving, setMoving] = useState(false);
 
-  const getRoomPeople = (roomId: string) => people.filter((p) => p.room === roomId);
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const users = await fetch(`${API_BASE}/users`).then((r) => r.json());
+        const mapped: Person[] = users.map((u: any) => ({
+          id: u.id,
+          name: u.name,
+          initials: u.name.split(" ").map((n: string) => n[0]).join(""),
+          status: u.status || "online",
+          currentRoom: u.currentRoom || null,
+          activity: u.activity || "Available",
+        }));
+        setPeople(mapped);
+      } catch (err) {
+        console.error("Failed to load users:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadData();
+  }, []);
+
+  // WebSocket for real-time room changes
+  useEffect(() => {
+    const socket = getSocket();
+
+    const handleRoomChange = (data: { userId: string; room: string | null }) => {
+      setPeople((prev) =>
+        prev.map((p) =>
+          p.id === data.userId ? { ...p, currentRoom: data.room } : p
+        )
+      );
+    };
+
+    const handleStatusChange = (data: { userId: string; status: string }) => {
+      setPeople((prev) =>
+        prev.map((p) =>
+          p.id === data.userId ? { ...p, status: data.status as Person["status"] } : p
+        )
+      );
+    };
+
+    socket.on("user:room:changed", handleRoomChange);
+    socket.on("user:status:changed", handleStatusChange);
+
+    return () => {
+      socket.off("user:room:changed", handleRoomChange);
+      socket.off("user:status:changed", handleStatusChange);
+    };
+  }, []);
+
+  const getRoomPeople = (roomId: string) =>
+    people.filter((p) => p.currentRoom === roomId);
+
   const onlinePeople = people.filter((p) => p.status !== "offline");
+
+  const moveToRoom = async (roomId: string) => {
+    if (!currentUser || moving) return;
+
+    setMoving(true);
+    try {
+      await fetch(`${API_BASE}/users/${currentUser.id}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currentRoom: roomId }),
+      });
+    } catch (err) {
+      console.error("Failed to move to room:", err);
+    } finally {
+      setMoving(false);
+    }
+  };
+
+  const currentUserRoom = people.find((p) => p.id === currentUser?.id)?.currentRoom;
 
   return (
     <motion.div
@@ -100,6 +167,7 @@ export default function VirtualOffice() {
         {rooms.map((room, idx) => {
           const roomPeople = getRoomPeople(room.id);
           const isSelected = selectedRoom === room.id;
+          const isCurrentRoom = currentUserRoom === room.id;
 
           return (
             <motion.div
@@ -113,7 +181,8 @@ export default function VirtualOffice() {
                 className={cn(
                   "cursor-pointer transition-all duration-200 border-2 overflow-hidden",
                   room.bgColor,
-                  isSelected && "ring-2 ring-primary shadow-lg"
+                  isSelected && "ring-2 ring-primary shadow-lg",
+                  isCurrentRoom && "ring-2 ring-success"
                 )}
                 onClick={() => setSelectedRoom(isSelected ? null : room.id)}
               >
@@ -121,6 +190,11 @@ export default function VirtualOffice() {
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-sm font-semibold">{room.name}</CardTitle>
                     <div className="flex items-center gap-1">
+                      {isCurrentRoom && (
+                        <Badge variant="default" className="text-[10px] h-5 bg-success">
+                          You're here
+                        </Badge>
+                      )}
                       {roomPeople.length > 0 && (
                         <Badge variant="secondary" className="text-[10px] h-5">
                           {roomPeople.length} {room.capacity ? `/ ${room.capacity}` : ""}
@@ -155,7 +229,7 @@ export default function VirtualOffice() {
                             <p className="text-xs font-medium text-foreground truncate">{person.name}</p>
                             <p className="text-[10px] text-muted-foreground truncate">{person.activity}</p>
                           </div>
-                          {person.room === "meeting-1" && (
+                          {room.id === "meeting-1" && (
                             <div className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
                           )}
                         </motion.div>
@@ -163,7 +237,21 @@ export default function VirtualOffice() {
                     </div>
                   )}
 
-                  {/* Quick action */}
+                  {/* Move to room / Quick actions */}
+                  {currentUser && !isCurrentRoom && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="w-full mt-2 text-xs h-7 gap-1"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        moveToRoom(room.id);
+                      }}
+                      disabled={moving}
+                    >
+                      {moving ? "Moving..." : "Move here"}
+                    </Button>
+                  )}
                   {room.id.startsWith("meeting") && roomPeople.length === 0 && (
                     <Button size="sm" variant="outline" className="w-full mt-2 text-xs h-7 gap-1">
                       <Plus className="w-3 h-3" /> Start Meeting

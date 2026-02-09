@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation, Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -10,12 +10,27 @@ import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import StatusIndicator from "@/components/shared/StatusIndicator";
+import { auth } from "@/lib/auth";
+
+const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
 
 interface NavItem {
   title: string;
   url: string;
   icon: React.ElementType;
   badge?: number;
+}
+
+interface Channel {
+  id: string;
+  name: string;
+  type: string;
+  teamId: string;
+}
+
+interface Team {
+  id: string;
+  name: string;
 }
 
 interface AppSidebarProps {
@@ -38,32 +53,42 @@ const bottomNav: NavItem[] = [
   { title: "Settings", url: "/settings", icon: Settings },
 ];
 
-const teams = [
-  {
-    name: "Engineering",
-    channels: [
-      { name: "general", icon: Hash, unread: 3 },
-      { name: "standup", icon: Volume2, unread: 0 },
-      { name: "announcements", icon: Megaphone, unread: 1 },
-    ],
-  },
-  {
-    name: "Design",
-    channels: [
-      { name: "general", icon: Hash, unread: 0 },
-      { name: "reviews", icon: Hash, unread: 2 },
-    ],
-  },
-];
+const channelIcons: Record<string, React.ElementType> = {
+  general: Hash,
+  announcement: Megaphone,
+  voice: Volume2,
+};
 
 export default function AppSidebar({ onNavigate }: AppSidebarProps) {
   const location = useLocation();
-  const [expandedTeams, setExpandedTeams] = useState<string[]>(["Engineering"]);
+  const currentUser = auth.getUser();
+  const [expandedTeams, setExpandedTeams] = useState<string[]>([]);
   const [collapsed, setCollapsed] = useState(false);
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [channels, setChannels] = useState<Channel[]>([]);
 
-  const toggleTeam = (name: string) => {
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const [teamsRes, channelsRes] = await Promise.all([
+          fetch(`${API_BASE}/teams`).then((r) => r.json()),
+          fetch(`${API_BASE}/channels`).then((r) => r.json()),
+        ]);
+        setTeams(teamsRes);
+        setChannels(channelsRes);
+        if (teamsRes.length > 0 && expandedTeams.length === 0) {
+          setExpandedTeams([teamsRes[0].id]);
+        }
+      } catch (err) {
+        console.error("Failed to load sidebar data:", err);
+      }
+    };
+    loadData();
+  }, []);
+
+  const toggleTeam = (id: string) => {
     setExpandedTeams((prev) =>
-      prev.includes(name) ? prev.filter((t) => t !== name) : [...prev, name]
+      prev.includes(id) ? prev.filter((t) => t !== id) : [...prev, id]
     );
   };
 
@@ -73,6 +98,8 @@ export default function AppSidebar({ onNavigate }: AppSidebarProps) {
   };
 
   const handleNav = () => onNavigate?.();
+
+  const getTeamChannels = (teamId: string) => channels.filter((c) => c.teamId === teamId);
 
   return (
     <aside
@@ -178,47 +205,51 @@ export default function AppSidebar({ onNavigate }: AppSidebarProps) {
                 <Plus className="w-3 h-3" />
               </button>
             </div>
-            {teams.map((team) => (
-              <div key={team.name}>
-                <button
-                  onClick={() => toggleTeam(team.name)}
-                  className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-sidebar-foreground hover:bg-sidebar-accent/50 rounded-lg transition-colors"
-                >
-                  <motion.div animate={{ rotate: expandedTeams.includes(team.name) ? 90 : 0 }} transition={{ duration: 0.15 }}>
-                    <ChevronRight className="w-3 h-3" />
-                  </motion.div>
-                  <span className="font-medium text-xs">{team.name}</span>
-                </button>
-                <AnimatePresence>
-                  {expandedTeams.includes(team.name) && (
-                    <motion.div
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: "auto", opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
-                      transition={{ duration: 0.15 }}
-                      className="overflow-hidden ml-4 space-y-0.5"
-                    >
-                      {team.channels.map((ch) => (
-                        <Link
-                          key={ch.name}
-                          to={`/chat?channel=${ch.name}`}
-                          onClick={handleNav}
-                          className="flex items-center gap-2 px-3 py-1 text-xs text-sidebar-muted hover:text-sidebar-accent-foreground hover:bg-sidebar-accent/50 rounded-lg transition-colors"
-                        >
-                          <ch.icon className="w-3 h-3" />
-                          <span className="flex-1">{ch.name}</span>
-                          {ch.unread > 0 && (
-                            <span className="text-[10px] bg-sidebar-primary text-sidebar-primary-foreground px-1.5 py-0.5 rounded-full font-medium">
-                              {ch.unread}
-                            </span>
-                          )}
-                        </Link>
-                      ))}
+            {teams.map((team) => {
+              const teamChannels = getTeamChannels(team.id);
+              return (
+                <div key={team.id}>
+                  <button
+                    onClick={() => toggleTeam(team.id)}
+                    className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-sidebar-foreground hover:bg-sidebar-accent/50 rounded-lg transition-colors"
+                  >
+                    <motion.div animate={{ rotate: expandedTeams.includes(team.id) ? 90 : 0 }} transition={{ duration: 0.15 }}>
+                      <ChevronRight className="w-3 h-3" />
                     </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
-            ))}
+                    <span className="font-medium text-xs">{team.name}</span>
+                    {teamChannels.length > 0 && (
+                      <span className="text-[10px] text-sidebar-muted ml-auto">{teamChannels.length}</span>
+                    )}
+                  </button>
+                  <AnimatePresence>
+                    {expandedTeams.includes(team.id) && (
+                      <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: "auto", opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.15 }}
+                        className="overflow-hidden ml-4 space-y-0.5"
+                      >
+                        {teamChannels.map((ch) => {
+                          const Icon = channelIcons[ch.type] || Hash;
+                          return (
+                            <Link
+                              key={ch.id}
+                              to={`/chat?channel=${ch.id}`}
+                              onClick={handleNav}
+                              className="flex items-center gap-2 px-3 py-1 text-xs text-sidebar-muted hover:text-sidebar-accent-foreground hover:bg-sidebar-accent/50 rounded-lg transition-colors"
+                            >
+                              <Icon className="w-3 h-3" />
+                              <span className="flex-1">{ch.name}</span>
+                            </Link>
+                          );
+                        })}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              );
+            })}
           </div>
         )}
       </nav>
@@ -257,13 +288,17 @@ export default function AppSidebar({ onNavigate }: AppSidebarProps) {
         <div className="flex items-center gap-3">
           <div className="relative">
             <Avatar className="h-8 w-8 ring-2 ring-sidebar-primary/30">
-              <AvatarFallback className="bg-sidebar-primary text-sidebar-primary-foreground text-xs font-medium">SK</AvatarFallback>
+              <AvatarFallback className="bg-sidebar-primary text-sidebar-primary-foreground text-xs font-medium">
+                {currentUser?.name ? currentUser.name.split(" ").map(n => n[0]).join("") : "SK"}
+              </AvatarFallback>
             </Avatar>
             <StatusIndicator status="online" className="absolute -bottom-0.5 -right-0.5 glow-success" />
           </div>
           {(!collapsed || onNavigate) && (
             <div className="flex-1 min-w-0">
-              <p className="text-xs font-semibold text-sidebar-accent-foreground truncate">สมชาย K.</p>
+              <p className="text-xs font-semibold text-sidebar-accent-foreground truncate">
+                {currentUser?.name || "Guest User"}
+              </p>
               <p className="text-[10px] text-sidebar-muted truncate">🟢 Available</p>
             </div>
           )}

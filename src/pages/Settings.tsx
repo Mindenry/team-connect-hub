@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { motion } from "framer-motion";
 import { User, Camera, Bell, Lock, Save } from "lucide-react";
@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useAuth } from "@/lib/auth";
 
 const sections = [
   { id: "profile", label: "Profile", icon: User },
@@ -19,9 +20,19 @@ const sections = [
 ];
 
 export default function SettingsPage() {
+  const { user } = useAuth();
   const isMobile = useIsMobile();
   const [activeSection, setActiveSection] = useState("profile");
   const [status, setStatus] = useState("online");
+  const [name, setName] = useState(user?.name || "");
+  const [email, setEmail] = useState(user?.email || "");
+
+  useEffect(() => {
+    if (user) {
+      setName(user.name);
+      setEmail(user.email);
+    }
+  }, [user]);
 
   const renderContent = () => {
     const content = (() => {
@@ -33,14 +44,15 @@ export default function SettingsPage() {
               <Card>
                 <CardContent className="p-6 space-y-6">
                   <div className="flex items-center gap-4">
-                    <Avatar className="h-16 w-16"><AvatarFallback className="bg-primary text-primary-foreground text-lg">SK</AvatarFallback></Avatar>
+                    <Avatar className="h-16 w-16">
+                      <AvatarFallback className="bg-primary text-primary-foreground text-lg">
+                        {user?.name?.split(" ").map((n: string) => n[0]).join("").toUpperCase() || "U"}
+                      </AvatarFallback>
+                    </Avatar>
                     <div><Button variant="outline" size="sm">Change Photo</Button><p className="text-xs text-muted-foreground mt-1">JPG, PNG. Max 2MB</p></div>
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div><Label>First Name</Label><Input defaultValue="สมชาย" className="mt-1" /></div>
-                    <div><Label>Last Name</Label><Input defaultValue="K." className="mt-1" /></div>
-                  </div>
-                  <div><Label>Email</Label><Input defaultValue="somchai@acme.com" className="mt-1" disabled /></div>
+                  <div><Label>Name</Label><Input value={name} onChange={(e) => setName(e.target.value)} className="mt-1" /></div>
+                  <div><Label>Email</Label><Input value={email} className="mt-1" disabled /></div>
                   <div>
                     <Label>Status</Label>
                     <Select value={status} onValueChange={setStatus}>

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
@@ -17,35 +17,9 @@ import FocusTimer from "@/components/widgets/FocusTimer";
 import MoodCheckin from "@/components/widgets/MoodCheckin";
 import TimeZoneWidget from "@/components/widgets/TimeZoneWidget";
 import WorkHoursTracker from "@/components/widgets/WorkHoursTracker";
+import { auth } from "@/lib/auth";
 
-const upcomingMeetings = [
-  { id: 1, title: "Sprint Planning", time: "10:00 AM", team: "Engineering", participants: 8, isNow: true },
-  { id: 2, title: "Design Review", time: "2:00 PM", team: "Design", participants: 5, isNow: false },
-  { id: 3, title: "1-on-1 with Manager", time: "4:30 PM", team: "", participants: 2, isNow: false },
-];
-
-const recentTasks = [
-  { id: 1, title: "Fix login bug on mobile", priority: "high", status: "in_progress", assignee: "SK" },
-  { id: 2, title: "Update API documentation", priority: "medium", status: "todo", assignee: "AP" },
-  { id: 3, title: "Review PR #142", priority: "low", status: "todo", assignee: "SK" },
-  { id: 4, title: "Deploy staging v2.3", priority: "high", status: "done", assignee: "JW" },
-];
-
-const onlineMembers = [
-  { name: "สมชาย K.", initials: "SK", status: "online" as const, activity: "In meeting", room: "🎥 Meeting A" },
-  { name: "อริสา P.", initials: "AP", status: "online" as const, activity: "Designing", room: "💻 Workspace" },
-  { name: "จิรวัฒน์ W.", initials: "JW", status: "busy" as const, activity: "Do not disturb", room: "💻 Workspace" },
-  { name: "พิมพ์ L.", initials: "PL", status: "away" as const, activity: "On break", room: "☕ Lounge" },
-  { name: "ธนา S.", initials: "TS", status: "online" as const, activity: "Coding", room: "💻 Workspace" },
-];
-
-const activityFeed = [
-  { id: 1, user: "อริสา P.", action: "created channel #design-system", icon: Hash, time: "10m ago", color: "bg-primary/10 text-primary" },
-  { id: 2, user: "จิรวัฒน์ W.", action: "completed 'Setup CI/CD pipeline'", icon: CheckSquare, time: "25m ago", color: "bg-success/10 text-success" },
-  { id: 3, user: "ธนา S.", action: "joined Sprint Planning", icon: Video, time: "30m ago", color: "bg-primary/10 text-primary" },
-  { id: 4, user: "พิมพ์ L.", action: "uploaded PR #142", icon: Activity, time: "1h ago", color: "bg-warning/10 text-warning" },
-  { id: 5, user: "นภา M.", action: "mentioned you in #general", icon: MessageSquare, time: "2h ago", color: "bg-destructive/10 text-destructive" },
-];
+const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
 
 const priorityColors: Record<string, string> = {
   high: "bg-destructive/10 text-destructive border-destructive/20",
@@ -59,6 +33,79 @@ const item = { initial: { opacity: 0, y: 10 }, animate: { opacity: 1, y: 0, tran
 export default function Dashboard() {
   const [showCreateMeeting, setShowCreateMeeting] = useState(false);
   const [showCreateTask, setShowCreateTask] = useState(false);
+  const [upcomingMeetings, setUpcomingMeetings] = useState<any[]>([]);
+  const [recentTasks, setRecentTasks] = useState<any[]>([]);
+  const [onlineMembers, setOnlineMembers] = useState<any[]>([]);
+  const [stats, setStats] = useState({
+    meetingsToday: 0,
+    openTasks: 0,
+    unreadMessages: 0,
+    teamOnline: "0/0",
+  });
+  const [loading, setLoading] = useState(true);
+  const currentUser = auth.getUser();
+
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const tomorrow = new Date(today);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+
+        const [meetingsRes, tasksRes, usersRes, teamsRes] = await Promise.all([
+          fetch(`${API_BASE}/meetings?status=upcoming`).then((r) => r.json()),
+          fetch(`${API_BASE}/tasks?status=todo,in_progress`).then((r) => r.json()),
+          fetch(`${API_BASE}/users`).then((r) => r.json()),
+          fetch(`${API_BASE}/teams`).then((r) => r.json()),
+        ]);
+
+        const upcoming = meetingsRes
+          .filter((m: any) => new Date(m.startTime) >= today && new Date(m.startTime) < tomorrow)
+          .slice(0, 3)
+          .map((m: any) => ({
+            id: m.id,
+            title: m.title,
+            time: new Date(m.startTime).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
+            team: m.team?.name || "",
+            participants: 0,
+            isNow: m.status === "live",
+          }));
+
+        const tasks = tasksRes.slice(0, 4).map((t: any) => ({
+          id: t.id,
+          title: t.title,
+          priority: t.priority,
+          status: t.status,
+          assignee: t.assignee?.name?.split(" ").map((n: string) => n[0]).join("") || "",
+        }));
+
+        const members = usersRes.slice(0, 5).map((u: any) => ({
+          name: u.name,
+          initials: u.name.split(" ").map((n: string) => n[0]).join(""),
+          status: "online" as const,
+          activity: "Available",
+          room: "💻 Workspace",
+        }));
+
+        setUpcomingMeetings(upcoming);
+        setRecentTasks(tasks);
+        setOnlineMembers(members);
+        setStats({
+          meetingsToday: upcoming.length,
+          openTasks: tasksRes.length,
+          unreadMessages: 0,
+          teamOnline: `${members.length}/${usersRes.length}`,
+        });
+      } catch (err) {
+        console.error("Failed to load dashboard data:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadData();
+  }, []);
 
   return (
     <motion.div className="p-4 md:p-6 space-y-4 md:space-y-5 max-w-[1400px]" variants={container} initial="initial" animate="animate">
@@ -68,8 +115,12 @@ export default function Dashboard() {
       {/* Header */}
       <motion.div variants={item} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl md:text-2xl font-bold text-foreground">Good morning, สมชาย 👋</h1>
-          <p className="text-xs md:text-sm text-muted-foreground">Monday, Feb 9 · 3 meetings · 4 tasks due today</p>
+          <h1 className="text-xl md:text-2xl font-bold text-foreground">
+            Good {new Date().getHours() < 12 ? "morning" : new Date().getHours() < 18 ? "afternoon" : "evening"}, {currentUser?.name || "User"} 👋
+          </h1>
+          <p className="text-xs md:text-sm text-muted-foreground">
+            {new Date().toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" })} · {stats.meetingsToday} meetings · {stats.openTasks} tasks
+          </p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={() => setShowCreateMeeting(true)} className="gap-2">
@@ -104,10 +155,10 @@ export default function Dashboard() {
       {/* Stats Cards */}
       <motion.div variants={item} className="grid grid-cols-2 gap-3">
         {[
-          { label: "Meetings Today", value: "3", icon: Video, trend: "+1 from yesterday", trendColor: "text-success", gradient: "from-primary/10 to-info/10" },
-          { label: "Open Tasks", value: "12", icon: CheckSquare, trend: "4 due today", trendColor: "text-warning", gradient: "from-warning/10 to-warning/5" },
-          { label: "Unread Messages", value: "5", icon: MessageSquare, trend: "2 mentions", trendColor: "text-primary", gradient: "from-primary/5 to-info/5" },
-          { label: "Team Online", value: "8/12", icon: Users, trend: "67% active", trendColor: "text-success", gradient: "from-success/10 to-success/5" },
+          { label: "Meetings Today", value: stats.meetingsToday.toString(), icon: Video, trend: "", trendColor: "text-success", gradient: "from-primary/10 to-info/10" },
+          { label: "Open Tasks", value: stats.openTasks.toString(), icon: CheckSquare, trend: "", trendColor: "text-warning", gradient: "from-warning/10 to-warning/5" },
+          { label: "Unread Messages", value: stats.unreadMessages.toString(), icon: MessageSquare, trend: "", trendColor: "text-primary", gradient: "from-primary/5 to-info/5" },
+          { label: "Team Online", value: stats.teamOnline, icon: Users, trend: "", trendColor: "text-success", gradient: "from-success/10 to-success/5" },
         ].map((stat, i) => (
           <motion.div key={stat.label} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.08 + i * 0.04 }}>
             <Card className={`card-hover bg-gradient-to-br ${stat.gradient} border-0 shadow-sm`}>
@@ -116,7 +167,7 @@ export default function Dashboard() {
                   <div>
                     <p className="text-xs text-muted-foreground font-medium">{stat.label}</p>
                     <p className="text-2xl font-bold text-foreground mt-0.5">{stat.value}</p>
-                    <p className={`text-[10px] mt-0.5 font-medium ${stat.trendColor}`}>{stat.trend}</p>
+                    {stat.trend && <p className={`text-[10px] mt-0.5 font-medium ${stat.trendColor}`}>{stat.trend}</p>}
                   </div>
                   <div className="w-9 h-9 rounded-xl bg-card/80 flex items-center justify-center shadow-sm">
                     <stat.icon className="w-4 h-4 text-primary" />
@@ -147,7 +198,12 @@ export default function Dashboard() {
             </div>
           </CardHeader>
           <CardContent className="space-y-2">
-            {upcomingMeetings.map((meeting, i) => (
+            {loading ? (
+              <div className="text-sm text-muted-foreground">Loading...</div>
+            ) : upcomingMeetings.length === 0 ? (
+              <div className="text-sm text-muted-foreground">No upcoming meetings</div>
+            ) : (
+              upcomingMeetings.map((meeting, i) => (
               <motion.div key={meeting.id} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.15 + i * 0.05 }}
                 className="flex items-center gap-3 p-2.5 rounded-lg border bg-card hover:bg-muted/30 transition-all">
                 <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
@@ -164,7 +220,8 @@ export default function Dashboard() {
                   <Link to="/meeting-room">{meeting.isNow ? "Join" : "View"}</Link>
                 </Button>
               </motion.div>
-            ))}
+              ))
+            )}
           </CardContent>
         </Card>
 
@@ -196,7 +253,12 @@ export default function Dashboard() {
             </div>
           </CardHeader>
           <CardContent className="space-y-2.5">
-            {onlineMembers.map((member, i) => (
+            {loading ? (
+              <div className="text-sm text-muted-foreground">Loading...</div>
+            ) : onlineMembers.length === 0 ? (
+              <div className="text-sm text-muted-foreground">No team members</div>
+            ) : (
+              onlineMembers.map((member, i) => (
               <motion.div key={member.name} initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.2 + i * 0.04 }}
                 className="flex items-center gap-2.5">
                 <div className="relative">
@@ -209,7 +271,8 @@ export default function Dashboard() {
                 </div>
                 <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">{member.room}</span>
               </motion.div>
-            ))}
+              ))
+            )}
           </CardContent>
         </Card>
 
@@ -233,13 +296,19 @@ export default function Dashboard() {
             </div>
           </CardHeader>
           <CardContent className="space-y-1.5">
-            {recentTasks.map((task) => (
-              <div key={task.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors">
-                <CheckSquare className={`w-4 h-4 shrink-0 ${task.status === "done" ? "text-success" : "text-muted-foreground"}`} />
-                <span className={`flex-1 text-sm text-foreground truncate ${task.status === "done" ? "line-through text-muted-foreground" : ""}`}>{task.title}</span>
-                <Badge variant="outline" className={`text-[10px] ${priorityColors[task.priority]}`}>{task.priority}</Badge>
-              </div>
-            ))}
+            {loading ? (
+              <div className="text-sm text-muted-foreground">Loading...</div>
+            ) : recentTasks.length === 0 ? (
+              <div className="text-sm text-muted-foreground">No tasks</div>
+            ) : (
+              recentTasks.map((task) => (
+                <div key={task.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors">
+                  <CheckSquare className={`w-4 h-4 shrink-0 ${task.status === "done" ? "text-success" : "text-muted-foreground"}`} />
+                  <span className={`flex-1 text-sm text-foreground truncate ${task.status === "done" ? "line-through text-muted-foreground" : ""}`}>{task.title}</span>
+                  <Badge variant="outline" className={`text-[10px] ${priorityColors[task.priority]}`}>{task.priority}</Badge>
+                </div>
+              ))
+            )}
           </CardContent>
         </Card>
 
@@ -247,17 +316,7 @@ export default function Dashboard() {
         <Card>
           <CardHeader className="pb-2"><CardTitle className="text-sm">Recent Activity</CardTitle></CardHeader>
           <CardContent className="space-y-2.5">
-            {activityFeed.map((act) => (
-              <div key={act.id} className="flex items-start gap-2.5">
-                <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 mt-0.5 ${act.color}`}>
-                  <act.icon className="w-3.5 h-3.5" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs text-foreground"><span className="font-medium">{act.user}</span> {act.action}</p>
-                  <p className="text-[10px] text-muted-foreground">{act.time}</p>
-                </div>
-              </div>
-            ))}
+            <div className="text-sm text-muted-foreground">No recent activity</div>
           </CardContent>
         </Card>
       </motion.div>

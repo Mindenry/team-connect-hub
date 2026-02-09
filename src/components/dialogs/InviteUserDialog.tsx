@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { UserPlus, Mail, Copy, Link, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,12 +14,30 @@ import {
   AnimatedDialogTitle as DialogTitle,
 } from "@/components/shared/AnimatedDialog";
 
-interface InviteUserDialogProps { open: boolean; onOpenChange: (open: boolean) => void; }
+const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
 
-export default function InviteUserDialog({ open, onOpenChange }: InviteUserDialogProps) {
+interface InviteUserDialogProps { open: boolean; onOpenChange: (open: boolean) => void; teamId?: string; }
+
+export default function InviteUserDialog({ open, onOpenChange, teamId }: InviteUserDialogProps) {
   const [emails, setEmails] = useState<string[]>([]);
   const [emailInput, setEmailInput] = useState("");
-  const [inviteLink] = useState("https://collabhub.app/invite/abc123xyz");
+  const [role, setRole] = useState("member");
+  const [selectedTeamId, setSelectedTeamId] = useState(teamId || "");
+  const [teams, setTeams] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (open) {
+      fetch(`${API_BASE}/teams`)
+        .then((r) => r.json())
+        .then((data) => {
+          setTeams(data);
+          if (teamId) setSelectedTeamId(teamId);
+        })
+        .catch(() => {});
+    }
+  }, [open, teamId]);
 
   const addEmail = () => {
     const trimmed = emailInput.trim();
@@ -53,18 +71,64 @@ export default function InviteUserDialog({ open, onOpenChange }: InviteUserDialo
               </div>
             )}
             <div className="grid grid-cols-2 gap-3">
-              <div><Label>Role</Label><Select defaultValue="member"><SelectTrigger className="mt-1"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="admin">Admin</SelectItem><SelectItem value="manager">Manager</SelectItem><SelectItem value="member">Member</SelectItem></SelectContent></Select></div>
-              <div><Label>Team</Label><Select><SelectTrigger className="mt-1"><SelectValue placeholder="Select" /></SelectTrigger><SelectContent><SelectItem value="engineering">Engineering</SelectItem><SelectItem value="design">Design</SelectItem><SelectItem value="operations">Operations</SelectItem></SelectContent></Select></div>
-            </div>
-            <div className="pt-3 border-t">
-              <Label className="flex items-center gap-1"><Link className="w-3 h-3" /> Or share invite link</Label>
-              <div className="flex gap-2 mt-1"><Input value={inviteLink} readOnly className="text-xs bg-muted" /><Button size="icon" variant="outline"><Copy className="w-4 h-4" /></Button></div>
-              <p className="text-xs text-muted-foreground mt-1">Link expires in 7 days</p>
+              <div><Label>Role</Label><Select value={role} onValueChange={setRole}><SelectTrigger className="mt-1"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="admin">Admin</SelectItem><SelectItem value="member">Member</SelectItem></SelectContent></Select></div>
+              <div><Label>Team</Label><Select value={selectedTeamId} onValueChange={setSelectedTeamId}><SelectTrigger className="mt-1"><SelectValue placeholder="Select" /></SelectTrigger><SelectContent>
+                {teams.map((team) => (
+                  <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>
+                ))}
+              </SelectContent></Select></div>
             </div>
           </div>
+          {error && <div className="text-sm text-destructive bg-destructive/10 p-2 rounded">{error}</div>}
           <DialogFooter>
-            <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button onClick={() => onOpenChange(false)} disabled={emails.length === 0}>Send {emails.length > 0 ? `${emails.length} Invite${emails.length > 1 ? "s" : ""}` : "Invites"}</Button>
+            <Button variant="outline" onClick={() => { onOpenChange(false); setError(null); setEmails([]); setEmailInput(""); }}>Cancel</Button>
+            <Button onClick={async () => {
+              if (emails.length === 0) {
+                setError("Please add at least one email");
+                return;
+              }
+              if (!selectedTeamId) {
+                setError("Please select a team");
+                return;
+              }
+              setLoading(true);
+              setError(null);
+              try {
+                const users = await fetch(`${API_BASE}/users`).then((r) => r.json());
+                const results = await Promise.all(
+                  emails.map(async (email) => {
+                    let user = users.find((u: any) => u.email === email);
+                    if (!user) {
+                      const name = email.split("@")[0];
+                      const createRes = await fetch(`${API_BASE}/users`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ email, name }),
+                      });
+                      if (!createRes.ok) throw new Error(`Failed to create user ${email}`);
+                      user = await createRes.json();
+                    }
+                    const addRes = await fetch(`${API_BASE}/teams/${selectedTeamId}/members`, {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ userId: user.id, role }),
+                    });
+                    if (!addRes.ok) throw new Error(`Failed to add ${email} to team`);
+                    return user;
+                  })
+                );
+                onOpenChange(false);
+                setEmails([]);
+                setEmailInput("");
+                window.location.reload();
+              } catch (err: any) {
+                setError(err.message ?? "Failed to invite users");
+              } finally {
+                setLoading(false);
+              }
+            }} disabled={emails.length === 0 || loading}>
+              {loading ? "Inviting..." : `Send ${emails.length > 0 ? `${emails.length} Invite${emails.length > 1 ? "s" : ""}` : "Invites"}`}
+            </Button>
           </DialogFooter>
         </DialogContent>
       )}

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   CheckSquare, Calendar, User, Tag, Flag, Link as LinkIcon, FileText,
 } from "lucide-react";
@@ -16,13 +16,42 @@ import {
   AnimatedDialogTitle as DialogTitle,
 } from "@/components/shared/AnimatedDialog";
 
+const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
+
 interface CreateTaskDialogProps { open: boolean; onOpenChange: (open: boolean) => void; }
 
 const tagOptions = ["frontend", "backend", "design", "bug", "feature", "docs", "testing", "devops", "ux", "mobile"];
 
 export default function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialogProps) {
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [title, setTitle] = useState("");
+  const [taskDescription, setTaskDescription] = useState("");
+  const [assigneeId, setAssigneeId] = useState("");
+  const [priority, setPriority] = useState("medium");
+  const [dueDate, setDueDate] = useState("");
+  const [teamId, setTeamId] = useState("");
+  const [meetingId, setMeetingId] = useState("");
+  const [users, setUsers] = useState<any[]>([]);
+  const [teams, setTeams] = useState<any[]>([]);
+  const [meetings, setMeetings] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
   const toggleTag = (tag: string) => setSelectedTags((prev) => prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]);
+
+  useEffect(() => {
+    if (open) {
+      Promise.all([
+        fetch(`${API_BASE}/users`).then((r) => r.json()),
+        fetch(`${API_BASE}/teams`).then((r) => r.json()),
+        fetch(`${API_BASE}/meetings`).then((r) => r.json()),
+      ]).then(([usersData, teamsData, meetingsData]) => {
+        setUsers(usersData);
+        setTeams(teamsData);
+        setMeetings(meetingsData);
+      }).catch(() => {});
+    }
+  }, [open]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -33,29 +62,40 @@ export default function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialo
             <DialogDescription>Create a new task and assign it to a team member</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            <div><Label>Task Title</Label><Input placeholder="e.g., Fix login bug on mobile" className="mt-1" /></div>
-            <div><Label>Description</Label><Textarea placeholder="Add task details..." className="mt-1 min-h-[80px]" /></div>
+            <div><Label>Task Title</Label><Input placeholder="e.g., Fix login bug on mobile" className="mt-1" value={title} onChange={(e) => setTitle(e.target.value)} /></div>
+            <div><Label>Description</Label><Textarea placeholder="Add task details..." className="mt-1 min-h-[80px]" value={taskDescription} onChange={(e) => setTaskDescription(e.target.value)} /></div>
             <div className="grid grid-cols-2 gap-3">
               <div><Label className="flex items-center gap-1"><User className="w-3 h-3" /> Assignee</Label>
-                <Select><SelectTrigger className="mt-1"><SelectValue placeholder="Select" /></SelectTrigger>
+                <Select value={assigneeId} onValueChange={setAssigneeId}><SelectTrigger className="mt-1"><SelectValue placeholder="Select" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="sk">สมชาย K.</SelectItem><SelectItem value="ap">อริสา P.</SelectItem>
-                    <SelectItem value="jw">จิรวัฒน์ W.</SelectItem><SelectItem value="pl">พิมพ์ L.</SelectItem>
-                    <SelectItem value="ts">ธนา S.</SelectItem><SelectItem value="nm">นภา M.</SelectItem>
+                    <SelectItem value="">Unassigned</SelectItem>
+                    {users.map((user) => (
+                      <SelectItem key={user.id} value={user.id}>{user.name}</SelectItem>
+                    ))}
                   </SelectContent></Select></div>
               <div><Label className="flex items-center gap-1"><Flag className="w-3 h-3" /> Priority</Label>
-                <Select><SelectTrigger className="mt-1"><SelectValue placeholder="Select" /></SelectTrigger>
+                <Select value={priority} onValueChange={setPriority}><SelectTrigger className="mt-1"><SelectValue placeholder="Select" /></SelectTrigger>
                   <SelectContent><SelectItem value="high">🔴 High</SelectItem><SelectItem value="medium">🟡 Medium</SelectItem><SelectItem value="low">🟢 Low</SelectItem></SelectContent></Select></div>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <div><Label className="flex items-center gap-1"><Calendar className="w-3 h-3" /> Due Date</Label><Input type="date" className="mt-1" /></div>
+              <div><Label className="flex items-center gap-1"><Calendar className="w-3 h-3" /> Due Date</Label><Input type="date" className="mt-1" value={dueDate} onChange={(e) => setDueDate(e.target.value)} /></div>
               <div><Label className="flex items-center gap-1"><LinkIcon className="w-3 h-3" /> Team</Label>
-                <Select><SelectTrigger className="mt-1"><SelectValue placeholder="Select" /></SelectTrigger>
-                  <SelectContent><SelectItem value="engineering">Engineering</SelectItem><SelectItem value="design">Design</SelectItem><SelectItem value="operations">Operations</SelectItem></SelectContent></Select></div>
+                <Select value={teamId} onValueChange={setTeamId}><SelectTrigger className="mt-1"><SelectValue placeholder="Select" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">No team</SelectItem>
+                    {teams.map((team) => (
+                      <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>
+                    ))}
+                  </SelectContent></Select></div>
             </div>
             <div><Label className="flex items-center gap-1"><LinkIcon className="w-3 h-3" /> Link to Meeting (optional)</Label>
-              <Select><SelectTrigger className="mt-1"><SelectValue placeholder="None" /></SelectTrigger>
-                <SelectContent><SelectItem value="none">None</SelectItem><SelectItem value="sprint">Sprint Planning</SelectItem><SelectItem value="design-review">Design Review</SelectItem><SelectItem value="roadmap">Product Roadmap Discussion</SelectItem></SelectContent></Select></div>
+              <Select value={meetingId} onValueChange={setMeetingId}><SelectTrigger className="mt-1"><SelectValue placeholder="None" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">None</SelectItem>
+                  {meetings.map((meeting) => (
+                    <SelectItem key={meeting.id} value={meeting.id}>{meeting.title}</SelectItem>
+                  ))}
+                </SelectContent></Select></div>
             <div><Label className="flex items-center gap-1"><Tag className="w-3 h-3" /> Tags</Label>
               <div className="flex flex-wrap gap-1.5 mt-2">
                 {tagOptions.map((tag) => (
@@ -67,9 +107,51 @@ export default function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialo
               </div>
             </div>
           </div>
+          {error && <div className="text-sm text-destructive bg-destructive/10 p-2 rounded">{error}</div>}
           <DialogFooter>
-            <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button onClick={() => onOpenChange(false)}>Create Task</Button>
+            <Button variant="outline" onClick={() => { onOpenChange(false); setError(null); setTitle(""); setTaskDescription(""); setAssigneeId(""); setDueDate(""); setTeamId(""); setMeetingId(""); setSelectedTags([]); }}>Cancel</Button>
+            <Button onClick={async () => {
+              if (!title.trim()) {
+                setError("Please enter a task title");
+                return;
+              }
+              setLoading(true);
+              setError(null);
+              try {
+                const res = await fetch(`${API_BASE}/tasks`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    title,
+                    description: taskDescription || null,
+                    priority,
+                    status: "todo",
+                    dueDate: dueDate ? new Date(dueDate).toISOString() : null,
+                    tags: selectedTags,
+                    assigneeId: assigneeId || null,
+                    teamId: teamId || null,
+                    meetingId: meetingId || null,
+                  }),
+                });
+
+                if (!res.ok) throw new Error("Failed to create task");
+                onOpenChange(false);
+                setTitle("");
+                setTaskDescription("");
+                setAssigneeId("");
+                setDueDate("");
+                setTeamId("");
+                setMeetingId("");
+                setSelectedTags([]);
+                window.location.reload();
+              } catch (err: any) {
+                setError(err.message ?? "Failed to create task");
+              } finally {
+                setLoading(false);
+              }
+            }} disabled={loading}>
+              {loading ? "Creating..." : "Create Task"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       )}

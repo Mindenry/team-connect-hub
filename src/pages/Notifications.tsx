@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
   Bell,
@@ -28,16 +28,7 @@ interface Notification {
   icon: React.ElementType;
 }
 
-const notifications: Notification[] = [
-  { id: "1", type: "meeting", title: "Sprint Planning starting now", description: "Join the Engineering team meeting", time: "Just now", isRead: false, icon: Video },
-  { id: "2", type: "mention", title: "อริสา P. mentioned you", description: "\"@สมชาย เช็ค PR ให้หน่อยค่ะ\"", time: "5m ago", isRead: false, icon: AtSign },
-  { id: "3", type: "task", title: "Task assigned: Fix login bug", description: "High priority · Due Feb 10", time: "15m ago", isRead: false, icon: CheckSquare },
-  { id: "4", type: "announcement", title: "Company announcement", description: "Office closed next Friday for maintenance", time: "1h ago", isRead: false, icon: Megaphone },
-  { id: "5", type: "mention", title: "จิรวัฒน์ W. replied to your message", description: "\"เห็นด้วยครับ ทำ approach B ดีกว่า\"", time: "2h ago", isRead: true, icon: MessageSquare },
-  { id: "6", type: "team", title: "New member joined Design team", description: "ปรียา S. has been added to Design", time: "3h ago", isRead: true, icon: Users },
-  { id: "7", type: "meeting", title: "Design Review scheduled", description: "Tomorrow at 2:00 PM with Design team", time: "4h ago", isRead: true, icon: Video },
-  { id: "8", type: "task", title: "Task status changed", description: "\"Database migration v2.3\" moved to Done by ธนา S.", time: "5h ago", isRead: true, icon: CheckSquare },
-];
+const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
 
 const typeColors: Record<string, string> = {
   mention: "bg-primary/10 text-primary",
@@ -48,7 +39,59 @@ const typeColors: Record<string, string> = {
 };
 
 export default function Notifications() {
-  const [items, setItems] = useState(notifications);
+  const [items, setItems] = useState<Notification[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const [meetings, tasks, teams] = await Promise.all([
+          fetch(`${API_BASE}/meetings`).then((r) => r.json()),
+          fetch(`${API_BASE}/tasks`).then((r) => r.json()),
+          fetch(`${API_BASE}/teams`).then((r) => r.json()),
+        ]);
+
+        const now = new Date();
+        const notifications: Notification[] = [];
+
+        meetings.slice(0, 3).forEach((m: any) => {
+          const start = new Date(m.startTime);
+          const diffMinutes = Math.floor((start.getTime() - now.getTime()) / 60000);
+          if (diffMinutes > 0 && diffMinutes < 60) {
+            notifications.push({
+              id: `meeting-${m.id}`,
+              type: "meeting",
+              title: `${m.title} starting soon`,
+              description: `Join the ${m.team?.name || ""} team meeting`,
+              time: diffMinutes < 5 ? "Just now" : `${diffMinutes}m ago`,
+              isRead: false,
+              icon: Video,
+            });
+          }
+        });
+
+        tasks.slice(0, 2).forEach((t: any) => {
+          notifications.push({
+            id: `task-${t.id}`,
+            type: "task",
+            title: `Task assigned: ${t.title}`,
+            description: `${t.priority} priority${t.dueDate ? ` · Due ${new Date(t.dueDate).toLocaleDateString()}` : ""}`,
+            time: "Recently",
+            isRead: false,
+            icon: CheckSquare,
+          });
+        });
+
+        setItems(notifications);
+      } catch (err) {
+        console.error("Failed to load notifications:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadData();
+  }, []);
+
   const unreadCount = items.filter((n) => !n.isRead).length;
 
   const markAllRead = () => setItems((prev) => prev.map((n) => ({ ...n, isRead: true })));
@@ -84,7 +127,12 @@ export default function Notifications() {
           </TabsList>
 
           <TabsContent value="all" className="space-y-1">
-            {items.map((n, i) => (
+            {loading ? (
+              <div className="text-muted-foreground p-4">Loading...</div>
+            ) : items.length === 0 ? (
+              <div className="text-muted-foreground p-4">No notifications</div>
+            ) : (
+              items.map((n, i) => (
               <motion.button
                 key={n.id}
                 initial={{ opacity: 0, x: -10 }}
@@ -110,7 +158,8 @@ export default function Notifications() {
                   <div className="w-2 h-2 rounded-full bg-primary mt-2 shrink-0" />
                 )}
               </motion.button>
-            ))}
+              ))
+            )}
           </TabsContent>
 
           <TabsContent value="mentions" className="space-y-1">

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Video, Calendar, Clock, Users, Shield, FileText, X,
 } from "lucide-react";
@@ -16,6 +16,9 @@ import {
   AnimatedDialogHeader as DialogHeader,
   AnimatedDialogTitle as DialogTitle,
 } from "@/components/shared/AnimatedDialog";
+import { auth } from "@/lib/auth";
+
+const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
 
 interface CreateMeetingDialogProps {
   open: boolean;
@@ -26,6 +29,24 @@ export default function CreateMeetingDialog({ open, onOpenChange }: CreateMeetin
   const [meetingType, setMeetingType] = useState<"instant" | "scheduled">("scheduled");
   const [waitingRoom, setWaitingRoom] = useState(true);
   const [allowScreenShare, setAllowScreenShare] = useState(true);
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [date, setDate] = useState("");
+  const [time, setTime] = useState("");
+  const [duration, setDuration] = useState("60");
+  const [teamId, setTeamId] = useState<string>("");
+  const [teams, setTeams] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (open) {
+      fetch(`${API_BASE}/teams`)
+        .then((r) => r.json())
+        .then((data) => setTeams(data))
+        .catch(() => {});
+    }
+  }, [open]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -40,16 +61,16 @@ export default function CreateMeetingDialog({ open, onOpenChange }: CreateMeetin
               <Button variant={meetingType === "instant" ? "default" : "outline"} size="sm" onClick={() => setMeetingType("instant")} className="flex-1"><Video className="w-4 h-4 mr-2" />Instant</Button>
               <Button variant={meetingType === "scheduled" ? "default" : "outline"} size="sm" onClick={() => setMeetingType("scheduled")} className="flex-1"><Calendar className="w-4 h-4 mr-2" />Scheduled</Button>
             </div>
-            <div><Label>Meeting Title</Label><Input placeholder="e.g., Sprint Planning" className="mt-1" /></div>
+            <div><Label>Meeting Title</Label><Input placeholder="e.g., Sprint Planning" className="mt-1" value={title} onChange={(e) => setTitle(e.target.value)} /></div>
             {meetingType === "scheduled" && (
               <>
                 <div className="grid grid-cols-2 gap-3">
-                  <div><Label>Date</Label><Input type="date" className="mt-1" /></div>
-                  <div><Label>Time</Label><Input type="time" className="mt-1" /></div>
+                  <div><Label>Date</Label><Input type="date" className="mt-1" value={date} onChange={(e) => setDate(e.target.value)} /></div>
+                  <div><Label>Time</Label><Input type="time" className="mt-1" value={time} onChange={(e) => setTime(e.target.value)} /></div>
                 </div>
                 <div>
                   <Label>Duration</Label>
-                  <Select defaultValue="60"><SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                  <Select value={duration} onValueChange={setDuration}><SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="15">15 minutes</SelectItem><SelectItem value="30">30 minutes</SelectItem>
                       <SelectItem value="45">45 minutes</SelectItem><SelectItem value="60">1 hour</SelectItem>
@@ -60,14 +81,16 @@ export default function CreateMeetingDialog({ open, onOpenChange }: CreateMeetin
               </>
             )}
             <div><Label>Team</Label>
-              <Select><SelectTrigger className="mt-1"><SelectValue placeholder="Select a team" /></SelectTrigger>
+              <Select value={teamId} onValueChange={setTeamId}><SelectTrigger className="mt-1"><SelectValue placeholder="Select a team" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="engineering">Engineering</SelectItem><SelectItem value="design">Design</SelectItem>
-                  <SelectItem value="operations">Operations</SelectItem><SelectItem value="company">Company-wide</SelectItem>
+                  <SelectItem value="">No team</SelectItem>
+                  {teams.map((team) => (
+                    <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
-            <div><Label>Agenda (optional)</Label><Textarea placeholder="Add meeting agenda items..." className="mt-1 min-h-[80px]" /></div>
+            <div><Label>Agenda (optional)</Label><Textarea placeholder="Add meeting agenda items..." className="mt-1 min-h-[80px]" value={description} onChange={(e) => setDescription(e.target.value)} /></div>
             <div className="space-y-3 pt-2 border-t">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2"><Shield className="w-4 h-4 text-muted-foreground" /><div><p className="text-sm font-medium text-foreground">Waiting Room</p><p className="text-xs text-muted-foreground">Participants need to be admitted</p></div></div>
@@ -79,9 +102,69 @@ export default function CreateMeetingDialog({ open, onOpenChange }: CreateMeetin
               </div>
             </div>
           </div>
+          {error && <div className="text-sm text-destructive bg-destructive/10 p-2 rounded">{error}</div>}
           <DialogFooter>
-            <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button onClick={() => onOpenChange(false)}>{meetingType === "instant" ? "Start Meeting" : "Schedule Meeting"}</Button>
+            <Button variant="outline" onClick={() => { onOpenChange(false); setError(null); setTitle(""); setDescription(""); setDate(""); setTime(""); }}>Cancel</Button>
+            <Button onClick={async () => {
+              if (!title.trim()) {
+                setError("Please enter a meeting title");
+                return;
+              }
+              if (meetingType === "scheduled" && (!date || !time)) {
+                setError("Please select date and time");
+                return;
+              }
+              setLoading(true);
+              setError(null);
+              try {
+                const user = auth.getUser();
+                if (!user) throw new Error("Not authenticated");
+
+                const now = new Date();
+                let startTime: Date;
+                let endTime: Date;
+
+                if (meetingType === "instant") {
+                  startTime = now;
+                  endTime = new Date(now.getTime() + 60 * 60000);
+                } else {
+                  const [hours, minutes] = time.split(":").map(Number);
+                  startTime = new Date(date);
+                  startTime.setHours(hours, minutes, 0, 0);
+                  endTime = new Date(startTime.getTime() + parseInt(duration) * 60000);
+                }
+
+                const res = await fetch(`${API_BASE}/meetings`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    title,
+                    description: description || null,
+                    startTime: startTime.toISOString(),
+                    endTime: endTime.toISOString(),
+                    waitingRoom,
+                    allowScreenShare,
+                    status: meetingType === "instant" ? "live" : "upcoming",
+                    teamId: teamId || null,
+                    hostId: user.id,
+                  }),
+                });
+
+                if (!res.ok) throw new Error("Failed to create meeting");
+                onOpenChange(false);
+                setTitle("");
+                setDescription("");
+                setDate("");
+                setTime("");
+                window.location.reload();
+              } catch (err: any) {
+                setError(err.message ?? "Failed to create meeting");
+              } finally {
+                setLoading(false);
+              }
+            }} disabled={loading}>
+              {loading ? "Creating..." : meetingType === "instant" ? "Start Meeting" : "Schedule Meeting"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       )}

@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
   DndContext,
@@ -35,6 +35,7 @@ interface Task {
   title: string;
   description?: string;
   priority: "high" | "medium" | "low";
+  status?: string;
   assignee: { name: string; initials: string };
   dueDate: string;
   tags: string[];
@@ -47,6 +48,8 @@ interface Column {
   color: string;
   tasks: Task[];
 }
+
+const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
 
 const initialColumns: Column[] = [
   {
@@ -244,6 +247,120 @@ export default function Tasks() {
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [viewMode, setViewMode] = useState<"kanban" | "list">("kanban");
   const [activeTask, setActiveTask] = useState<Task | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const mapTask = (t: any): Task => {
+    const mapPrio = (p: string | null | undefined): Task["priority"] => {
+      if (p === "high" || p === "medium" || p === "low") return p;
+      return "medium";
+    };
+    return {
+      id: t.id,
+      title: t.title,
+      description: t.description ?? undefined,
+      priority: mapPrio(t.priority),
+      assignee: {
+        name: t.assignee?.name ?? "Unassigned",
+        initials: t.assignee?.name?.split(" ").map((p: string) => p[0]).join("").toUpperCase() ?? "NA",
+      },
+      dueDate: t.dueDate ? new Date(t.dueDate).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "-",
+      tags: t.tags ?? [],
+      linkedMeeting: t.meeting?.title,
+    };
+  };
+
+  const updateColumnsFromTasks = (tasks: Task[]) => {
+    const cols: Column[] = [
+      { id: "todo", title: "To Do", color: "bg-muted-foreground", tasks: [] },
+      { id: "in_progress", title: "In Progress", color: "bg-primary", tasks: [] },
+      { id: "review", title: "In Review", color: "bg-warning", tasks: [] },
+      { id: "done", title: "Done", color: "bg-success", tasks: [] },
+    ];
+    tasks.forEach((t) => {
+      const status = ["todo", "in_progress", "review", "done"].includes(t.status || "todo") ? (t.status || "todo") : "todo";
+      const col = cols.find((c) => c.id === status);
+      if (col) col.tasks.push(t);
+    });
+    return cols;
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const res = await fetch(`${API_BASE}/tasks`);
+        if (!res.ok) throw new Error(`Failed to load tasks (${res.status})`);
+        const data = await res.json();
+
+        const mappedTasks: Task[] = data.map((t: any) => ({
+          ...mapTask(t),
+          status: t.status && ["todo", "in_progress", "review", "done"].includes(t.status) ? t.status : "todo",
+        }));
+
+        if (!cancelled) {
+          const cols = updateColumnsFromTasks(mappedTasks);
+          setColumns(cols);
+        }
+      } catch (e: any) {
+        console.error(e);
+        if (!cancelled) {
+          setError(e.message ?? "Failed to load tasks");
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    load();
+
+    // Setup WebSocket for real-time updates
+    const socket = getSocket();
+    socket.on('task:created', (task: any) => {
+      if (!cancelled) {
+        const mapped = { ...mapTask(task), status: task.status || "todo" };
+        setColumns((prev) => {
+          const cols = prev.map((col) => ({ ...col, tasks: [...col.tasks] }));
+          const col = cols.find((c) => c.id === mapped.status);
+          if (col && !col.tasks.find((t) => t.id === mapped.id)) {
+            col.tasks.push(mapped);
+          }
+          return cols;
+        });
+      }
+    });
+    socket.on('task:updated', (task: any) => {
+      if (!cancelled) {
+        const mapped = { ...mapTask(task), status: task.status || "todo" };
+        setColumns((prev) => {
+          const cols = prev.map((col) => ({
+            ...col,
+            tasks: col.tasks.filter((t) => t.id !== mapped.id),
+          }));
+          const col = cols.find((c) => c.id === mapped.status);
+          if (col) col.tasks.push(mapped);
+          return cols;
+        });
+      }
+    });
+    socket.on('task:deleted', ({ id }: { id: string }) => {
+      if (!cancelled) {
+        setColumns((prev) => prev.map((col) => ({
+          ...col,
+          tasks: col.tasks.filter((t) => t.id !== id),
+        })));
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      socket.off('task:created');
+      socket.off('task:updated');
+      socket.off('task:deleted');
+    };
+  }, []);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
@@ -292,7 +409,7 @@ export default function Tasks() {
     });
   };
 
-  const handleDragEnd = (event: DragEndEvent) => {
+  const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
     setActiveTask(null);
     if (!over) return;
@@ -301,18 +418,33 @@ export default function Tasks() {
     const overId = over.id as string;
     if (activeId === overId) return;
 
-    const col = findColumnByTaskId(activeId);
-    if (!col) return;
+    const activeCol = findColumnByTaskId(activeId);
+    const overCol = findColumnByTaskId(overId) || columns.find((c) => c.id === overId);
+    
+    if (!activeCol || !overCol) return;
 
-    const oldIndex = col.tasks.findIndex((t) => t.id === activeId);
-    const newIndex = col.tasks.findIndex((t) => t.id === overId);
-    if (oldIndex === -1 || newIndex === -1) return;
-
-    setColumns((prev) =>
-      prev.map((c) =>
-        c.id === col.id ? { ...c, tasks: arrayMove(c.tasks, oldIndex, newIndex) } : c
-      )
-    );
+    // If moved to different column, update status via API
+    if (activeCol.id !== overCol.id) {
+      try {
+        await fetch(`${API_BASE}/tasks/${activeId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status: overCol.id }),
+        });
+      } catch (err) {
+        console.error("Failed to update task status:", err);
+      }
+    } else {
+      // Same column, just reorder
+      const oldIndex = activeCol.tasks.findIndex((t) => t.id === activeId);
+      const newIndex = activeCol.tasks.findIndex((t) => t.id === overId);
+      if (oldIndex === -1 || newIndex === -1) return;
+      setColumns((prev) =>
+        prev.map((c) =>
+          c.id === activeCol.id ? { ...c, tasks: arrayMove(c.tasks, oldIndex, newIndex) } : c
+        )
+      );
+    }
   };
 
   const allTasks = columns.flatMap((col) => col.tasks.map((t) => ({ ...t, column: col.title })));
@@ -354,8 +486,20 @@ export default function Tasks() {
         </div>
       </div>
 
-      {/* Kanban Board */}
-      {viewMode === "kanban" ? (
+      {/* Loading / error */}
+      {loading && (
+        <div className="flex-1 flex items-center justify-center">
+          <p className="text-sm text-muted-foreground">Loading tasks...</p>
+        </div>
+      )}
+      {error && !loading && (
+        <div className="flex-1 flex items-center justify-center">
+          <p className="text-sm text-destructive">Failed to load tasks: {error}</p>
+        </div>
+      )}
+
+      {/* Kanban Board / List */}
+      {!loading && !error && (viewMode === "kanban" ? (
         <div className="flex-1 overflow-x-auto p-6">
           <DndContext
             sensors={sensors}
@@ -428,7 +572,7 @@ export default function Tasks() {
             </table>
           </div>
         </div>
-      )}
+      ))}
     </div>
   );
 }

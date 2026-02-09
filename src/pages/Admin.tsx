@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useAuth } from "@/lib/auth";
 import {
   Search,
   MoreHorizontal,
@@ -48,32 +49,13 @@ interface UserRecord {
   joinedDate: string;
 }
 
-const users: UserRecord[] = [
-  { id: "1", name: "สมชาย K.", email: "somchai@acme.com", role: "Admin", status: "online", lastActive: "Now", isActive: true, teams: ["Engineering"], joinedDate: "Jan 15, 2025" },
-  { id: "2", name: "อริสา P.", email: "arisa@acme.com", role: "Manager", status: "online", lastActive: "Now", isActive: true, teams: ["Design"], joinedDate: "Jan 20, 2025" },
-  { id: "3", name: "จิรวัฒน์ W.", email: "jirawat@acme.com", role: "Member", status: "busy", lastActive: "Now", isActive: true, teams: ["Engineering"], joinedDate: "Mar 5, 2025" },
-  { id: "4", name: "พิมพ์ L.", email: "pim@acme.com", role: "Member", status: "away", lastActive: "15m ago", isActive: true, teams: ["Design", "Engineering"], joinedDate: "Feb 10, 2025" },
-  { id: "5", name: "ธนา S.", email: "thana@acme.com", role: "Member", status: "online", lastActive: "Now", isActive: true, teams: ["Engineering"], joinedDate: "Feb 15, 2025" },
-  { id: "6", name: "นภา M.", email: "napa@acme.com", role: "Member", status: "offline", lastActive: "2h ago", isActive: true, teams: ["Engineering"], joinedDate: "Apr 1, 2025" },
-  { id: "7", name: "วิภา T.", email: "wipa@acme.com", role: "Admin", status: "offline", lastActive: "1d ago", isActive: false, teams: ["Operations"], joinedDate: "Jan 15, 2025" },
-  { id: "8", name: "กิตติ R.", email: "kitti@acme.com", role: "Member", status: "online", lastActive: "Now", isActive: true, teams: ["Operations"], joinedDate: "Mar 20, 2025" },
-  { id: "9", name: "ปรียา S.", email: "preeya@acme.com", role: "Member", status: "online", lastActive: "Now", isActive: true, teams: ["Operations"], joinedDate: "Apr 15, 2025" },
-];
+const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
 
 const roleColors: Record<string, string> = {
   Admin: "bg-destructive/10 text-destructive",
   Manager: "bg-primary/10 text-primary",
   Member: "bg-secondary text-secondary-foreground",
 };
-
-const auditLogs = [
-  { id: 1, user: "สมชาย K.", action: "Invited user preeya@acme.com", time: "Today 9:15 AM", type: "user" },
-  { id: 2, user: "อริสา P.", action: "Created channel #design-system", time: "Today 9:00 AM", type: "channel" },
-  { id: 3, user: "สมชาย K.", action: "Changed role of จิรวัฒน์ W. to Member", time: "Yesterday 4:30 PM", type: "role" },
-  { id: 4, user: "วิภา T.", action: "Deactivated account", time: "Yesterday 2:00 PM", type: "user" },
-  { id: 5, user: "สมชาย K.", action: "Updated security policy", time: "Feb 7, 2026", type: "security" },
-  { id: 6, user: "สมชาย K.", action: "Created team 'Operations'", time: "Feb 1, 2026", type: "team" },
-];
 
 const adminSections = [
   { id: "users", label: "Users", icon: Users },
@@ -84,10 +66,49 @@ const adminSections = [
 ];
 
 export default function Admin() {
+  const { user } = useAuth();
   const [activeSection, setActiveSection] = useState("users");
   const [searchQuery, setSearchQuery] = useState("");
   const [showInvite, setShowInvite] = useState(false);
   const [roleFilter, setRoleFilter] = useState("all");
+  const [users, setUsers] = useState<UserRecord[]>([]);
+  const [auditLogs, setAuditLogs] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const [usersRes, teamsRes] = await Promise.all([
+          fetch(`${API_BASE}/users`).then((r) => r.json()),
+          fetch(`${API_BASE}/teams`).then((r) => r.json()),
+        ]);
+
+        const usersData: UserRecord[] = usersRes.map((u: any) => {
+          const userTeams = teamsRes
+            .filter((t: any) => t.members?.some((m: any) => m.userId === u.id))
+            .map((t: any) => t.name);
+          return {
+            id: u.id,
+            name: u.name,
+            email: u.email,
+            role: "Member", // Default role, can be enhanced with role management
+            status: "online" as const, // Mock status for now
+            lastActive: "Now",
+            isActive: true,
+            teams: userTeams,
+            joinedDate: new Date(u.createdAt).toLocaleDateString(),
+          };
+        });
+        setUsers(usersData);
+        setAuditLogs([]); // Audit logs would need a separate API endpoint
+      } catch (err) {
+        console.error("Failed to load admin data:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadData();
+  }, []);
 
   const filteredUsers = users.filter((u) => {
     const matchesSearch = u.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -128,6 +149,7 @@ export default function Admin() {
               <div className="flex items-center gap-3">
                 <h2 className="font-semibold text-foreground">Users Management</h2>
                 <Badge variant="secondary" className="text-xs">{users.length} users</Badge>
+                {loading && <span className="text-xs text-muted-foreground">Loading...</span>}
               </div>
               <div className="flex gap-2">
                 <div className="relative">

@@ -1,10 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Hash, Send, Smile, Paperclip, Pin, Reply, Search, Plus, AtSign,
-  MoreHorizontal, Users, Settings, Volume2, Megaphone, ChevronDown,
-  Image, File, Bookmark,
+  MoreHorizontal, Users, Volume2, Megaphone, Bookmark,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -15,69 +14,170 @@ import { Separator } from "@/components/ui/separator";
 import StatusIndicator from "@/components/shared/StatusIndicator";
 import CreateChannelDialog from "@/components/dialogs/CreateChannelDialog";
 import { slidePanel } from "@/components/shared/PageTransition";
+import { auth } from "@/lib/auth";
+import { getSocket } from "@/lib/websocket";
+
+const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
 
 interface Channel {
-  id: string; name: string; type: "general" | "announcement" | "voice";
-  team: string; unread: number; description?: string; memberCount?: number;
+  id: string;
+  name: string;
+  type: "general" | "announcement" | "voice";
+  teamId: string;
+  team?: { id: string; name: string };
+  description?: string;
+  _count?: { messages: number };
 }
 
 interface Message {
-  id: number; sender: string; initials: string; time: string; text: string;
-  isPinned?: boolean; reactions?: { emoji: string; count: number }[];
-  replyTo?: string; isSystem?: boolean;
-  attachment?: { name: string; size: string; type: string };
+  id: string;
+  text: string;
+  senderId: string;
+  sender: { id: string; name: string; email: string };
+  channelId: string;
+  isPinned: boolean;
+  isSystem: boolean;
+  createdAt: string;
+  replyTo?: { id: string; text: string; sender: { name: string } };
 }
-
-const channels: Channel[] = [
-  { id: "1", name: "general", type: "general", team: "Engineering", unread: 3, description: "General engineering discussions", memberCount: 8 },
-  { id: "2", name: "standup", type: "voice", team: "Engineering", unread: 0, description: "Daily standup voice channel", memberCount: 8 },
-  { id: "3", name: "announcements", type: "announcement", team: "Engineering", unread: 1, description: "Important announcements only", memberCount: 8 },
-  { id: "4", name: "general", type: "general", team: "Design", unread: 0, description: "Design team discussions", memberCount: 4 },
-  { id: "5", name: "reviews", type: "general", team: "Design", unread: 2, description: "Design reviews and feedback", memberCount: 4 },
-  { id: "6", name: "announcements", type: "announcement", team: "Company", unread: 0, description: "Company-wide announcements", memberCount: 12 },
-];
-
-const messages: Message[] = [
-  { id: 0, sender: "", initials: "", time: "9:00 AM", text: "— Today, Monday Feb 9 —", isSystem: true },
-  { id: 1, sender: "อริสา P.", initials: "AP", time: "9:30 AM", text: "Good morning ทุกคน! วันนี้มี standup 10:00 นะคะ 🙏", reactions: [{ emoji: "👋", count: 4 }, { emoji: "☀️", count: 2 }] },
-  { id: 2, sender: "จิรวัฒน์ W.", initials: "JW", time: "9:32 AM", text: "ได้ครับ! มีอัปเดตเรื่อง API v2 ด้วย" },
-  { id: 3, sender: "สมชาย K.", initials: "SK", time: "9:35 AM", text: "เยี่ยมเลย @จิรวัฒน์ เตรียม demo ด้วยนะ", reactions: [{ emoji: "👍", count: 2 }, { emoji: "🔥", count: 1 }] },
-  { id: 4, sender: "พิมพ์ L.", initials: "PL", time: "9:40 AM", text: "FYI: ผมพึ่ง push PR #142 ไป review ด้วยนะครับ\n\nมี changes หลายจุด:\n- Fix mobile responsive\n- Update user profile API\n- Add unit tests", isPinned: true },
-  { id: 8, sender: "พิมพ์ L.", initials: "PL", time: "9:41 AM", text: "", attachment: { name: "pr-142-screenshot.png", size: "1.2 MB", type: "image" } },
-  { id: 5, sender: "ธนา S.", initials: "TS", time: "9:45 AM", text: "Review ให้แล้วครับ LGTM 🚀", replyTo: "พิมพ์ L. — PR #142 review" },
-  { id: 6, sender: "นภา M.", initials: "NM", time: "9:50 AM", text: "มีใครเจอ bug เรื่อง upload ไฟล์ใน Safari ไหมคะ? ลองแล้วไม่ work" },
-  { id: 7, sender: "จิรวัฒน์ W.", initials: "JW", time: "9:52 AM", text: "เจอเหมือนกันครับ น่าจะเรื่อง CORS setting ผม log issue ไว้แล้ว", reactions: [{ emoji: "🙏", count: 1 }] },
-];
-
-const dmContacts = [
-  { name: "อริสา P.", initials: "AP", status: "online" as const, unread: 1, lastMsg: "ช่วยเช็ค PR ให้หน่อยค่ะ" },
-  { name: "จิรวัฒน์ W.", initials: "JW", status: "busy" as const, unread: 0, lastMsg: "OK ครับ" },
-  { name: "พิมพ์ L.", initials: "PL", status: "away" as const, unread: 0, lastMsg: "ขอบคุณครับ" },
-  { name: "ธนา S.", initials: "TS", status: "online" as const, unread: 0, lastMsg: "Deploy เรียบร้อยครับ" },
-];
 
 const channelIcons: Record<string, React.ElementType> = {
   general: Hash, announcement: Megaphone, voice: Volume2,
 };
 
-const pinnedMessages = [
-  { sender: "พิมพ์ L.", text: "PR #142 ไป review ด้วยนะครับ", time: "9:40 AM" },
-];
-
 export default function Chat() {
   const isMobile = useIsMobile();
-  const [activeChannel, setActiveChannel] = useState("1");
+  const currentUser = auth.getUser();
+  const [activeChannel, setActiveChannel] = useState<string | null>(null);
   const [messageInput, setMessageInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [showCreateChannel, setShowCreateChannel] = useState(false);
   const [showPinned, setShowPinned] = useState(false);
   const [showMembers, setShowMembers] = useState(false);
   const [showChannelList, setShowChannelList] = useState(!isMobile);
+  const [channels, setChannels] = useState<Channel[]>([]);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [dmContacts, setDmContacts] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [sending, setSending] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Load channels from API
+  useEffect(() => {
+    const loadChannels = async () => {
+      try {
+        const [channelsRes, usersRes] = await Promise.all([
+          fetch(`${API_BASE}/channels`).then((r) => r.json()),
+          fetch(`${API_BASE}/users`).then((r) => r.json()),
+        ]);
+
+        setChannels(channelsRes);
+        if (channelsRes.length > 0 && !activeChannel) {
+          setActiveChannel(channelsRes[0].id);
+        }
+
+        const contacts = usersRes.slice(0, 4).map((u: any) => ({
+          id: u.id,
+          name: u.name,
+          initials: u.name.split(" ").map((n: string) => n[0]).join(""),
+          status: u.status || "online",
+          unread: 0,
+          lastMsg: "",
+        }));
+        setDmContacts(contacts);
+      } catch (err) {
+        console.error("Failed to load channels:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadChannels();
+  }, []);
+
+  // Load messages when channel changes
+  useEffect(() => {
+    if (!activeChannel) return;
+
+    const loadMessages = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/channels/${activeChannel}/messages`);
+        const data = await res.json();
+        setMessages(data);
+      } catch (err) {
+        console.error("Failed to load messages:", err);
+        setMessages([]);
+      }
+    };
+    loadMessages();
+  }, [activeChannel]);
+
+  // WebSocket for real-time messages
+  useEffect(() => {
+    const socket = getSocket();
+
+    const handleNewMessage = (message: Message) => {
+      if (message.channelId === activeChannel) {
+        setMessages((prev) => [...prev, message]);
+      }
+    };
+
+    const handleMessageUpdated = (message: Message) => {
+      setMessages((prev) => prev.map((m) => m.id === message.id ? message : m));
+    };
+
+    socket.on("message:created", handleNewMessage);
+    socket.on("message:updated", handleMessageUpdated);
+
+    return () => {
+      socket.off("message:created", handleNewMessage);
+      socket.off("message:updated", handleMessageUpdated);
+    };
+  }, [activeChannel]);
+
+  // Scroll to bottom on new messages
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  const sendMessage = useCallback(async () => {
+    if (!messageInput.trim() || !activeChannel || !currentUser || sending) return;
+
+    setSending(true);
+    try {
+      await fetch(`${API_BASE}/channels/${activeChannel}/messages`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: messageInput.trim(),
+          senderId: currentUser.id,
+        }),
+      });
+      setMessageInput("");
+    } catch (err) {
+      console.error("Failed to send message:", err);
+    } finally {
+      setSending(false);
+    }
+  }, [messageInput, activeChannel, currentUser, sending]);
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  };
+
+  const formatTime = (dateStr: string) => {
+    return new Date(dateStr).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  };
+
+  const getInitials = (name: string) => name.split(" ").map((n) => n[0]).join("");
 
   const currentChannel = channels.find((c) => c.id === activeChannel);
   const groupedChannels = channels.reduce<Record<string, Channel[]>>((acc, ch) => {
-    if (!acc[ch.team]) acc[ch.team] = [];
-    acc[ch.team].push(ch);
+    const teamName = ch.team?.name || "General";
+    if (!acc[teamName]) acc[teamName] = [];
+    acc[teamName].push(ch);
     return acc;
   }, {});
 
@@ -115,7 +215,6 @@ export default function Chat() {
                     )}>
                     <Icon className="w-4 h-4 shrink-0" />
                     <span className="flex-1 text-left truncate">{ch.name}</span>
-                    {ch.unread > 0 && <Badge variant="destructive" className="h-5 min-w-[20px] px-1.5 text-xs">{ch.unread}</Badge>}
                   </button>
                 );
               })}
@@ -134,9 +233,7 @@ export default function Chat() {
                 </div>
                 <div className="flex-1 text-left min-w-0">
                   <span className="block truncate">{dm.name}</span>
-                  <span className="block text-xs text-muted-foreground truncate">{dm.lastMsg}</span>
                 </div>
-                {dm.unread > 0 && <Badge variant="destructive" className="h-5 min-w-[20px] px-1.5 text-xs">{dm.unread}</Badge>}
               </button>
             ))}
           </div>
@@ -151,8 +248,8 @@ export default function Chat() {
               <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setShowChannelList(true)}><Hash className="w-4 h-4" /></Button>
             )}
             <Hash className="w-4 h-4 text-muted-foreground" />
-            <h2 className="font-medium text-foreground">{currentChannel?.name}</h2>
-            <Badge variant="secondary" className="text-xs">{currentChannel?.team}</Badge>
+            <h2 className="font-medium text-foreground">{currentChannel?.name || "Select a channel"}</h2>
+            {currentChannel?.team && <Badge variant="secondary" className="text-xs">{currentChannel.team.name}</Badge>}
             {currentChannel?.description && <span className="text-xs text-muted-foreground hidden md:inline">— {currentChannel.description}</span>}
           </div>
           <div className="flex items-center gap-1">
@@ -166,71 +263,74 @@ export default function Chat() {
           {/* Messages */}
           <div className="flex-1 flex flex-col">
             <div className="flex-1 overflow-y-auto scrollbar-thin p-4 space-y-1">
-              {messages.map((msg, i) => {
-                if (msg.isSystem) {
-                  return (
-                    <div key={msg.id} className="flex items-center gap-3 py-2">
-                      <Separator className="flex-1" /><span className="text-xs text-muted-foreground shrink-0">{msg.text}</span><Separator className="flex-1" />
-                    </div>
-                  );
-                }
-                return (
-                  <motion.div
-                    key={msg.id}
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: i * 0.03, duration: 0.2 }}
-                    className="group flex gap-3 hover:bg-muted/30 -mx-2 px-2 py-1.5 rounded-lg transition-colors"
-                  >
-                    <Avatar className="h-9 w-9 mt-0.5 shrink-0"><AvatarFallback className="bg-primary/10 text-primary text-xs">{msg.initials}</AvatarFallback></Avatar>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-semibold text-foreground">{msg.sender}</span>
-                        <span className="text-xs text-muted-foreground">{msg.time}</span>
-                        {msg.isPinned && <Pin className="w-3 h-3 text-warning" />}
+              {loading ? (
+                <div className="text-sm text-muted-foreground p-4">Loading...</div>
+              ) : !currentChannel ? (
+                <div className="text-sm text-muted-foreground p-4">Select a channel to start chatting</div>
+              ) : messages.length === 0 ? (
+                <div className="text-sm text-muted-foreground p-4">No messages yet. Start the conversation!</div>
+              ) : (
+                messages.map((msg, i) => {
+                  if (msg.isSystem) {
+                    return (
+                      <div key={msg.id} className="flex items-center gap-3 py-2">
+                        <Separator className="flex-1" /><span className="text-xs text-muted-foreground shrink-0">{msg.text}</span><Separator className="flex-1" />
                       </div>
-                      {msg.replyTo && (
-                        <div className="flex items-center gap-1 text-xs text-primary mb-0.5 bg-primary/5 px-2 py-0.5 rounded w-fit"><Reply className="w-3 h-3" /><span>{msg.replyTo}</span></div>
-                      )}
-                      {msg.text && <p className="text-sm text-foreground whitespace-pre-line">{msg.text}</p>}
-                      {msg.attachment && (
-                        <div className="mt-1 flex items-center gap-2 p-2 rounded-lg border bg-muted/30 w-fit max-w-xs">
-                          {msg.attachment.type === "image" ? <Image className="w-4 h-4 text-primary shrink-0" /> : <File className="w-4 h-4 text-muted-foreground shrink-0" />}
-                          <div className="min-w-0"><p className="text-sm text-foreground truncate">{msg.attachment.name}</p><p className="text-xs text-muted-foreground">{msg.attachment.size}</p></div>
+                    );
+                  }
+                  return (
+                    <motion.div
+                      key={msg.id}
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: i * 0.02, duration: 0.15 }}
+                      className="group flex gap-3 hover:bg-muted/30 -mx-2 px-2 py-1.5 rounded-lg transition-colors"
+                    >
+                      <Avatar className="h-9 w-9 mt-0.5 shrink-0"><AvatarFallback className="bg-primary/10 text-primary text-xs">{getInitials(msg.sender.name)}</AvatarFallback></Avatar>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-semibold text-foreground">{msg.sender.name}</span>
+                          <span className="text-xs text-muted-foreground">{formatTime(msg.createdAt)}</span>
+                          {msg.isPinned && <Pin className="w-3 h-3 text-warning" />}
                         </div>
-                      )}
-                      {msg.reactions && msg.reactions.length > 0 && (
-                        <div className="flex gap-1 mt-1">
-                          {msg.reactions.map((r, ri) => (
-                            <button key={ri} className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-muted hover:bg-primary/10 text-xs transition-colors"><span>{r.emoji}</span><span className="text-muted-foreground">{r.count}</span></button>
-                          ))}
-                          <button className="flex items-center px-1.5 py-0.5 rounded-full bg-muted hover:bg-primary/10 text-xs opacity-0 group-hover:opacity-100 transition-opacity"><Plus className="w-3 h-3 text-muted-foreground" /></button>
-                        </div>
-                      )}
-                    </div>
-                    <div className="opacity-0 group-hover:opacity-100 flex items-start gap-0.5 transition-opacity">
-                      <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground"><Smile className="w-3.5 h-3.5" /></Button>
-                      <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground"><Reply className="w-3.5 h-3.5" /></Button>
-                      <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground"><Bookmark className="w-3.5 h-3.5" /></Button>
-                      <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground"><MoreHorizontal className="w-3.5 h-3.5" /></Button>
-                    </div>
-                  </motion.div>
-                );
-              })}
+                        {msg.replyTo && (
+                          <div className="flex items-center gap-1 text-xs text-primary mb-0.5 bg-primary/5 px-2 py-0.5 rounded w-fit"><Reply className="w-3 h-3" /><span>{msg.replyTo.sender.name}: {msg.replyTo.text.slice(0, 50)}</span></div>
+                        )}
+                        {msg.text && <p className="text-sm text-foreground whitespace-pre-line">{msg.text}</p>}
+                      </div>
+                      <div className="opacity-0 group-hover:opacity-100 flex items-start gap-0.5 transition-opacity">
+                        <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground"><Smile className="w-3.5 h-3.5" /></Button>
+                        <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground"><Reply className="w-3.5 h-3.5" /></Button>
+                        <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground"><Bookmark className="w-3.5 h-3.5" /></Button>
+                        <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground"><MoreHorizontal className="w-3.5 h-3.5" /></Button>
+                      </div>
+                    </motion.div>
+                  );
+                })
+              )}
+              <div ref={messagesEndRef} />
             </div>
             <div className="p-4 border-t">
               <div className="flex items-center gap-2 bg-muted rounded-lg px-3 py-2">
                 <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground shrink-0"><Plus className="w-4 h-4" /></Button>
-                <Input value={messageInput} onChange={(e) => setMessageInput(e.target.value)} placeholder={`Message #${currentChannel?.name}...`} className="border-0 bg-transparent shadow-none focus-visible:ring-0 px-0 h-8" />
+                <Input
+                  value={messageInput}
+                  onChange={(e) => setMessageInput(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder={`Message #${currentChannel?.name || "channel"}...`}
+                  className="border-0 bg-transparent shadow-none focus-visible:ring-0 px-0 h-8"
+                  disabled={!currentUser}
+                />
                 <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground shrink-0"><AtSign className="w-4 h-4" /></Button>
                 <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground shrink-0"><Smile className="w-4 h-4" /></Button>
                 <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground shrink-0"><Paperclip className="w-4 h-4" /></Button>
-                <Button size="icon" className="h-8 w-8 shrink-0"><Send className="w-4 h-4" /></Button>
+                <Button size="icon" className="h-8 w-8 shrink-0" onClick={sendMessage} disabled={!messageInput.trim() || sending}><Send className="w-4 h-4" /></Button>
               </div>
               <div className="flex items-center gap-3 mt-1.5 px-1">
                 <span className="text-xs text-muted-foreground">Press <kbd className="bg-muted px-1 rounded text-[10px]">Enter</kbd> to send</span>
                 <span className="text-xs text-muted-foreground">|</span>
                 <span className="text-xs text-muted-foreground"><kbd className="bg-muted px-1 rounded text-[10px]">Shift+Enter</kbd> for new line</span>
+                {!currentUser && <span className="text-xs text-destructive ml-auto">Login required to send messages</span>}
               </div>
             </div>
           </div>
@@ -241,12 +341,16 @@ export default function Chat() {
               <motion.div key="pinned" variants={slidePanel} initial="initial" animate="animate" exit="exit" className="w-64 border-l flex flex-col shrink-0">
                 <div className="px-4 py-3 border-b"><h3 className="text-sm font-medium text-foreground">Pinned Messages</h3></div>
                 <div className="flex-1 overflow-y-auto p-3 space-y-2">
-                  {pinnedMessages.map((pm, i) => (
-                    <motion.div key={i} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }} className="p-2.5 rounded-lg border bg-muted/30">
-                      <div className="flex items-center gap-1 mb-1"><Pin className="w-3 h-3 text-warning" /><span className="text-xs font-medium text-foreground">{pm.sender}</span><span className="text-xs text-muted-foreground">{pm.time}</span></div>
-                      <p className="text-xs text-foreground">{pm.text}</p>
-                    </motion.div>
-                  ))}
+                  {messages.filter((m) => m.isPinned).length === 0 ? (
+                    <div className="text-xs text-muted-foreground">No pinned messages</div>
+                  ) : (
+                    messages.filter((m) => m.isPinned).map((pm, i) => (
+                      <motion.div key={pm.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }} className="p-2.5 rounded-lg border bg-muted/30">
+                        <div className="flex items-center gap-1 mb-1"><Pin className="w-3 h-3 text-warning" /><span className="text-xs font-medium text-foreground">{pm.sender.name}</span><span className="text-xs text-muted-foreground">{formatTime(pm.createdAt)}</span></div>
+                        <p className="text-xs text-foreground">{pm.text}</p>
+                      </motion.div>
+                    ))
+                  )}
                 </div>
               </motion.div>
             )}
@@ -254,7 +358,7 @@ export default function Chat() {
           <AnimatePresence>
             {showMembers && (
               <motion.div key="members" variants={slidePanel} initial="initial" animate="animate" exit="exit" className="w-64 border-l flex flex-col shrink-0">
-                <div className="px-4 py-3 border-b"><h3 className="text-sm font-medium text-foreground">Members ({currentChannel?.memberCount})</h3></div>
+                <div className="px-4 py-3 border-b"><h3 className="text-sm font-medium text-foreground">Members</h3></div>
                 <div className="flex-1 overflow-y-auto p-3 space-y-1">
                   <p className="text-xs font-semibold uppercase text-muted-foreground mb-2">Online</p>
                   {dmContacts.filter(d => d.status === "online").map((m, i) => (

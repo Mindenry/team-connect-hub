@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Plus,
   Search,
@@ -35,6 +35,8 @@ import {
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 
+const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
+
 interface TeamMember {
   name: string;
   initials: string;
@@ -60,67 +62,83 @@ interface Team {
   createdDate: string;
 }
 
-const teams: Team[] = [
-  {
-    id: "1",
-    name: "Engineering",
-    description: "Core development team — frontend, backend, and infrastructure",
-    members: [
-      { name: "สมชาย K.", initials: "SK", email: "somchai@acme.com", role: "lead", status: "online", joinedDate: "Jan 2025" },
-      { name: "จิรวัฒน์ W.", initials: "JW", email: "jirawat@acme.com", role: "member", status: "busy", joinedDate: "Mar 2025" },
-      { name: "ธนา S.", initials: "TS", email: "thana@acme.com", role: "member", status: "online", joinedDate: "Feb 2025" },
-      { name: "นภา M.", initials: "NM", email: "napa@acme.com", role: "member", status: "away", joinedDate: "Apr 2025" },
-    ],
-    channels: [
-      { name: "general", type: "General", messages: 234 },
-      { name: "standup", type: "Voice", messages: 0 },
-      { name: "announcements", type: "Announcement", messages: 12 },
-      { name: "code-review", type: "General", messages: 89 },
-      { name: "bugs", type: "General", messages: 45 },
-    ],
-    activeTasks: 12,
-    createdDate: "Jan 15, 2025",
-  },
-  {
-    id: "2",
-    name: "Design",
-    description: "UI/UX design and user research",
-    members: [
-      { name: "อริสา P.", initials: "AP", email: "arisa@acme.com", role: "lead", status: "online", joinedDate: "Jan 2025" },
-      { name: "พิมพ์ L.", initials: "PL", email: "pim@acme.com", role: "member", status: "away", joinedDate: "Feb 2025" },
-    ],
-    channels: [
-      { name: "general", type: "General", messages: 156 },
-      { name: "reviews", type: "General", messages: 67 },
-      { name: "inspiration", type: "General", messages: 23 },
-    ],
-    activeTasks: 6,
-    createdDate: "Jan 20, 2025",
-  },
-  {
-    id: "3",
-    name: "Operations",
-    description: "HR, admin, and organizational management",
-    members: [
-      { name: "วิภา T.", initials: "VT", email: "wipa@acme.com", role: "lead", status: "offline", joinedDate: "Jan 2025" },
-      { name: "กิตติ R.", initials: "KR", email: "kitti@acme.com", role: "member", status: "online", joinedDate: "Mar 2025" },
-      { name: "ปรียา S.", initials: "PS", email: "preeya@acme.com", role: "member", status: "online", joinedDate: "Apr 2025" },
-    ],
-    channels: [
-      { name: "general", type: "General", messages: 89 },
-      { name: "hr-updates", type: "Announcement", messages: 15 },
-    ],
-    activeTasks: 4,
-    createdDate: "Feb 1, 2025",
-  },
-];
-
 export default function Teams() {
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedTeam, setSelectedTeam] = useState<string | null>("1");
+  const [selectedTeam, setSelectedTeam] = useState<string | null>(null);
   const [showInvite, setShowInvite] = useState(false);
   const [showCreateChannel, setShowCreateChannel] = useState(false);
   const [showCreateTeam, setShowCreateTeam] = useState(false);
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [teamName, setTeamName] = useState("");
+  const [teamDescription, setTeamDescription] = useState("");
+
+  useEffect(() => {
+    const loadTeams = async () => {
+      try {
+        const [teamsRes, tasksRes] = await Promise.all([
+          fetch(`${API_BASE}/teams`).then((r) => r.json()),
+          fetch(`${API_BASE}/tasks`).then((r) => r.json()),
+        ]);
+
+        const teamsWithData = await Promise.all(
+          teamsRes.map(async (team: any) => {
+            const membersRes = await fetch(`${API_BASE}/teams/${team.id}/members`).then((r) => r.json());
+            const members = membersRes.map((m: any) => ({
+              name: m.user.name,
+              initials: m.user.name.split(" ").map((n: string) => n[0]).join(""),
+              email: m.user.email,
+              role: m.role === "admin" ? "lead" : "member",
+              status: "online" as const,
+              joinedDate: new Date(m.createdAt).toLocaleDateString("en-US", { month: "short", year: "numeric" }),
+            }));
+
+            const teamTasks = tasksRes.filter((t: any) => t.teamId === team.id);
+            const activeTasks = teamTasks.filter((t: any) => t.status !== "done").length;
+
+            return {
+              id: team.id,
+              name: team.name,
+              description: team.description || "",
+              members,
+              channels: [],
+              activeTasks,
+              createdDate: new Date(team.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+            };
+          })
+        );
+
+        setTeams(teamsWithData);
+        if (teamsWithData.length > 0 && !selectedTeam) {
+          setSelectedTeam(teamsWithData[0].id);
+        }
+      } catch (err) {
+        console.error("Failed to load teams:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadTeams();
+  }, []);
+
+  const handleCreateTeam = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/teams`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: teamName }),
+      });
+      if (res.ok) {
+        setShowCreateTeam(false);
+        setTeamName("");
+        setTeamDescription("");
+        window.location.reload();
+      }
+    } catch (err) {
+      console.error("Failed to create team:", err);
+    }
+  };
 
   const activeTeam = teams.find((t) => t.id === selectedTeam);
 
@@ -137,12 +155,12 @@ export default function Teams() {
             <DialogDescription>Create a new team for your organization</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            <div><Label>Team Name</Label><Input placeholder="e.g., Marketing" className="mt-1" /></div>
-            <div><Label>Description</Label><Textarea placeholder="What does this team do?" className="mt-1" /></div>
+            <div><Label>Team Name</Label><Input placeholder="e.g., Marketing" className="mt-1" value={teamName} onChange={(e) => setTeamName(e.target.value)} /></div>
+            <div><Label>Description</Label><Textarea placeholder="What does this team do?" className="mt-1" value={teamDescription} onChange={(e) => setTeamDescription(e.target.value)} /></div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowCreateTeam(false)}>Cancel</Button>
-            <Button onClick={() => setShowCreateTeam(false)}>Create Team</Button>
+            <Button variant="outline" onClick={() => { setShowCreateTeam(false); setTeamName(""); setTeamDescription(""); }}>Cancel</Button>
+            <Button onClick={handleCreateTeam} disabled={!teamName.trim()}>Create Team</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -160,7 +178,12 @@ export default function Teams() {
           </div>
         </div>
         <div className="flex-1 overflow-y-auto scrollbar-thin px-2 space-y-1">
-          {teams.map((team) => (
+          {loading ? (
+            <div className="text-sm text-muted-foreground p-3">Loading...</div>
+          ) : teams.length === 0 ? (
+            <div className="text-sm text-muted-foreground p-3">No teams yet</div>
+          ) : (
+            teams.filter((team) => team.name.toLowerCase().includes(searchQuery.toLowerCase())).map((team) => (
             <button
               key={team.id}
               onClick={() => setSelectedTeam(team.id)}
@@ -178,7 +201,8 @@ export default function Teams() {
                 </div>
               </div>
             </button>
-          ))}
+            ))
+          )}
         </div>
       </div>
 
@@ -251,17 +275,21 @@ export default function Teams() {
                     <Plus className="w-4 h-4 mr-2" />Add Channel
                   </Button>
                 </div>
-                {activeTeam.channels.map((ch) => (
-                  <div key={ch.name} className="flex items-center gap-3 p-3 rounded-lg border hover:bg-muted/50 transition-colors">
-                    <Hash className="w-4 h-4 text-muted-foreground" />
-                    <div className="flex-1">
-                      <p className="text-sm font-medium text-foreground">#{ch.name}</p>
+                {activeTeam.channels.length === 0 ? (
+                  <div className="text-sm text-muted-foreground p-3">No channels yet</div>
+                ) : (
+                  activeTeam.channels.map((ch) => (
+                    <div key={ch.name} className="flex items-center gap-3 p-3 rounded-lg border hover:bg-muted/50 transition-colors">
+                      <Hash className="w-4 h-4 text-muted-foreground" />
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-foreground">#{ch.name}</p>
+                      </div>
+                      <Badge variant="secondary" className="text-xs">{ch.type}</Badge>
+                      <span className="text-xs text-muted-foreground">{ch.messages} messages</span>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground"><MoreHorizontal className="w-4 h-4" /></Button>
                     </div>
-                    <Badge variant="secondary" className="text-xs">{ch.type}</Badge>
-                    <span className="text-xs text-muted-foreground">{ch.messages} messages</span>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground"><MoreHorizontal className="w-4 h-4" /></Button>
-                  </div>
-                ))}
+                  ))
+                )}
               </TabsContent>
             </Tabs>
           </div>
