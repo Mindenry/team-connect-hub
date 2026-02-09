@@ -1,23 +1,9 @@
 import { useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import {
-  Hash,
-  Send,
-  Smile,
-  Paperclip,
-  Pin,
-  Reply,
-  Search,
-  Plus,
-  AtSign,
-  MoreHorizontal,
-  Users,
-  Settings,
-  Volume2,
-  Megaphone,
-  ChevronDown,
-  Image,
-  File,
-  Bookmark,
+  Hash, Send, Smile, Paperclip, Pin, Reply, Search, Plus, AtSign,
+  MoreHorizontal, Users, Settings, Volume2, Megaphone, ChevronDown,
+  Image, File, Bookmark,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -27,27 +13,17 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import StatusIndicator from "@/components/shared/StatusIndicator";
 import CreateChannelDialog from "@/components/dialogs/CreateChannelDialog";
+import { slidePanel } from "@/components/shared/PageTransition";
 
 interface Channel {
-  id: string;
-  name: string;
-  type: "general" | "announcement" | "voice";
-  team: string;
-  unread: number;
-  description?: string;
-  memberCount?: number;
+  id: string; name: string; type: "general" | "announcement" | "voice";
+  team: string; unread: number; description?: string; memberCount?: number;
 }
 
 interface Message {
-  id: number;
-  sender: string;
-  initials: string;
-  time: string;
-  text: string;
-  isPinned?: boolean;
-  reactions?: { emoji: string; count: number }[];
-  replyTo?: string;
-  isSystem?: boolean;
+  id: number; sender: string; initials: string; time: string; text: string;
+  isPinned?: boolean; reactions?: { emoji: string; count: number }[];
+  replyTo?: string; isSystem?: boolean;
   attachment?: { name: string; size: string; type: string };
 }
 
@@ -80,9 +56,7 @@ const dmContacts = [
 ];
 
 const channelIcons: Record<string, React.ElementType> = {
-  general: Hash,
-  announcement: Megaphone,
-  voice: Volume2,
+  general: Hash, announcement: Megaphone, voice: Volume2,
 };
 
 const pinnedMessages = [
@@ -116,27 +90,20 @@ export default function Chat() {
             <Input placeholder="Search messages..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-9 h-8 text-sm" />
           </div>
         </div>
-
         <div className="flex-1 overflow-y-auto scrollbar-thin p-2 space-y-3">
           {Object.entries(groupedChannels).map(([team, chs]) => (
             <div key={team}>
               <div className="flex items-center justify-between px-2 py-1">
                 <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{team}</span>
-                <button onClick={() => setShowCreateChannel(true)} className="text-muted-foreground hover:text-foreground">
-                  <Plus className="w-3.5 h-3.5" />
-                </button>
+                <button onClick={() => setShowCreateChannel(true)} className="text-muted-foreground hover:text-foreground"><Plus className="w-3.5 h-3.5" /></button>
               </div>
               {chs.map((ch) => {
                 const Icon = channelIcons[ch.type] || Hash;
                 return (
-                  <button
-                    key={ch.id}
-                    onClick={() => setActiveChannel(ch.id)}
-                    className={cn(
-                      "w-full flex items-center gap-2 px-3 py-1.5 rounded-md text-sm transition-colors",
+                  <button key={ch.id} onClick={() => setActiveChannel(ch.id)}
+                    className={cn("w-full flex items-center gap-2 px-3 py-1.5 rounded-md text-sm transition-colors",
                       activeChannel === ch.id ? "bg-chat-active text-primary font-medium" : "text-muted-foreground hover:bg-chat-hover hover:text-foreground"
-                    )}
-                  >
+                    )}>
                     <Icon className="w-4 h-4 shrink-0" />
                     <span className="flex-1 text-left truncate">{ch.name}</span>
                     {ch.unread > 0 && <Badge variant="destructive" className="h-5 min-w-[20px] px-1.5 text-xs">{ch.unread}</Badge>}
@@ -145,7 +112,6 @@ export default function Chat() {
               })}
             </div>
           ))}
-
           <div>
             <div className="flex items-center justify-between px-2 py-1">
               <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Direct Messages</span>
@@ -154,9 +120,7 @@ export default function Chat() {
             {dmContacts.map((dm) => (
               <button key={dm.name} className="w-full flex items-center gap-2 px-3 py-1.5 rounded-md text-sm text-muted-foreground hover:bg-chat-hover hover:text-foreground transition-colors">
                 <div className="relative">
-                  <Avatar className="h-6 w-6">
-                    <AvatarFallback className="bg-primary/10 text-primary text-[10px]">{dm.initials}</AvatarFallback>
-                  </Avatar>
+                  <Avatar className="h-6 w-6"><AvatarFallback className="bg-primary/10 text-primary text-[10px]">{dm.initials}</AvatarFallback></Avatar>
                   <StatusIndicator status={dm.status} className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 border-card" />
                 </div>
                 <div className="flex-1 text-left min-w-0">
@@ -172,26 +136,17 @@ export default function Chat() {
 
       {/* Chat Area */}
       <div className="flex-1 flex flex-col">
-        {/* Channel Header */}
         <div className="flex items-center justify-between px-4 h-12 border-b shrink-0">
           <div className="flex items-center gap-2">
             <Hash className="w-4 h-4 text-muted-foreground" />
             <h2 className="font-medium text-foreground">{currentChannel?.name}</h2>
             <Badge variant="secondary" className="text-xs">{currentChannel?.team}</Badge>
-            {currentChannel?.description && (
-              <span className="text-xs text-muted-foreground hidden md:inline">— {currentChannel.description}</span>
-            )}
+            {currentChannel?.description && <span className="text-xs text-muted-foreground hidden md:inline">— {currentChannel.description}</span>}
           </div>
           <div className="flex items-center gap-1">
-            <Button variant={showPinned ? "default" : "ghost"} size="icon" className="h-8 w-8" onClick={() => { setShowPinned(!showPinned); setShowMembers(false); }}>
-              <Pin className="w-4 h-4" />
-            </Button>
-            <Button variant={showMembers ? "default" : "ghost"} size="icon" className="h-8 w-8" onClick={() => { setShowMembers(!showMembers); setShowPinned(false); }}>
-              <Users className="w-4 h-4" />
-            </Button>
-            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground">
-              <Search className="w-4 h-4" />
-            </Button>
+            <Button variant={showPinned ? "default" : "ghost"} size="icon" className="h-8 w-8" onClick={() => { setShowPinned(!showPinned); setShowMembers(false); }}><Pin className="w-4 h-4" /></Button>
+            <Button variant={showMembers ? "default" : "ghost"} size="icon" className="h-8 w-8" onClick={() => { setShowMembers(!showMembers); setShowPinned(false); }}><Users className="w-4 h-4" /></Button>
+            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground"><Search className="w-4 h-4" /></Button>
           </div>
         </div>
 
@@ -199,21 +154,23 @@ export default function Chat() {
           {/* Messages */}
           <div className="flex-1 flex flex-col">
             <div className="flex-1 overflow-y-auto scrollbar-thin p-4 space-y-1">
-              {messages.map((msg) => {
+              {messages.map((msg, i) => {
                 if (msg.isSystem) {
                   return (
                     <div key={msg.id} className="flex items-center gap-3 py-2">
-                      <Separator className="flex-1" />
-                      <span className="text-xs text-muted-foreground shrink-0">{msg.text}</span>
-                      <Separator className="flex-1" />
+                      <Separator className="flex-1" /><span className="text-xs text-muted-foreground shrink-0">{msg.text}</span><Separator className="flex-1" />
                     </div>
                   );
                 }
                 return (
-                  <div key={msg.id} className="group flex gap-3 hover:bg-muted/30 -mx-2 px-2 py-1.5 rounded-lg transition-colors">
-                    <Avatar className="h-9 w-9 mt-0.5 shrink-0">
-                      <AvatarFallback className="bg-primary/10 text-primary text-xs">{msg.initials}</AvatarFallback>
-                    </Avatar>
+                  <motion.div
+                    key={msg.id}
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: i * 0.03, duration: 0.2 }}
+                    className="group flex gap-3 hover:bg-muted/30 -mx-2 px-2 py-1.5 rounded-lg transition-colors"
+                  >
+                    <Avatar className="h-9 w-9 mt-0.5 shrink-0"><AvatarFallback className="bg-primary/10 text-primary text-xs">{msg.initials}</AvatarFallback></Avatar>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-semibold text-foreground">{msg.sender}</span>
@@ -221,36 +178,21 @@ export default function Chat() {
                         {msg.isPinned && <Pin className="w-3 h-3 text-warning" />}
                       </div>
                       {msg.replyTo && (
-                        <div className="flex items-center gap-1 text-xs text-primary mb-0.5 bg-primary/5 px-2 py-0.5 rounded w-fit">
-                          <Reply className="w-3 h-3" />
-                          <span>{msg.replyTo}</span>
-                        </div>
+                        <div className="flex items-center gap-1 text-xs text-primary mb-0.5 bg-primary/5 px-2 py-0.5 rounded w-fit"><Reply className="w-3 h-3" /><span>{msg.replyTo}</span></div>
                       )}
                       {msg.text && <p className="text-sm text-foreground whitespace-pre-line">{msg.text}</p>}
                       {msg.attachment && (
                         <div className="mt-1 flex items-center gap-2 p-2 rounded-lg border bg-muted/30 w-fit max-w-xs">
-                          {msg.attachment.type === "image" ? (
-                            <Image className="w-4 h-4 text-primary shrink-0" />
-                          ) : (
-                            <File className="w-4 h-4 text-muted-foreground shrink-0" />
-                          )}
-                          <div className="min-w-0">
-                            <p className="text-sm text-foreground truncate">{msg.attachment.name}</p>
-                            <p className="text-xs text-muted-foreground">{msg.attachment.size}</p>
-                          </div>
+                          {msg.attachment.type === "image" ? <Image className="w-4 h-4 text-primary shrink-0" /> : <File className="w-4 h-4 text-muted-foreground shrink-0" />}
+                          <div className="min-w-0"><p className="text-sm text-foreground truncate">{msg.attachment.name}</p><p className="text-xs text-muted-foreground">{msg.attachment.size}</p></div>
                         </div>
                       )}
                       {msg.reactions && msg.reactions.length > 0 && (
                         <div className="flex gap-1 mt-1">
-                          {msg.reactions.map((r, i) => (
-                            <button key={i} className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-muted hover:bg-primary/10 text-xs transition-colors">
-                              <span>{r.emoji}</span>
-                              <span className="text-muted-foreground">{r.count}</span>
-                            </button>
+                          {msg.reactions.map((r, ri) => (
+                            <button key={ri} className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-muted hover:bg-primary/10 text-xs transition-colors"><span>{r.emoji}</span><span className="text-muted-foreground">{r.count}</span></button>
                           ))}
-                          <button className="flex items-center px-1.5 py-0.5 rounded-full bg-muted hover:bg-primary/10 text-xs opacity-0 group-hover:opacity-100 transition-opacity">
-                            <Plus className="w-3 h-3 text-muted-foreground" />
-                          </button>
+                          <button className="flex items-center px-1.5 py-0.5 rounded-full bg-muted hover:bg-primary/10 text-xs opacity-0 group-hover:opacity-100 transition-opacity"><Plus className="w-3 h-3 text-muted-foreground" /></button>
                         </div>
                       )}
                     </div>
@@ -260,12 +202,10 @@ export default function Chat() {
                       <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground"><Bookmark className="w-3.5 h-3.5" /></Button>
                       <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground"><MoreHorizontal className="w-3.5 h-3.5" /></Button>
                     </div>
-                  </div>
+                  </motion.div>
                 );
               })}
             </div>
-
-            {/* Message Input */}
             <div className="p-4 border-t">
               <div className="flex items-center gap-2 bg-muted rounded-lg px-3 py-2">
                 <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground shrink-0"><Plus className="w-4 h-4" /></Button>
@@ -278,64 +218,56 @@ export default function Chat() {
               <div className="flex items-center gap-3 mt-1.5 px-1">
                 <span className="text-xs text-muted-foreground">Press <kbd className="bg-muted px-1 rounded text-[10px]">Enter</kbd> to send</span>
                 <span className="text-xs text-muted-foreground">|</span>
-                <span className="text-xs text-muted-foreground">
-                  <kbd className="bg-muted px-1 rounded text-[10px]">Shift+Enter</kbd> for new line
-                </span>
+                <span className="text-xs text-muted-foreground"><kbd className="bg-muted px-1 rounded text-[10px]">Shift+Enter</kbd> for new line</span>
               </div>
             </div>
           </div>
 
-          {/* Pinned Messages Panel */}
-          {showPinned && (
-            <div className="w-64 border-l flex flex-col shrink-0 animate-slide-in">
-              <div className="px-4 py-3 border-b">
-                <h3 className="text-sm font-medium text-foreground">Pinned Messages</h3>
-              </div>
-              <div className="flex-1 overflow-y-auto p-3 space-y-2">
-                {pinnedMessages.map((pm, i) => (
-                  <div key={i} className="p-2.5 rounded-lg border bg-muted/30">
-                    <div className="flex items-center gap-1 mb-1">
-                      <Pin className="w-3 h-3 text-warning" />
-                      <span className="text-xs font-medium text-foreground">{pm.sender}</span>
-                      <span className="text-xs text-muted-foreground">{pm.time}</span>
-                    </div>
-                    <p className="text-xs text-foreground">{pm.text}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Members Panel */}
-          {showMembers && (
-            <div className="w-64 border-l flex flex-col shrink-0 animate-slide-in">
-              <div className="px-4 py-3 border-b">
-                <h3 className="text-sm font-medium text-foreground">Members ({currentChannel?.memberCount})</h3>
-              </div>
-              <div className="flex-1 overflow-y-auto p-3 space-y-1">
-                <p className="text-xs font-semibold uppercase text-muted-foreground mb-2">Online</p>
-                {dmContacts.filter(d => d.status === "online").map((m) => (
-                  <div key={m.name} className="flex items-center gap-2 p-2 rounded-lg hover:bg-muted/50">
-                    <div className="relative">
-                      <Avatar className="h-7 w-7"><AvatarFallback className="bg-primary/10 text-primary text-[10px]">{m.initials}</AvatarFallback></Avatar>
-                      <StatusIndicator status={m.status} className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 border-card" />
-                    </div>
-                    <span className="text-sm text-foreground">{m.name}</span>
-                  </div>
-                ))}
-                <p className="text-xs font-semibold uppercase text-muted-foreground mb-2 mt-3">Offline</p>
-                {dmContacts.filter(d => d.status !== "online").map((m) => (
-                  <div key={m.name} className="flex items-center gap-2 p-2 rounded-lg hover:bg-muted/50 opacity-60">
-                    <div className="relative">
-                      <Avatar className="h-7 w-7"><AvatarFallback className="bg-primary/10 text-primary text-[10px]">{m.initials}</AvatarFallback></Avatar>
-                      <StatusIndicator status={m.status} className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 border-card" />
-                    </div>
-                    <span className="text-sm text-foreground">{m.name}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+          {/* Panels with AnimatePresence */}
+          <AnimatePresence>
+            {showPinned && (
+              <motion.div key="pinned" variants={slidePanel} initial="initial" animate="animate" exit="exit" className="w-64 border-l flex flex-col shrink-0">
+                <div className="px-4 py-3 border-b"><h3 className="text-sm font-medium text-foreground">Pinned Messages</h3></div>
+                <div className="flex-1 overflow-y-auto p-3 space-y-2">
+                  {pinnedMessages.map((pm, i) => (
+                    <motion.div key={i} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }} className="p-2.5 rounded-lg border bg-muted/30">
+                      <div className="flex items-center gap-1 mb-1"><Pin className="w-3 h-3 text-warning" /><span className="text-xs font-medium text-foreground">{pm.sender}</span><span className="text-xs text-muted-foreground">{pm.time}</span></div>
+                      <p className="text-xs text-foreground">{pm.text}</p>
+                    </motion.div>
+                  ))}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+          <AnimatePresence>
+            {showMembers && (
+              <motion.div key="members" variants={slidePanel} initial="initial" animate="animate" exit="exit" className="w-64 border-l flex flex-col shrink-0">
+                <div className="px-4 py-3 border-b"><h3 className="text-sm font-medium text-foreground">Members ({currentChannel?.memberCount})</h3></div>
+                <div className="flex-1 overflow-y-auto p-3 space-y-1">
+                  <p className="text-xs font-semibold uppercase text-muted-foreground mb-2">Online</p>
+                  {dmContacts.filter(d => d.status === "online").map((m, i) => (
+                    <motion.div key={m.name} initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.04 }} className="flex items-center gap-2 p-2 rounded-lg hover:bg-muted/50">
+                      <div className="relative">
+                        <Avatar className="h-7 w-7"><AvatarFallback className="bg-primary/10 text-primary text-[10px]">{m.initials}</AvatarFallback></Avatar>
+                        <StatusIndicator status={m.status} className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 border-card" />
+                      </div>
+                      <span className="text-sm text-foreground">{m.name}</span>
+                    </motion.div>
+                  ))}
+                  <p className="text-xs font-semibold uppercase text-muted-foreground mb-2 mt-3">Offline</p>
+                  {dmContacts.filter(d => d.status !== "online").map((m, i) => (
+                    <motion.div key={m.name} initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.1 + i * 0.04 }} className="flex items-center gap-2 p-2 rounded-lg hover:bg-muted/50">
+                      <div className="relative">
+                        <Avatar className="h-7 w-7"><AvatarFallback className="bg-primary/10 text-primary text-[10px]">{m.initials}</AvatarFallback></Avatar>
+                        <StatusIndicator status={m.status} className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 border-card" />
+                      </div>
+                      <span className="text-sm text-muted-foreground">{m.name}</span>
+                    </motion.div>
+                  ))}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </div>
     </div>

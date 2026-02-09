@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { motion } from "framer-motion";
 import {
   Bell,
   Check,
@@ -83,9 +84,12 @@ export default function Notifications() {
           </TabsList>
 
           <TabsContent value="all" className="space-y-1">
-            {items.map((n) => (
-              <button
+            {items.map((n, i) => (
+              <motion.button
                 key={n.id}
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: i * 0.03 }}
                 onClick={() => markRead(n.id)}
                 className={cn(
                   "w-full flex items-start gap-3 p-3 rounded-lg text-left transition-colors",
@@ -105,7 +109,7 @@ export default function Notifications() {
                 {!n.isRead && (
                   <div className="w-2 h-2 rounded-full bg-primary mt-2 shrink-0" />
                 )}
-              </button>
+              </motion.button>
             ))}
           </TabsContent>
 

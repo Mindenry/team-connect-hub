@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { motion } from "framer-motion";
 import {
   Video,
   Plus,
@@ -47,8 +48,13 @@ const statusStyles: Record<string, string> = {
   ended: "bg-muted text-muted-foreground",
 };
 
-function MeetingCard({ meeting }: { meeting: Meeting }) {
+function MeetingCard({ meeting, index }: { meeting: Meeting; index: number }) {
   return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: index * 0.05, duration: 0.2 }}
+    >
     <Card className="hover:shadow-md transition-shadow">
       <CardContent className="p-4">
         <div className="flex items-center gap-4">
@@ -92,6 +98,7 @@ function MeetingCard({ meeting }: { meeting: Meeting }) {
         </div>
       </CardContent>
     </Card>
+    </motion.div>
   );
 }
 
@@ -132,13 +139,13 @@ export default function Meetings() {
             <TabsTrigger value="past">Past ({filteredMeetings.filter(m => m.status === "ended").length})</TabsTrigger>
           </TabsList>
           <TabsContent value="all" className="space-y-3">
-            {filteredMeetings.map((m) => <MeetingCard key={m.id} meeting={m} />)}
+            {filteredMeetings.map((m, i) => <MeetingCard key={m.id} meeting={m} index={i} />)}
           </TabsContent>
           <TabsContent value="upcoming" className="space-y-3">
-            {filteredMeetings.filter(m => m.status !== "ended").map((m) => <MeetingCard key={m.id} meeting={m} />)}
+            {filteredMeetings.filter(m => m.status !== "ended").map((m, i) => <MeetingCard key={m.id} meeting={m} index={i} />)}
           </TabsContent>
           <TabsContent value="past" className="space-y-3">
-            {filteredMeetings.filter(m => m.status === "ended").map((m) => <MeetingCard key={m.id} meeting={m} />)}
+            {filteredMeetings.filter(m => m.status === "ended").map((m, i) => <MeetingCard key={m.id} meeting={m} index={i} />)}
           </TabsContent>
         </Tabs>
       </div>
