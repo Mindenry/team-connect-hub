@@ -18,6 +18,7 @@ import SettingsPage from "./pages/Settings";
 import Admin from "./pages/Admin";
 import Login from "./pages/Login";
 import InviteSetup from "./pages/InviteSetup";
+import VirtualOffice from "./pages/VirtualOffice";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -35,6 +36,7 @@ const App = () => (
           <Route path="/meeting-room" element={<MeetingRoom />} />
           <Route element={<AppLayout />}>
             <Route path="/" element={<Dashboard />} />
+            <Route path="/virtual-office" element={<VirtualOffice />} />
             <Route path="/meetings" element={<Meetings />} />
             <Route path="/meeting-summary" element={<MeetingSummary />} />
             <Route path="/chat" element={<Chat />} />
