@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { motion } from "framer-motion";
 import { User, Camera, Bell, Lock, Save } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -18,6 +19,7 @@ const sections = [
 ];
 
 export default function SettingsPage() {
+  const isMobile = useIsMobile();
   const [activeSection, setActiveSection] = useState("profile");
   const [status, setStatus] = useState("online");
 
@@ -146,13 +148,14 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="flex h-screen">
-      <div className="w-56 border-r shrink-0 p-4">
+    <div className="flex flex-col md:flex-row h-screen">
+      <div className={cn("border-r shrink-0 p-4", isMobile ? "border-b border-r-0" : "w-56")}>
         <h1 className="text-lg font-semibold text-foreground mb-4 px-2">Settings</h1>
-        <nav className="space-y-0.5">
+        <nav className={cn("space-y-0.5", isMobile && "flex gap-1 overflow-x-auto pb-2")}>
           {sections.map((s) => (
             <button key={s.id} onClick={() => setActiveSection(s.id)}
-              className={cn("w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors",
+              className={cn("flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors whitespace-nowrap",
+                isMobile ? "" : "w-full",
                 activeSection === s.id ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground hover:bg-muted hover:text-foreground"
               )}>
               <s.icon className="w-4 h-4" />{s.label}
@@ -160,7 +163,7 @@ export default function SettingsPage() {
           ))}
         </nav>
       </div>
-      <div className="flex-1 overflow-y-auto p-6 max-w-2xl">
+      <div className="flex-1 overflow-y-auto p-4 md:p-6 max-w-2xl">
         {renderContent()}
       </div>
     </div>

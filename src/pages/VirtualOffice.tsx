@@ -69,20 +69,20 @@ export default function VirtualOffice() {
 
   return (
     <motion.div
-      className="p-6 space-y-6 max-w-7xl"
+      className="p-4 md:p-6 space-y-4 md:space-y-6 max-w-7xl"
       variants={container}
       initial="initial"
       animate="animate"
     >
       {/* Header */}
-      <motion.div variants={item} className="flex items-center justify-between">
+      <motion.div variants={item} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
-            <MapPin className="w-6 h-6 text-primary" />
+          <h1 className="text-xl md:text-2xl font-bold text-foreground flex items-center gap-2">
+            <MapPin className="w-5 md:w-6 h-5 md:h-6 text-primary" />
             Virtual Office
           </h1>
-          <p className="text-muted-foreground">
-            {onlinePeople.length} of {people.length} team members online · See where everyone is working
+          <p className="text-xs md:text-sm text-muted-foreground">
+            {onlinePeople.length} of {people.length} online · See where everyone is
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -182,7 +182,7 @@ export default function VirtualOffice() {
       </motion.div>
 
       {/* Quick Stats Footer */}
-      <motion.div variants={item} className="grid grid-cols-4 gap-4">
+      <motion.div variants={item} className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
         {[
           { label: "Focus Time Today", value: "4h 32m", desc: "Above average", trend: "text-success" },
           { label: "Meetings Attended", value: "2 / 3", desc: "1 upcoming", trend: "text-primary" },

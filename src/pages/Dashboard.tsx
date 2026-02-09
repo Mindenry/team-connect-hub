@@ -61,28 +61,28 @@ export default function Dashboard() {
   const [showCreateTask, setShowCreateTask] = useState(false);
 
   return (
-    <motion.div className="p-6 space-y-5 max-w-[1400px]" variants={container} initial="initial" animate="animate">
+    <motion.div className="p-4 md:p-6 space-y-4 md:space-y-5 max-w-[1400px]" variants={container} initial="initial" animate="animate">
       <CreateMeetingDialog open={showCreateMeeting} onOpenChange={setShowCreateMeeting} />
       <CreateTaskDialog open={showCreateTask} onOpenChange={setShowCreateTask} />
 
       {/* Header */}
-      <motion.div variants={item} className="flex items-center justify-between">
+      <motion.div variants={item} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Good morning, สมชาย 👋</h1>
-          <p className="text-sm text-muted-foreground">Monday, Feb 9 · 3 meetings · 4 tasks due today</p>
+          <h1 className="text-xl md:text-2xl font-bold text-foreground">Good morning, สมชาย 👋</h1>
+          <p className="text-xs md:text-sm text-muted-foreground">Monday, Feb 9 · 3 meetings · 4 tasks due today</p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={() => setShowCreateMeeting(true)} className="gap-2">
-            <Calendar className="w-4 h-4" />Schedule
+            <Calendar className="w-4 h-4" /><span className="hidden sm:inline">Schedule</span>
           </Button>
           <Button size="sm" className="gradient-primary gap-2 shadow-md" asChild>
-            <Link to="/meeting-room"><Video className="w-4 h-4" />Start Meeting</Link>
+            <Link to="/meeting-room"><Video className="w-4 h-4" /><span className="hidden sm:inline">Start Meeting</span></Link>
           </Button>
         </div>
       </motion.div>
 
       {/* Quick Actions */}
-      <motion.div variants={item} className="flex gap-2 flex-wrap">
+      <motion.div variants={item} className="flex gap-2 flex-wrap overflow-x-auto pb-1">
         {[
           { label: "New Meeting", icon: Video, action: () => setShowCreateMeeting(true) },
           { label: "New Task", icon: CheckSquare, action: () => setShowCreateTask(true) },
@@ -102,7 +102,7 @@ export default function Dashboard() {
       </motion.div>
 
       {/* Stats Cards */}
-      <motion.div variants={item} className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <motion.div variants={item} className="grid grid-cols-2 gap-3">
         {[
           { label: "Meetings Today", value: "3", icon: Video, trend: "+1 from yesterday", trendColor: "text-success", gradient: "from-primary/10 to-info/10" },
           { label: "Open Tasks", value: "12", icon: CheckSquare, trend: "4 due today", trendColor: "text-warning", gradient: "from-warning/10 to-warning/5" },
@@ -129,9 +129,9 @@ export default function Dashboard() {
       </motion.div>
 
       {/* Row 1: Focus Timer + Mood + Meetings */}
-      <motion.div variants={item} className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+      <motion.div variants={item} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-4">
         {/* Focus Timer */}
-        <Card className="lg:col-span-3 card-hover">
+        <Card className="md:col-span-1 lg:col-span-3 card-hover">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm flex items-center gap-2"><Target className="w-4 h-4 text-primary" /> Focus Timer</CardTitle>
           </CardHeader>
@@ -139,7 +139,7 @@ export default function Dashboard() {
         </Card>
 
         {/* Upcoming Meetings */}
-        <Card className="lg:col-span-5">
+        <Card className="md:col-span-2 lg:col-span-5">
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
               <CardTitle className="text-sm">Upcoming Meetings</CardTitle>
@@ -169,7 +169,7 @@ export default function Dashboard() {
         </Card>
 
         {/* Mood Check-in */}
-        <Card className="lg:col-span-4 card-hover">
+        <Card className="md:col-span-1 lg:col-span-4 card-hover">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm flex items-center gap-2"><Sparkles className="w-4 h-4 text-warning" /> Daily Check-in</CardTitle>
           </CardHeader>
@@ -178,7 +178,7 @@ export default function Dashboard() {
       </motion.div>
 
       {/* Row 2: Work Hours + Team Status + Time Zones */}
-      <motion.div variants={item} className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+      <motion.div variants={item} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-4">
         {/* Work Hours Tracker */}
         <Card className="lg:col-span-4 card-hover">
           <CardHeader className="pb-2">
