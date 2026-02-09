@@ -1,0 +1,210 @@
+import { useState } from "react";
+import { motion } from "framer-motion";
+import {
+  Monitor, Coffee, Video, Headphones, MessageSquare, Phone,
+  Wifi, WifiOff, Plus, Settings, MapPin,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import StatusIndicator from "@/components/shared/StatusIndicator";
+
+interface Person {
+  id: string;
+  name: string;
+  initials: string;
+  status: "online" | "busy" | "away" | "offline";
+  room: string;
+  activity: string;
+  avatar?: string;
+}
+
+interface Room {
+  id: string;
+  name: string;
+  icon: React.ElementType;
+  description: string;
+  color: string;
+  bgColor: string;
+  capacity?: number;
+}
+
+const rooms: Room[] = [
+  { id: "workspace", name: "💻 Open Workspace", icon: Monitor, description: "Focused individual work", color: "text-primary", bgColor: "bg-primary/5 border-primary/20" },
+  { id: "meeting-1", name: "🎥 Meeting Room A", icon: Video, description: "Sprint Planning (LIVE)", color: "text-success", bgColor: "bg-success/5 border-success/20" },
+  { id: "meeting-2", name: "🎥 Meeting Room B", icon: Video, description: "Available", color: "text-muted-foreground", bgColor: "bg-muted/50 border-border" },
+  { id: "huddle", name: "🎧 Huddle Zone", icon: Headphones, description: "Quick calls & pairing", color: "text-info", bgColor: "bg-info/5 border-info/20" },
+  { id: "lounge", name: "☕ Break Lounge", icon: Coffee, description: "Relax & social chat", color: "text-warning", bgColor: "bg-warning/5 border-warning/20" },
+  { id: "phone", name: "📞 Phone Booth", icon: Phone, description: "Private calls", color: "text-destructive", bgColor: "bg-destructive/5 border-destructive/20" },
+];
+
+const people: Person[] = [
+  { id: "1", name: "สมชาย K.", initials: "SK", status: "online", room: "meeting-1", activity: "In Sprint Planning" },
+  { id: "2", name: "อริสา P.", initials: "AP", status: "online", room: "workspace", activity: "Working on designs" },
+  { id: "3", name: "จิรวัฒน์ W.", initials: "JW", status: "busy", room: "meeting-1", activity: "In Sprint Planning" },
+  { id: "4", name: "พิมพ์ L.", initials: "PL", status: "away", room: "lounge", activity: "On break ☕" },
+  { id: "5", name: "ธนา S.", initials: "TS", status: "online", room: "workspace", activity: "Coding — API v2" },
+  { id: "6", name: "นภา M.", initials: "NM", status: "online", room: "huddle", activity: "Pair programming" },
+  { id: "7", name: "กิตติ R.", initials: "KR", status: "online", room: "workspace", activity: "Reviewing docs" },
+  { id: "8", name: "ปรียา S.", initials: "PS", status: "online", room: "phone", activity: "Client call" },
+  { id: "9", name: "วิภา T.", initials: "VT", status: "offline", room: "workspace", activity: "Offline" },
+];
+
+const container = {
+  animate: { transition: { staggerChildren: 0.06 } },
+};
+
+const item = {
+  initial: { opacity: 0, y: 12 },
+  animate: { opacity: 1, y: 0, transition: { duration: 0.25 } },
+};
+
+export default function VirtualOffice() {
+  const [selectedRoom, setSelectedRoom] = useState<string | null>(null);
+
+  const getRoomPeople = (roomId: string) => people.filter((p) => p.room === roomId);
+  const onlinePeople = people.filter((p) => p.status !== "offline");
+
+  return (
+    <motion.div
+      className="p-6 space-y-6 max-w-7xl"
+      variants={container}
+      initial="initial"
+      animate="animate"
+    >
+      {/* Header */}
+      <motion.div variants={item} className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
+            <MapPin className="w-6 h-6 text-primary" />
+            Virtual Office
+          </h1>
+          <p className="text-muted-foreground">
+            {onlinePeople.length} of {people.length} team members online · See where everyone is working
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Badge variant="outline" className="text-xs gap-1">
+            <Wifi className="w-3 h-3 text-success" /> {onlinePeople.length} online
+          </Badge>
+          <Badge variant="outline" className="text-xs gap-1">
+            <WifiOff className="w-3 h-3 text-muted-foreground" /> {people.length - onlinePeople.length} offline
+          </Badge>
+        </div>
+      </motion.div>
+
+      {/* Floor Plan Grid */}
+      <motion.div variants={item} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {rooms.map((room, idx) => {
+          const roomPeople = getRoomPeople(room.id);
+          const isSelected = selectedRoom === room.id;
+
+          return (
+            <motion.div
+              key={room.id}
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: idx * 0.06 }}
+              whileHover={{ scale: 1.01 }}
+            >
+              <Card
+                className={cn(
+                  "cursor-pointer transition-all duration-200 border-2 overflow-hidden",
+                  room.bgColor,
+                  isSelected && "ring-2 ring-primary shadow-lg"
+                )}
+                onClick={() => setSelectedRoom(isSelected ? null : room.id)}
+              >
+                <CardHeader className="pb-2">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-sm font-semibold">{room.name}</CardTitle>
+                    <div className="flex items-center gap-1">
+                      {roomPeople.length > 0 && (
+                        <Badge variant="secondary" className="text-[10px] h-5">
+                          {roomPeople.length} {room.capacity ? `/ ${room.capacity}` : ""}
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground">{room.description}</p>
+                </CardHeader>
+                <CardContent className="pb-4">
+                  {roomPeople.length === 0 ? (
+                    <p className="text-xs text-muted-foreground italic py-2">Empty — ready to use</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {roomPeople.map((person, pi) => (
+                        <motion.div
+                          key={person.id}
+                          initial={{ opacity: 0, x: -8 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: 0.1 + pi * 0.04 }}
+                          className="flex items-center gap-2.5 p-1.5 rounded-lg hover:bg-card/50 transition-colors"
+                        >
+                          <div className="relative">
+                            <Avatar className="h-7 w-7">
+                              <AvatarFallback className="bg-card text-foreground text-[10px] font-medium">
+                                {person.initials}
+                              </AvatarFallback>
+                            </Avatar>
+                            <StatusIndicator status={person.status} className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 border-card" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-medium text-foreground truncate">{person.name}</p>
+                            <p className="text-[10px] text-muted-foreground truncate">{person.activity}</p>
+                          </div>
+                          {person.room === "meeting-1" && (
+                            <div className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
+                          )}
+                        </motion.div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Quick action */}
+                  {room.id.startsWith("meeting") && roomPeople.length === 0 && (
+                    <Button size="sm" variant="outline" className="w-full mt-2 text-xs h-7 gap-1">
+                      <Plus className="w-3 h-3" /> Start Meeting
+                    </Button>
+                  )}
+                  {room.id === "huddle" && (
+                    <Button size="sm" variant="outline" className="w-full mt-2 text-xs h-7 gap-1">
+                      <Headphones className="w-3 h-3" /> Join Huddle
+                    </Button>
+                  )}
+                </CardContent>
+              </Card>
+            </motion.div>
+          );
+        })}
+      </motion.div>
+
+      {/* Quick Stats Footer */}
+      <motion.div variants={item} className="grid grid-cols-4 gap-4">
+        {[
+          { label: "Focus Time Today", value: "4h 32m", desc: "Above average", trend: "text-success" },
+          { label: "Meetings Attended", value: "2 / 3", desc: "1 upcoming", trend: "text-primary" },
+          { label: "Messages Sent", value: "28", desc: "+12 from yesterday", trend: "text-info" },
+          { label: "Collaboration Score", value: "92%", desc: "Top 10% this week", trend: "text-success" },
+        ].map((stat, i) => (
+          <motion.div
+            key={stat.label}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.4 + i * 0.05 }}
+          >
+            <Card className="card-hover">
+              <CardContent className="p-4 text-center">
+                <p className="text-2xl font-bold text-foreground">{stat.value}</p>
+                <p className="text-xs font-medium text-muted-foreground mt-0.5">{stat.label}</p>
+                <p className={cn("text-[10px] mt-1", stat.trend)}>{stat.desc}</p>
+              </CardContent>
+            </Card>
+          </motion.div>
+        ))}
+      </motion.div>
+    </motion.div>
+  );
+}

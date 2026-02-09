@@ -4,98 +4,107 @@
 
 @layer base {
   :root {
-    --background: 220 14% 96%;
-    --foreground: 220 20% 10%;
+    --background: 220 16% 96%;
+    --foreground: 222 47% 11%;
 
     --card: 0 0% 100%;
-    --card-foreground: 220 20% 10%;
+    --card-foreground: 222 47% 11%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 220 20% 10%;
+    --popover-foreground: 222 47% 11%;
 
-    --primary: 217 71% 45%;
+    --primary: 217 91% 50%;
     --primary-foreground: 0 0% 100%;
 
     --secondary: 220 14% 92%;
-    --secondary-foreground: 220 20% 25%;
+    --secondary-foreground: 222 47% 20%;
 
     --muted: 220 14% 94%;
     --muted-foreground: 220 10% 46%;
 
-    --accent: 217 71% 45%;
+    --accent: 217 91% 50%;
     --accent-foreground: 0 0% 100%;
 
     --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 100%;
 
-    --success: 142 71% 35%;
+    --success: 152 69% 39%;
     --success-foreground: 0 0% 100%;
 
     --warning: 38 92% 50%;
     --warning-foreground: 0 0% 10%;
 
+    --info: 199 89% 48%;
+    --info-foreground: 0 0% 100%;
+
     --border: 220 13% 89%;
     --input: 220 13% 89%;
-    --ring: 217 71% 45%;
+    --ring: 217 91% 50%;
 
-    --radius: 0.5rem;
+    --radius: 0.625rem;
 
     /* Sidebar - Dark corporate */
     --sidebar-background: 222 47% 11%;
-    --sidebar-foreground: 220 14% 80%;
-    --sidebar-primary: 217 71% 55%;
+    --sidebar-foreground: 220 14% 75%;
+    --sidebar-primary: 217 91% 55%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 222 40% 18%;
+    --sidebar-accent: 222 40% 16%;
     --sidebar-accent-foreground: 220 14% 92%;
-    --sidebar-border: 222 30% 20%;
-    --sidebar-ring: 217 71% 55%;
-    --sidebar-muted: 220 10% 50%;
+    --sidebar-border: 222 30% 18%;
+    --sidebar-ring: 217 91% 55%;
+    --sidebar-muted: 220 10% 48%;
 
     /* Meeting room */
-    --meeting-bg: 222 47% 8%;
-    --meeting-controls: 222 40% 14%;
-    --meeting-tile: 222 35% 16%;
-    --meeting-hover: 217 71% 45%;
+    --meeting-bg: 222 47% 6%;
+    --meeting-controls: 222 40% 12%;
+    --meeting-tile: 222 35% 14%;
+    --meeting-hover: 217 91% 50%;
 
     /* Chat */
     --chat-hover: 220 14% 94%;
-    --chat-active: 217 71% 95%;
+    --chat-active: 217 91% 96%;
 
     /* Status colors */
-    --online: 142 71% 45%;
+    --online: 152 69% 39%;
     --busy: 0 72% 51%;
     --away: 38 92% 50%;
     --offline: 220 10% 60%;
+
+    /* Glass & Gradient */
+    --glass: 0 0% 100% / 0.7;
+    --glass-border: 0 0% 100% / 0.2;
+    --gradient-start: 217 91% 50%;
+    --gradient-end: 199 89% 48%;
   }
 
   .dark {
-    --background: 222 47% 8%;
+    --background: 222 47% 6%;
     --foreground: 220 14% 92%;
 
-    --card: 222 40% 12%;
+    --card: 222 40% 10%;
     --card-foreground: 220 14% 92%;
 
-    --popover: 222 40% 12%;
+    --popover: 222 40% 10%;
     --popover-foreground: 220 14% 92%;
 
-    --primary: 217 71% 55%;
+    --primary: 217 91% 55%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 222 30% 20%;
+    --secondary: 222 30% 18%;
     --secondary-foreground: 220 14% 85%;
 
-    --muted: 222 30% 18%;
+    --muted: 222 30% 16%;
     --muted-foreground: 220 10% 55%;
 
-    --accent: 217 71% 55%;
+    --accent: 217 91% 55%;
     --accent-foreground: 0 0% 100%;
 
     --destructive: 0 62% 50%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 222 30% 20%;
-    --input: 222 30% 20%;
-    --ring: 217 71% 55%;
+    --border: 222 30% 18%;
+    --input: 222 30% 18%;
+    --ring: 217 91% 55%;
   }
 }
 
@@ -106,7 +115,7 @@
 
   body {
     @apply bg-background text-foreground antialiased;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   }
 }
 
@@ -116,7 +125,7 @@
     scrollbar-color: hsl(var(--sidebar-border)) transparent;
   }
   .scrollbar-thin::-webkit-scrollbar {
-    width: 6px;
+    width: 5px;
   }
   .scrollbar-thin::-webkit-scrollbar-track {
     background: transparent;
@@ -124,5 +133,38 @@
   .scrollbar-thin::-webkit-scrollbar-thumb {
     background-color: hsl(var(--sidebar-border));
     border-radius: 3px;
+  }
+
+  .glass {
+    background: hsl(var(--glass));
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid hsl(var(--glass-border));
+  }
+
+  .gradient-primary {
+    background: linear-gradient(135deg, hsl(var(--gradient-start)), hsl(var(--gradient-end)));
+  }
+
+  .gradient-text {
+    background: linear-gradient(135deg, hsl(var(--gradient-start)), hsl(var(--gradient-end)));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .card-hover {
+    @apply transition-all duration-200;
+  }
+  .card-hover:hover {
+    @apply shadow-lg -translate-y-0.5;
+  }
+
+  .glow-primary {
+    box-shadow: 0 0 20px hsl(var(--primary) / 0.15), 0 0 40px hsl(var(--primary) / 0.05);
+  }
+
+  .glow-success {
+    box-shadow: 0 0 12px hsl(var(--success) / 0.3);
   }
 }
