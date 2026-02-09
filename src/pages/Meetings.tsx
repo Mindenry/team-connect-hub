@@ -8,7 +8,6 @@ import {
   Users,
   MoreHorizontal,
   Filter,
-  Link as LinkIcon,
   Copy,
 } from "lucide-react";
 import { Link } from "react-router-dom";
@@ -18,6 +17,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import CreateMeetingDialog from "@/components/dialogs/CreateMeetingDialog";
 
 interface Meeting {
   id: string;
@@ -47,11 +47,66 @@ const statusStyles: Record<string, string> = {
   ended: "bg-muted text-muted-foreground",
 };
 
+function MeetingCard({ meeting }: { meeting: Meeting }) {
+  return (
+    <Card className="hover:shadow-md transition-shadow">
+      <CardContent className="p-4">
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+            <Video className="w-5 h-5 text-primary" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-0.5">
+              <h3 className="font-medium text-foreground">{meeting.title}</h3>
+              <Badge className={`text-xs ${statusStyles[meeting.status]}`}>
+                {meeting.status === "live" ? "LIVE" : meeting.status}
+              </Badge>
+              {meeting.hasWaitingRoom && (
+                <Badge variant="outline" className="text-xs">Waiting Room</Badge>
+              )}
+            </div>
+            <div className="flex items-center gap-3 text-sm text-muted-foreground">
+              <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5" />{meeting.date}</span>
+              <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" />{meeting.time} ({meeting.duration})</span>
+              <span className="flex items-center gap-1"><Users className="w-3.5 h-3.5" />{meeting.participants}</span>
+              {meeting.team && <Badge variant="secondary" className="text-xs">{meeting.team}</Badge>}
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Avatar className="h-7 w-7">
+              <AvatarFallback className="bg-primary/10 text-primary text-[10px]">{meeting.host.initials}</AvatarFallback>
+            </Avatar>
+            {meeting.status === "live" && (
+              <Button size="sm" asChild><Link to="/meeting-room">Join</Link></Button>
+            )}
+            {meeting.status === "upcoming" && (
+              <Button size="sm" variant="outline"><Copy className="w-3.5 h-3.5 mr-1" />Copy Link</Button>
+            )}
+            {meeting.status === "ended" && (
+              <Button size="sm" variant="ghost" asChild><Link to="/meeting-summary">Summary</Link></Button>
+            )}
+            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground">
+              <MoreHorizontal className="w-4 h-4" />
+            </Button>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function Meetings() {
   const [searchQuery, setSearchQuery] = useState("");
+  const [showCreateMeeting, setShowCreateMeeting] = useState(false);
+
+  const filteredMeetings = meetings.filter((m) =>
+    m.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    m.team.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   return (
     <div className="flex flex-col h-screen">
+      <CreateMeetingDialog open={showCreateMeeting} onOpenChange={setShowCreateMeeting} />
       <div className="flex items-center justify-between px-6 h-14 border-b shrink-0">
         <h1 className="text-lg font-semibold text-foreground">Meetings</h1>
         <div className="flex items-center gap-2">
@@ -59,19 +114,12 @@ export default function Meetings() {
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input placeholder="Search meetings..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-9 h-8 w-48 text-sm" />
           </div>
-          <Button variant="outline" size="sm">
-            <Filter className="w-4 h-4 mr-2" />
-            Filter
-          </Button>
+          <Button variant="outline" size="sm"><Filter className="w-4 h-4 mr-2" />Filter</Button>
           <Button size="sm" asChild>
-            <Link to="/meeting-room">
-              <Video className="w-4 h-4 mr-2" />
-              Instant Meeting
-            </Link>
+            <Link to="/meeting-room"><Video className="w-4 h-4 mr-2" />Instant Meeting</Link>
           </Button>
-          <Button size="sm" variant="outline">
-            <Plus className="w-4 h-4 mr-2" />
-            Schedule
+          <Button size="sm" variant="outline" onClick={() => setShowCreateMeeting(true)}>
+            <Plus className="w-4 h-4 mr-2" />Schedule
           </Button>
         </div>
       </div>
@@ -79,78 +127,18 @@ export default function Meetings() {
       <div className="flex-1 overflow-y-auto p-6">
         <Tabs defaultValue="all">
           <TabsList className="mb-4">
-            <TabsTrigger value="all">All</TabsTrigger>
-            <TabsTrigger value="upcoming">Upcoming</TabsTrigger>
-            <TabsTrigger value="past">Past</TabsTrigger>
+            <TabsTrigger value="all">All ({filteredMeetings.length})</TabsTrigger>
+            <TabsTrigger value="upcoming">Upcoming ({filteredMeetings.filter(m => m.status !== "ended").length})</TabsTrigger>
+            <TabsTrigger value="past">Past ({filteredMeetings.filter(m => m.status === "ended").length})</TabsTrigger>
           </TabsList>
-
           <TabsContent value="all" className="space-y-3">
-            {meetings.map((meeting) => (
-              <Card key={meeting.id} className="hover:shadow-md transition-shadow">
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                      <Video className="w-5 h-5 text-primary" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-0.5">
-                        <h3 className="font-medium text-foreground">{meeting.title}</h3>
-                        <Badge className={`text-xs ${statusStyles[meeting.status]}`}>
-                          {meeting.status === "live" ? "LIVE" : meeting.status}
-                        </Badge>
-                        {meeting.hasWaitingRoom && (
-                          <Badge variant="outline" className="text-xs">Waiting Room</Badge>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                        <span className="flex items-center gap-1">
-                          <Calendar className="w-3.5 h-3.5" />{meeting.date}
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <Clock className="w-3.5 h-3.5" />{meeting.time} ({meeting.duration})
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <Users className="w-3.5 h-3.5" />{meeting.participants}
-                        </span>
-                        {meeting.team && <Badge variant="secondary" className="text-xs">{meeting.team}</Badge>}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Avatar className="h-7 w-7">
-                        <AvatarFallback className="bg-primary/10 text-primary text-[10px]">{meeting.host.initials}</AvatarFallback>
-                      </Avatar>
-                      {meeting.status === "live" && (
-                        <Button size="sm" asChild>
-                          <Link to="/meeting-room">Join</Link>
-                        </Button>
-                      )}
-                      {meeting.status === "upcoming" && (
-                        <Button size="sm" variant="outline">
-                          <Copy className="w-3.5 h-3.5 mr-1" />
-                          Copy Link
-                        </Button>
-                      )}
-                      {meeting.status === "ended" && (
-                        <Button size="sm" variant="ghost">Summary</Button>
-                      )}
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground">
-                        <MoreHorizontal className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+            {filteredMeetings.map((m) => <MeetingCard key={m.id} meeting={m} />)}
           </TabsContent>
           <TabsContent value="upcoming" className="space-y-3">
-            {meetings.filter(m => m.status !== "ended").map((meeting) => (
-              <Card key={meeting.id}><CardContent className="p-4 text-sm text-foreground">{meeting.title} — {meeting.time}</CardContent></Card>
-            ))}
+            {filteredMeetings.filter(m => m.status !== "ended").map((m) => <MeetingCard key={m.id} meeting={m} />)}
           </TabsContent>
           <TabsContent value="past" className="space-y-3">
-            {meetings.filter(m => m.status === "ended").map((meeting) => (
-              <Card key={meeting.id}><CardContent className="p-4 text-sm text-foreground">{meeting.title} — {meeting.time}</CardContent></Card>
-            ))}
+            {filteredMeetings.filter(m => m.status === "ended").map((m) => <MeetingCard key={m.id} meeting={m} />)}
           </TabsContent>
         </Tabs>
       </div>
