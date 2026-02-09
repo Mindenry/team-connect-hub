@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { motion } from "framer-motion";
 import {
   BarChart3,
   Video,
@@ -63,17 +63,19 @@ export default function Reports() {
             { label: "Avg Duration", value: "42m", sub: "Per meeting", icon: Clock, trend: "-5%" },
             { label: "Tasks Completed", value: "23", sub: "This week", icon: CheckSquare, trend: "+18%" },
             { label: "Overdue Tasks", value: "6", sub: "Across teams", icon: AlertCircle, trend: "-2" },
-          ].map((stat) => (
-            <Card key={stat.label}>
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <stat.icon className="w-4 h-4 text-muted-foreground" />
-                  <span className="text-xs text-success font-medium">{stat.trend}</span>
-                </div>
-                <p className="text-2xl font-bold text-foreground">{stat.value}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">{stat.label} — {stat.sub}</p>
-              </CardContent>
-            </Card>
+          ].map((stat, i) => (
+            <motion.div key={stat.label} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.06 }}>
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <stat.icon className="w-4 h-4 text-muted-foreground" />
+                    <span className="text-xs text-success font-medium">{stat.trend}</span>
+                  </div>
+                  <p className="text-2xl font-bold text-foreground">{stat.value}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{stat.label} — {stat.sub}</p>
+                </CardContent>
+              </Card>
+            </motion.div>
           ))}
         </div>
 

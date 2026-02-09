@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { motion } from "framer-motion";
 import {
   Plus,
   Filter,
@@ -150,6 +151,12 @@ export default function Tasks() {
                   {column.tasks.map((task) => {
                     const PriorityIcon = priorityIcons[task.priority].icon;
                     return (
+                      <motion.div
+                        layout
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ duration: 0.2 }}
+                      >
                       <Card key={task.id} className="cursor-pointer hover:shadow-md transition-shadow group" onClick={() => setSelectedTask(task)}>
                         <CardContent className="p-3">
                           <div className="flex items-start justify-between mb-2">
@@ -178,6 +185,7 @@ export default function Tasks() {
                           </div>
                         </CardContent>
                       </Card>
+                      </motion.div>
                     );
                   })}
                 </div>

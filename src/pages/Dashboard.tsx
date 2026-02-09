@@ -1,19 +1,9 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
+import { motion } from "framer-motion";
 import {
-  Video,
-  Plus,
-  Calendar,
-  MessageSquare,
-  CheckSquare,
-  Users,
-  Clock,
-  ArrowRight,
-  TrendingUp,
-  Activity,
-  User,
-  Hash,
-  Zap,
+  Video, Plus, Calendar, MessageSquare, CheckSquare, Users, Clock,
+  ArrowRight, TrendingUp, Activity, User, Hash, Zap,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -64,10 +54,13 @@ const priorityColors: Record<string, string> = {
   low: "bg-secondary text-secondary-foreground",
 };
 
-const statusLabels: Record<string, string> = {
-  todo: "To Do",
-  in_progress: "In Progress",
-  done: "Done",
+const container = {
+  animate: { transition: { staggerChildren: 0.05 } },
+};
+
+const item = {
+  initial: { opacity: 0, y: 12 },
+  animate: { opacity: 1, y: 0, transition: { duration: 0.25 } },
 };
 
 export default function Dashboard() {
@@ -75,70 +68,77 @@ export default function Dashboard() {
   const [showCreateTask, setShowCreateTask] = useState(false);
 
   return (
-    <div className="p-6 space-y-6 max-w-7xl">
+    <motion.div
+      className="p-6 space-y-6 max-w-7xl"
+      variants={container}
+      initial="initial"
+      animate="animate"
+    >
       <CreateMeetingDialog open={showCreateMeeting} onOpenChange={setShowCreateMeeting} />
       <CreateTaskDialog open={showCreateTask} onOpenChange={setShowCreateTask} />
 
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <motion.div variants={item} className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Good morning, สมชาย 👋</h1>
           <p className="text-muted-foreground">Here's what's happening today — Monday, Feb 9</p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={() => setShowCreateMeeting(true)}>
-            <Calendar className="w-4 h-4 mr-2" />
-            Schedule Meeting
+            <Calendar className="w-4 h-4 mr-2" />Schedule Meeting
           </Button>
           <Button size="sm" asChild>
-            <Link to="/meeting-room">
-              <Video className="w-4 h-4 mr-2" />
-              Start Instant Meeting
-            </Link>
+            <Link to="/meeting-room"><Video className="w-4 h-4 mr-2" />Start Instant Meeting</Link>
           </Button>
         </div>
-      </div>
+      </motion.div>
 
       {/* Quick Actions */}
-      <div className="flex gap-2">
+      <motion.div variants={item} className="flex gap-2">
         {[
           { label: "New Meeting", icon: Video, action: () => setShowCreateMeeting(true) },
           { label: "New Task", icon: CheckSquare, action: () => setShowCreateTask(true) },
           { label: "Join by Code", icon: Zap, action: () => {} },
         ].map((qa) => (
           <Button key={qa.label} variant="outline" size="sm" onClick={qa.action} className="gap-2">
-            <qa.icon className="w-3.5 h-3.5" />
-            {qa.label}
+            <qa.icon className="w-3.5 h-3.5" />{qa.label}
           </Button>
         ))}
-      </div>
+      </motion.div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <motion.div variants={item} className="grid grid-cols-1 md:grid-cols-4 gap-4">
         {[
           { label: "Meetings Today", value: "3", icon: Video, trend: "+1 from yesterday", trendColor: "text-success" },
           { label: "Open Tasks", value: "12", icon: CheckSquare, trend: "4 due today", trendColor: "text-warning" },
           { label: "Unread Messages", value: "5", icon: MessageSquare, trend: "2 mentions", trendColor: "text-primary" },
           { label: "Team Online", value: "8/12", icon: Users, trend: "67% active", trendColor: "text-success" },
-        ].map((stat) => (
-          <Card key={stat.label}>
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">{stat.label}</p>
-                  <p className="text-2xl font-bold text-foreground mt-1">{stat.value}</p>
-                  <p className={`text-xs mt-1 ${stat.trendColor}`}>{stat.trend}</p>
+        ].map((stat, i) => (
+          <motion.div
+            key={stat.label}
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ delay: 0.1 + i * 0.05, duration: 0.25 }}
+          >
+            <Card className="hover:shadow-md transition-shadow">
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-muted-foreground">{stat.label}</p>
+                    <p className="text-2xl font-bold text-foreground mt-1">{stat.value}</p>
+                    <p className={`text-xs mt-1 ${stat.trendColor}`}>{stat.trend}</p>
+                  </div>
+                  <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                    <stat.icon className="w-5 h-5 text-primary" />
+                  </div>
                 </div>
-                <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                  <stat.icon className="w-5 h-5 text-primary" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          </motion.div>
         ))}
-      </div>
+      </motion.div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <motion.div variants={item} className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Upcoming Meetings */}
         <Card className="lg:col-span-2">
           <CardHeader className="pb-3">
@@ -150,8 +150,14 @@ export default function Dashboard() {
             </div>
           </CardHeader>
           <CardContent className="space-y-3">
-            {upcomingMeetings.map((meeting) => (
-              <div key={meeting.id} className="flex items-center gap-4 p-3 rounded-lg border bg-card hover:bg-muted/50 transition-colors">
+            {upcomingMeetings.map((meeting, i) => (
+              <motion.div
+                key={meeting.id}
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.2 + i * 0.06 }}
+                className="flex items-center gap-4 p-3 rounded-lg border bg-card hover:bg-muted/50 transition-colors"
+              >
                 <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
                   <Video className="w-5 h-5 text-primary" />
                 </div>
@@ -159,7 +165,7 @@ export default function Dashboard() {
                   <div className="flex items-center gap-2">
                     <p className="font-medium text-foreground truncate">{meeting.title}</p>
                     {meeting.isNow && (
-                      <Badge className="bg-success text-success-foreground text-xs animate-pulse-soft">LIVE</Badge>
+                      <Badge className="bg-success text-success-foreground text-xs animate-pulse">LIVE</Badge>
                     )}
                   </div>
                   <p className="text-sm text-muted-foreground">
@@ -169,19 +175,23 @@ export default function Dashboard() {
                 <Button size="sm" variant={meeting.isNow ? "default" : "outline"} asChild>
                   <Link to="/meeting-room">{meeting.isNow ? "Join Now" : "Details"}</Link>
                 </Button>
-              </div>
+              </motion.div>
             ))}
           </CardContent>
         </Card>
 
         {/* Team Status */}
         <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">Team Status</CardTitle>
-          </CardHeader>
+          <CardHeader className="pb-3"><CardTitle className="text-base">Team Status</CardTitle></CardHeader>
           <CardContent className="space-y-3">
-            {onlineMembers.map((member) => (
-              <div key={member.name} className="flex items-center gap-3">
+            {onlineMembers.map((member, i) => (
+              <motion.div
+                key={member.name}
+                initial={{ opacity: 0, x: 10 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.25 + i * 0.04 }}
+                className="flex items-center gap-3"
+              >
                 <div className="relative">
                   <Avatar className="h-8 w-8">
                     <AvatarFallback className="bg-primary/10 text-primary text-xs">{member.initials}</AvatarFallback>
@@ -192,13 +202,13 @@ export default function Dashboard() {
                   <p className="text-sm font-medium text-foreground truncate">{member.name}</p>
                   <p className="text-xs text-muted-foreground">{member.activity}</p>
                 </div>
-              </div>
+              </motion.div>
             ))}
           </CardContent>
         </Card>
-      </div>
+      </motion.div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <motion.div variants={item} className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* My Tasks */}
         <Card>
           <CardHeader className="pb-3">
@@ -249,9 +259,7 @@ export default function Dashboard() {
 
         {/* Activity Feed */}
         <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">Recent Activity</CardTitle>
-          </CardHeader>
+          <CardHeader className="pb-3"><CardTitle className="text-base">Recent Activity</CardTitle></CardHeader>
           <CardContent className="space-y-3">
             {activityFeed.map((item) => (
               <div key={item.id} className="flex items-start gap-2.5">
@@ -268,7 +276,7 @@ export default function Dashboard() {
             ))}
           </CardContent>
         </Card>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }
