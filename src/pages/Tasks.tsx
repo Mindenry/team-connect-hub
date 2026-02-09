@@ -1,17 +1,25 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { motion } from "framer-motion";
 import {
-  Plus,
-  Filter,
-  Search,
-  MoreHorizontal,
-  Calendar,
-  CheckSquare,
-  ArrowUp,
-  ArrowRight,
-  ArrowDown,
-  LayoutGrid,
-  List,
+  DndContext,
+  DragOverlay,
+  closestCorners,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragStartEvent,
+  type DragEndEvent,
+  type DragOverEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+  useSortable,
+  arrayMove,
+} from "@dnd-kit/sortable";
+import {
+  Plus, Filter, Search, MoreHorizontal, Calendar, CheckSquare,
+  ArrowUp, ArrowRight, ArrowDown, LayoutGrid, List, GripVertical,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -85,12 +93,227 @@ const priorityIcons: Record<string, { icon: React.ElementType; color: string }> 
   low: { icon: ArrowDown, color: "text-muted-foreground" },
 };
 
+// --- Sortable Task Card ---
+function SortableTaskCard({
+  task,
+  onSelect,
+}: {
+  task: Task;
+  onSelect: (task: Task) => void;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: task.id });
+
+  const style: React.CSSProperties = {
+    transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
+    transition,
+  };
+
+  const PriorityIcon = priorityIcons[task.priority].icon;
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={cn(
+        "touch-none",
+        isDragging && "opacity-40"
+      )}
+    >
+      <Card
+        className={cn(
+          "cursor-pointer hover:shadow-md transition-shadow group border",
+          isDragging && "shadow-lg ring-2 ring-primary/30"
+        )}
+        onClick={() => onSelect(task)}
+      >
+        <CardContent className="p-3">
+          <div className="flex items-start justify-between mb-2">
+            <div className="flex items-center gap-1.5 flex-1 min-w-0">
+              <button
+                className="shrink-0 text-muted-foreground/50 hover:text-muted-foreground cursor-grab active:cursor-grabbing touch-none"
+                {...attributes}
+                {...listeners}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <GripVertical className="w-3.5 h-3.5" />
+              </button>
+              <h4 className="text-sm font-medium text-foreground leading-tight truncate">{task.title}</h4>
+            </div>
+            <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" onClick={(e) => e.stopPropagation()}>
+              <MoreHorizontal className="w-3.5 h-3.5" />
+            </Button>
+          </div>
+          <div className="flex flex-wrap gap-1 mb-2">
+            {task.tags.map((tag) => (
+              <Badge key={tag} variant="secondary" className="text-[10px] px-1.5 py-0">{tag}</Badge>
+            ))}
+          </div>
+          {task.linkedMeeting && (
+            <div className="flex items-center gap-1 mb-2 text-xs text-primary">
+              <CheckSquare className="w-3 h-3" />
+              <span>From: {task.linkedMeeting}</span>
+            </div>
+          )}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Avatar className="h-5 w-5"><AvatarFallback className="bg-primary/10 text-primary text-[9px]">{task.assignee.initials}</AvatarFallback></Avatar>
+              <div className="flex items-center gap-1 text-xs text-muted-foreground"><Calendar className="w-3 h-3" />{task.dueDate}</div>
+            </div>
+            <PriorityIcon className={cn("w-4 h-4", priorityIcons[task.priority].color)} />
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// --- Droppable Column ---
+function DroppableColumn({
+  column,
+  onAddTask,
+  onSelectTask,
+}: {
+  column: Column;
+  onAddTask: () => void;
+  onSelectTask: (task: Task) => void;
+}) {
+  const taskIds = column.tasks.map((t) => t.id);
+
+  return (
+    <div className="w-72 flex flex-col shrink-0">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <div className={cn("w-2.5 h-2.5 rounded-full", column.color)} />
+          <h3 className="text-sm font-semibold text-foreground">{column.title}</h3>
+          <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">{column.tasks.length}</span>
+        </div>
+        <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground" onClick={onAddTask}>
+          <Plus className="w-4 h-4" />
+        </Button>
+      </div>
+      <SortableContext items={taskIds} strategy={verticalListSortingStrategy}>
+        <div className="flex-1 space-y-2 overflow-y-auto scrollbar-thin min-h-[60px] rounded-lg p-1">
+          {column.tasks.map((task) => (
+            <SortableTaskCard key={task.id} task={task} onSelect={onSelectTask} />
+          ))}
+        </div>
+      </SortableContext>
+    </div>
+  );
+}
+
+// --- Drag Overlay Card (the "ghost" card while dragging) ---
+function TaskDragOverlay({ task }: { task: Task }) {
+  const PriorityIcon = priorityIcons[task.priority].icon;
+  return (
+    <Card className="w-72 shadow-2xl ring-2 ring-primary/20 rotate-2 cursor-grabbing">
+      <CardContent className="p-3">
+        <div className="flex items-start gap-1.5 mb-2">
+          <GripVertical className="w-3.5 h-3.5 text-muted-foreground shrink-0 mt-0.5" />
+          <h4 className="text-sm font-medium text-foreground leading-tight">{task.title}</h4>
+        </div>
+        <div className="flex flex-wrap gap-1 mb-2">
+          {task.tags.map((tag) => (
+            <Badge key={tag} variant="secondary" className="text-[10px] px-1.5 py-0">{tag}</Badge>
+          ))}
+        </div>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Avatar className="h-5 w-5"><AvatarFallback className="bg-primary/10 text-primary text-[9px]">{task.assignee.initials}</AvatarFallback></Avatar>
+            <div className="flex items-center gap-1 text-xs text-muted-foreground"><Calendar className="w-3 h-3" />{task.dueDate}</div>
+          </div>
+          <PriorityIcon className={cn("w-4 h-4", priorityIcons[task.priority].color)} />
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// --- Main Component ---
 export default function Tasks() {
-  const [columns] = useState(initialColumns);
+  const [columns, setColumns] = useState<Column[]>(initialColumns);
   const [searchQuery, setSearchQuery] = useState("");
   const [showCreateTask, setShowCreateTask] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [viewMode, setViewMode] = useState<"kanban" | "list">("kanban");
+  const [activeTask, setActiveTask] = useState<Task | null>(null);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
+  );
+
+  const findColumnByTaskId = useCallback(
+    (taskId: string) => columns.find((col) => col.tasks.some((t) => t.id === taskId)),
+    [columns]
+  );
+
+  const handleDragStart = (event: DragStartEvent) => {
+    const { active } = event;
+    const col = findColumnByTaskId(active.id as string);
+    const task = col?.tasks.find((t) => t.id === active.id);
+    if (task) setActiveTask(task);
+  };
+
+  const handleDragOver = (event: DragOverEvent) => {
+    const { active, over } = event;
+    if (!over) return;
+
+    const activeId = active.id as string;
+    const overId = over.id as string;
+
+    const activeCol = findColumnByTaskId(activeId);
+    const overCol = findColumnByTaskId(overId) || columns.find((c) => c.id === overId);
+
+    if (!activeCol || !overCol || activeCol.id === overCol.id) return;
+
+    setColumns((prev) => {
+      const activeTask = activeCol.tasks.find((t) => t.id === activeId)!;
+      const overTaskIndex = overCol.tasks.findIndex((t) => t.id === overId);
+
+      return prev.map((col) => {
+        if (col.id === activeCol.id) {
+          return { ...col, tasks: col.tasks.filter((t) => t.id !== activeId) };
+        }
+        if (col.id === overCol.id) {
+          const newTasks = [...col.tasks];
+          const insertIndex = overTaskIndex >= 0 ? overTaskIndex : newTasks.length;
+          newTasks.splice(insertIndex, 0, activeTask);
+          return { ...col, tasks: newTasks };
+        }
+        return col;
+      });
+    });
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    setActiveTask(null);
+    if (!over) return;
+
+    const activeId = active.id as string;
+    const overId = over.id as string;
+    if (activeId === overId) return;
+
+    const col = findColumnByTaskId(activeId);
+    if (!col) return;
+
+    const oldIndex = col.tasks.findIndex((t) => t.id === activeId);
+    const newIndex = col.tasks.findIndex((t) => t.id === overId);
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    setColumns((prev) =>
+      prev.map((c) =>
+        c.id === col.id ? { ...c, tasks: arrayMove(c.tasks, oldIndex, newIndex) } : c
+      )
+    );
+  };
 
   const allTasks = columns.flatMap((col) => col.tasks.map((t) => ({ ...t, column: col.title })));
 
@@ -134,64 +357,27 @@ export default function Tasks() {
       {/* Kanban Board */}
       {viewMode === "kanban" ? (
         <div className="flex-1 overflow-x-auto p-6">
-          <div className="flex gap-4 h-full min-w-max">
-            {columns.map((column) => (
-              <div key={column.id} className="w-72 flex flex-col shrink-0">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-2">
-                    <div className={cn("w-2.5 h-2.5 rounded-full", column.color)} />
-                    <h3 className="text-sm font-semibold text-foreground">{column.title}</h3>
-                    <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">{column.tasks.length}</span>
-                  </div>
-                  <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground" onClick={() => setShowCreateTask(true)}>
-                    <Plus className="w-4 h-4" />
-                  </Button>
-                </div>
-                <div className="flex-1 space-y-2 overflow-y-auto scrollbar-thin">
-                  {column.tasks.map((task) => {
-                    const PriorityIcon = priorityIcons[task.priority].icon;
-                    return (
-                      <motion.div
-                        layout
-                        initial={{ opacity: 0, scale: 0.95 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        transition={{ duration: 0.2 }}
-                      >
-                      <Card key={task.id} className="cursor-pointer hover:shadow-md transition-shadow group" onClick={() => setSelectedTask(task)}>
-                        <CardContent className="p-3">
-                          <div className="flex items-start justify-between mb-2">
-                            <h4 className="text-sm font-medium text-foreground leading-tight flex-1">{task.title}</h4>
-                            <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" onClick={(e) => e.stopPropagation()}>
-                              <MoreHorizontal className="w-3.5 h-3.5" />
-                            </Button>
-                          </div>
-                          <div className="flex flex-wrap gap-1 mb-2">
-                            {task.tags.map((tag) => (
-                              <Badge key={tag} variant="secondary" className="text-[10px] px-1.5 py-0">{tag}</Badge>
-                            ))}
-                          </div>
-                          {task.linkedMeeting && (
-                            <div className="flex items-center gap-1 mb-2 text-xs text-primary">
-                              <CheckSquare className="w-3 h-3" />
-                              <span>From: {task.linkedMeeting}</span>
-                            </div>
-                          )}
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <Avatar className="h-5 w-5"><AvatarFallback className="bg-primary/10 text-primary text-[9px]">{task.assignee.initials}</AvatarFallback></Avatar>
-                              <div className="flex items-center gap-1 text-xs text-muted-foreground"><Calendar className="w-3 h-3" />{task.dueDate}</div>
-                            </div>
-                            <PriorityIcon className={cn("w-4 h-4", priorityIcons[task.priority].color)} />
-                          </div>
-                        </CardContent>
-                      </Card>
-                      </motion.div>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
-          </div>
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCorners}
+            onDragStart={handleDragStart}
+            onDragOver={handleDragOver}
+            onDragEnd={handleDragEnd}
+          >
+            <div className="flex gap-4 h-full min-w-max">
+              {columns.map((column) => (
+                <DroppableColumn
+                  key={column.id}
+                  column={column}
+                  onAddTask={() => setShowCreateTask(true)}
+                  onSelectTask={setSelectedTask}
+                />
+              ))}
+            </div>
+            <DragOverlay>
+              {activeTask ? <TaskDragOverlay task={activeTask} /> : null}
+            </DragOverlay>
+          </DndContext>
         </div>
       ) : (
         /* List View */
