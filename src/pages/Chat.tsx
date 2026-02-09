@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Hash, Send, Smile, Paperclip, Pin, Reply, Search, Plus, AtSign,
@@ -64,12 +65,14 @@ const pinnedMessages = [
 ];
 
 export default function Chat() {
+  const isMobile = useIsMobile();
   const [activeChannel, setActiveChannel] = useState("1");
   const [messageInput, setMessageInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [showCreateChannel, setShowCreateChannel] = useState(false);
   const [showPinned, setShowPinned] = useState(false);
   const [showMembers, setShowMembers] = useState(false);
+  const [showChannelList, setShowChannelList] = useState(!isMobile);
 
   const currentChannel = channels.find((c) => c.id === activeChannel);
   const groupedChannels = channels.reduce<Record<string, Channel[]>>((acc, ch) => {
@@ -83,7 +86,13 @@ export default function Chat() {
       <CreateChannelDialog open={showCreateChannel} onOpenChange={setShowCreateChannel} />
 
       {/* Channel List */}
-      <div className="w-60 bg-card border-r flex flex-col shrink-0">
+      <div className={cn("bg-card border-r flex flex-col shrink-0 transition-all", isMobile ? (showChannelList ? "w-full absolute inset-0 z-20" : "hidden") : "w-60")}>
+        {isMobile && (
+          <div className="flex items-center justify-between px-3 py-2 border-b">
+            <span className="text-sm font-medium text-foreground">Channels</span>
+            <Button variant="ghost" size="sm" onClick={() => setShowChannelList(false)} className="text-xs">Close</Button>
+          </div>
+        )}
         <div className="p-3 border-b">
           <div className="relative">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -100,7 +109,7 @@ export default function Chat() {
               {chs.map((ch) => {
                 const Icon = channelIcons[ch.type] || Hash;
                 return (
-                  <button key={ch.id} onClick={() => setActiveChannel(ch.id)}
+                  <button key={ch.id} onClick={() => { setActiveChannel(ch.id); if (isMobile) setShowChannelList(false); }}
                     className={cn("w-full flex items-center gap-2 px-3 py-1.5 rounded-md text-sm transition-colors",
                       activeChannel === ch.id ? "bg-chat-active text-primary font-medium" : "text-muted-foreground hover:bg-chat-hover hover:text-foreground"
                     )}>
@@ -138,14 +147,17 @@ export default function Chat() {
       <div className="flex-1 flex flex-col">
         <div className="flex items-center justify-between px-4 h-12 border-b shrink-0">
           <div className="flex items-center gap-2">
+            {isMobile && (
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setShowChannelList(true)}><Hash className="w-4 h-4" /></Button>
+            )}
             <Hash className="w-4 h-4 text-muted-foreground" />
             <h2 className="font-medium text-foreground">{currentChannel?.name}</h2>
             <Badge variant="secondary" className="text-xs">{currentChannel?.team}</Badge>
             {currentChannel?.description && <span className="text-xs text-muted-foreground hidden md:inline">— {currentChannel.description}</span>}
           </div>
           <div className="flex items-center gap-1">
-            <Button variant={showPinned ? "default" : "ghost"} size="icon" className="h-8 w-8" onClick={() => { setShowPinned(!showPinned); setShowMembers(false); }}><Pin className="w-4 h-4" /></Button>
-            <Button variant={showMembers ? "default" : "ghost"} size="icon" className="h-8 w-8" onClick={() => { setShowMembers(!showMembers); setShowPinned(false); }}><Users className="w-4 h-4" /></Button>
+            <Button variant={showPinned ? "default" : "ghost"} size="icon" className="h-8 w-8 hidden md:flex" onClick={() => { setShowPinned(!showPinned); setShowMembers(false); }}><Pin className="w-4 h-4" /></Button>
+            <Button variant={showMembers ? "default" : "ghost"} size="icon" className="h-8 w-8 hidden md:flex" onClick={() => { setShowMembers(!showMembers); setShowPinned(false); }}><Users className="w-4 h-4" /></Button>
             <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground"><Search className="w-4 h-4" /></Button>
           </div>
         </div>

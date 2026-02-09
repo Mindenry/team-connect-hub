@@ -3,7 +3,7 @@ import { useLocation, Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   LayoutDashboard, Video, MessageSquare, CheckSquare, Users,
-  BarChart3, Settings, Bell, Shield, ChevronDown, ChevronRight,
+  BarChart3, Settings, Bell, Shield, ChevronRight,
   Hash, Volume2, Megaphone, Plus, Search, LogOut, MapPin, Headphones,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -16,6 +16,10 @@ interface NavItem {
   url: string;
   icon: React.ElementType;
   badge?: number;
+}
+
+interface AppSidebarProps {
+  onNavigate?: () => void;
 }
 
 const mainNav: NavItem[] = [
@@ -52,7 +56,7 @@ const teams = [
   },
 ];
 
-export default function AppSidebar() {
+export default function AppSidebar({ onNavigate }: AppSidebarProps) {
   const location = useLocation();
   const [expandedTeams, setExpandedTeams] = useState<string[]>(["Engineering"]);
   const [collapsed, setCollapsed] = useState(false);
@@ -68,11 +72,13 @@ export default function AppSidebar() {
     return location.pathname.startsWith(url);
   };
 
+  const handleNav = () => onNavigate?.();
+
   return (
     <aside
       className={cn(
-        "flex flex-col bg-sidebar text-sidebar-foreground border-r border-sidebar-border transition-all duration-200 h-screen sticky top-0",
-        collapsed ? "w-16" : "w-64"
+        "flex flex-col bg-sidebar text-sidebar-foreground border-r border-sidebar-border transition-all duration-200 h-screen",
+        onNavigate ? "w-full" : (collapsed ? "w-16 sticky top-0" : "w-64 sticky top-0")
       )}
     >
       {/* Header */}
@@ -80,36 +86,39 @@ export default function AppSidebar() {
         <div className="w-8 h-8 rounded-lg gradient-primary flex items-center justify-center shadow-md">
           <Video className="w-4 h-4 text-sidebar-primary-foreground" />
         </div>
-        {!collapsed && (
+        {(!collapsed || onNavigate) && (
           <div className="flex-1 min-w-0">
             <h1 className="text-sm font-bold text-sidebar-accent-foreground truncate">CollabHub</h1>
             <p className="text-[10px] text-sidebar-muted truncate">Acme Corp · WFH</p>
           </div>
         )}
-        <button
-          onClick={() => setCollapsed(!collapsed)}
-          className="p-1 rounded hover:bg-sidebar-accent text-sidebar-muted hover:text-sidebar-accent-foreground transition-colors"
-        >
-          <ChevronRight className={cn("w-4 h-4 transition-transform", !collapsed && "rotate-180")} />
-        </button>
+        {!onNavigate && (
+          <button
+            onClick={() => setCollapsed(!collapsed)}
+            className="p-1 rounded hover:bg-sidebar-accent text-sidebar-muted hover:text-sidebar-accent-foreground transition-colors"
+          >
+            <ChevronRight className={cn("w-4 h-4 transition-transform", !collapsed && "rotate-180")} />
+          </button>
+        )}
       </div>
 
       {/* Search */}
-      {!collapsed && (
+      {(!collapsed || onNavigate) && (
         <div className="px-3 py-2">
           <button className="w-full flex items-center gap-2 px-3 py-1.5 rounded-lg bg-sidebar-accent/50 text-sidebar-muted text-xs hover:text-sidebar-accent-foreground hover:bg-sidebar-accent transition-colors">
             <Search className="w-3.5 h-3.5" />
             <span>Search...</span>
-            <kbd className="ml-auto text-[10px] bg-sidebar-border/50 px-1.5 py-0.5 rounded">⌘K</kbd>
+            {!onNavigate && <kbd className="ml-auto text-[10px] bg-sidebar-border/50 px-1.5 py-0.5 rounded">⌘K</kbd>}
           </button>
         </div>
       )}
 
       {/* Quick Huddle */}
-      {!collapsed && (
+      {(!collapsed || onNavigate) && (
         <div className="px-3 pb-2">
           <Link
             to="/meeting-room"
+            onClick={handleNav}
             className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-sidebar-primary/10 text-sidebar-primary text-xs font-medium hover:bg-sidebar-primary/20 transition-colors"
           >
             <Headphones className="w-3.5 h-3.5" />
@@ -131,6 +140,7 @@ export default function AppSidebar() {
           <Link
             key={item.url}
             to={item.url}
+            onClick={handleNav}
             className={cn(
               "flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all group relative",
               isActive(item.url)
@@ -140,13 +150,13 @@ export default function AppSidebar() {
           >
             {isActive(item.url) && (
               <motion.div
-                layoutId="activeNav"
+                layoutId={onNavigate ? "activeNavMobile" : "activeNav"}
                 className="absolute left-0 w-[3px] h-5 rounded-r-full bg-sidebar-primary"
                 transition={{ type: "spring", damping: 25, stiffness: 300 }}
               />
             )}
             <item.icon className="w-4 h-4 shrink-0" />
-            {!collapsed && (
+            {(!collapsed || onNavigate) && (
               <>
                 <span className="flex-1">{item.title}</span>
                 {item.badge && item.badge > 0 && (
@@ -160,7 +170,7 @@ export default function AppSidebar() {
         ))}
 
         {/* Teams/Channels */}
-        {!collapsed && (
+        {(!collapsed || onNavigate) && (
           <div className="pt-3">
             <div className="flex items-center justify-between px-3 py-1">
               <span className="text-[10px] font-semibold uppercase tracking-widest text-sidebar-muted">Teams</span>
@@ -192,6 +202,7 @@ export default function AppSidebar() {
                         <Link
                           key={ch.name}
                           to={`/chat?channel=${ch.name}`}
+                          onClick={handleNav}
                           className="flex items-center gap-2 px-3 py-1 text-xs text-sidebar-muted hover:text-sidebar-accent-foreground hover:bg-sidebar-accent/50 rounded-lg transition-colors"
                         >
                           <ch.icon className="w-3 h-3" />
@@ -218,6 +229,7 @@ export default function AppSidebar() {
           <Link
             key={item.url}
             to={item.url}
+            onClick={handleNav}
             className={cn(
               "flex items-center gap-3 px-3 py-1.5 rounded-lg text-sm transition-colors",
               isActive(item.url)
@@ -226,7 +238,7 @@ export default function AppSidebar() {
             )}
           >
             <item.icon className="w-4 h-4 shrink-0" />
-            {!collapsed && (
+            {(!collapsed || onNavigate) && (
               <>
                 <span className="flex-1 text-xs">{item.title}</span>
                 {item.badge && item.badge > 0 && (
@@ -249,13 +261,13 @@ export default function AppSidebar() {
             </Avatar>
             <StatusIndicator status="online" className="absolute -bottom-0.5 -right-0.5 glow-success" />
           </div>
-          {!collapsed && (
+          {(!collapsed || onNavigate) && (
             <div className="flex-1 min-w-0">
               <p className="text-xs font-semibold text-sidebar-accent-foreground truncate">สมชาย K.</p>
               <p className="text-[10px] text-sidebar-muted truncate">🟢 Available</p>
             </div>
           )}
-          {!collapsed && (
+          {(!collapsed || onNavigate) && (
             <button className="p-1 rounded hover:bg-sidebar-accent text-sidebar-muted hover:text-sidebar-accent-foreground transition-colors">
               <LogOut className="w-3.5 h-3.5" />
             </button>

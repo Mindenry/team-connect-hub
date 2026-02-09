@@ -124,7 +124,7 @@ export default function MeetingRoom() {
               initial="initial"
               animate="animate"
               exit="exit"
-              className="w-72 bg-meeting-controls border-l border-sidebar-border flex flex-col"
+              className="w-full md:w-72 bg-meeting-controls border-l border-sidebar-border flex flex-col absolute md:relative right-0 inset-y-0 z-10"
             >
               <div className="flex items-center justify-between px-4 py-3 border-b border-sidebar-border">
                 <h3 className="text-sm font-medium text-primary-foreground">Participants ({participants.length})</h3>
@@ -180,7 +180,7 @@ export default function MeetingRoom() {
               initial="initial"
               animate="animate"
               exit="exit"
-              className="w-72 bg-meeting-controls border-l border-sidebar-border flex flex-col"
+              className="w-full md:w-72 bg-meeting-controls border-l border-sidebar-border flex flex-col absolute md:relative right-0 inset-y-0 z-10"
             >
               <div className="flex items-center justify-between px-4 py-3 border-b border-sidebar-border">
                 <h3 className="text-sm font-medium text-primary-foreground">Meeting Chat</h3>
@@ -220,7 +220,7 @@ export default function MeetingRoom() {
         transition={{ delay: 0.3, duration: 0.3 }}
         className="flex items-center justify-center gap-2 py-3 px-4 shrink-0"
       >
-        <div className="flex items-center gap-2 bg-meeting-controls rounded-xl px-4 py-2">
+        <div className="flex items-center gap-1 md:gap-2 bg-meeting-controls rounded-xl px-2 md:px-4 py-2 flex-wrap justify-center">
           <Button variant="ghost" size="icon" className={cn("rounded-full h-10 w-10 transition-colors", isMuted ? "bg-destructive text-destructive-foreground hover:bg-destructive/90" : "text-primary-foreground hover:bg-meeting-tile")} onClick={() => setIsMuted(!isMuted)}>
             {isMuted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
           </Button>
