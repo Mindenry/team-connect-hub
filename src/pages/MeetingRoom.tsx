@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Mic, MicOff, Video as VideoIcon, VideoOff, Monitor, MonitorOff, PhoneOff, Users,
+  Mic, MicOff, Video as VideoIcon, VideoOff, Monitor, MonitorOff, Users,
   MessageSquare, Hand, Settings, Send, X, Loader2, ChevronUp, Volume2,
-  Maximize, Minimize, Copy, Check, Lock, Radio, Circle,
+  Maximize, Minimize, Copy, Check, Lock, Radio, Circle, Paperclip, Smile,
+  FileText, Download, Image as ImageIcon
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -37,6 +38,8 @@ import {
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
 
+const isImageMime = (m?: string) => !!m && m.startsWith("image/");
+
 interface ParticipantState {
   isMuted: boolean;
   isCameraOn: boolean;
@@ -57,14 +60,18 @@ interface ChatMessage {
   sender: string;
   time: string;
   text: string;
+  type?: "text" | "file" | "image";
+  fileUrl?: string;
+  fileName?: string;
 }
+
+const COMMON_EMOJIS = ["😀", "😂", "🤣", "😍", "👍", "🙏", "👏", "🔥", "✨", "🙌", "✅", "❌", "💯"];
 
 interface MediaDevice {
   deviceId: string;
   label: string;
 }
 
-// WebRTC peer connection
 interface PeerData {
   connection: RTCPeerConnection;
   remoteStream: MediaStream | null;
@@ -80,11 +87,17 @@ const ICE_SERVERS: RTCConfiguration = {
 export default function MeetingRoom() {
   const { id: meetingId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const currentUser = auth.getUser();
+
+  const lobbyState = (location.state as any) || {};
+  const initialMuted: boolean = lobbyState.initialMuted ?? true;
+  const initialCameraOn: boolean = lobbyState.initialCameraOn ?? false;
+  const initialSelectedMicId: string = lobbyState.selectedMicId ?? "";
+  const initialSelectedCameraId: string = lobbyState.selectedCameraId ?? "";
 
   const peerId = useRef(`${currentUser?.id || "guest"}-${Date.now()}`);
 
-  // UI State
   const [loading, setLoading] = useState(true);
   const [showParticipants, setShowParticipants] = useState(false);
   const [showChat, setShowChat] = useState(false);
@@ -97,29 +110,37 @@ export default function MeetingRoom() {
   const [copied, setCopied] = useState(false);
   const [spotlightPeerId, setSpotlightPeerId] = useState<string | null>(null);
   const [isRecording, setIsRecording] = useState(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordedChunksRef = useRef<Blob[]>([]);
+  const recordCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const recordRafRef = useRef<number>(0);
+  const recordAudioContextRef = useRef<AudioContext | null>(null);
+  const recordAudioDestRef = useRef<MediaStreamAudioDestinationNode | null>(null);
 
-  // Participants (remote only)
   const [participants, setParticipants] = useState<Participant[]>([]);
 
-  // Media State
-  const [isMuted, setIsMuted] = useState(true);
-  const [isCameraOn, setIsCameraOn] = useState(false);
+  const [isMuted, setIsMuted] = useState(initialMuted);
+  const [isCameraOn, setIsCameraOn] = useState(initialCameraOn);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [isHandRaised, setIsHandRaised] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [hasAudioDevice, setHasAudioDevice] = useState(false);
 
-  // Device Settings
   const [audioInputs, setAudioInputs] = useState<MediaDevice[]>([]);
   const [audioOutputs, setAudioOutputs] = useState<MediaDevice[]>([]);
   const [videoInputs, setVideoInputs] = useState<MediaDevice[]>([]);
-  const [selectedMic, setSelectedMic] = useState<string>("");
+  const [selectedMic, setSelectedMic] = useState<string>(initialSelectedMicId);
   const [selectedSpeaker, setSelectedSpeaker] = useState<string>("");
-  const [selectedCamera, setSelectedCamera] = useState<string>("");
+  const [selectedCamera, setSelectedCamera] = useState<string>(initialSelectedCameraId);
   const [mirrorVideo, setMirrorVideo] = useState(true);
   const [speakerVolume, setSpeakerVolume] = useState([80]);
 
-  // Refs
+  // Chat enhancements
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [showMentionList, setShowMentionList] = useState(false);
+  const [mentionQuery, setMentionQuery] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const screenStreamRef = useRef<MediaStream | null>(null);
@@ -135,10 +156,14 @@ export default function MeetingRoom() {
   const remoteAudioRefs = useRef<Map<string, HTMLAudioElement>>(new Map());
 
   const userName = currentUser?.name || "Guest";
-  const userInitials = userName.split(" ").map(n => n[0]).join("").slice(0, 2);
   const meetingCode = meetingId || "quick-huddle";
 
-  // Create peer connection
+  const formatTime = (s: number) => {
+    const m = Math.floor(s / 60);
+    const sec = s % 60;
+    return `${m.toString().padStart(2, "0")}:${sec.toString().padStart(2, "0")}`;
+  };
+
   const createPeerConnection = useCallback((remotePeerId: string, isInitiator: boolean) => {
     const socket = socketRef.current;
     const pc = new RTCPeerConnection(ICE_SERVERS);
@@ -146,39 +171,40 @@ export default function MeetingRoom() {
     const peerData: PeerData = { connection: pc, remoteStream: null };
     peersRef.current.set(remotePeerId, peerData);
 
-    // Add local tracks
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach(track => {
         pc.addTrack(track, localStreamRef.current!);
       });
     }
 
-    // Handle remote stream
     pc.ontrack = (event) => {
-      console.log("🎥 Remote track received from:", remotePeerId, event.track.kind);
-      peerData.remoteStream = event.streams[0];
+      const remoteStream = event.streams[0];
+      if (!remoteStream) return;
 
-      // Attach to video element
-      const videoEl = remoteVideoRefs.current.get(remotePeerId);
-      if (videoEl && videoEl.srcObject !== event.streams[0]) {
-        videoEl.srcObject = event.streams[0];
+      console.log("🎥 Remote track received from:", remotePeerId, event.track.kind);
+      
+      const peerData = peersRef.current.get(remotePeerId);
+      if (peerData) {
+        peerData.remoteStream = remoteStream;
       }
 
-      // Attach to audio element for audio playback (only once)
+      const videoEl = remoteVideoRefs.current.get(remotePeerId);
+      if (videoEl && videoEl.srcObject !== remoteStream) {
+        videoEl.srcObject = remoteStream;
+        videoEl.play().catch(e => console.log("Video play failed:", e));
+      }
+
       const audioEl = remoteAudioRefs.current.get(remotePeerId);
-      if (audioEl && audioEl.srcObject !== event.streams[0]) {
-        audioEl.srcObject = event.streams[0];
-        // Only play if not already playing
+      if (audioEl && audioEl.srcObject !== remoteStream) {
+        audioEl.srcObject = remoteStream;
         if (audioEl.paused) {
           audioEl.play().catch(e => console.log("Audio autoplay blocked:", e));
         }
       }
 
-      // Force re-render to show video (debounced)
       setParticipants(prev => [...prev]);
     };
 
-    // Handle ICE candidates
     pc.onicecandidate = (event) => {
       if (event.candidate) {
         socket.emit("webrtc:ice-candidate", {
@@ -188,11 +214,6 @@ export default function MeetingRoom() {
       }
     };
 
-    pc.onconnectionstatechange = () => {
-      console.log(`Peer ${remotePeerId} connection: ${pc.connectionState}`);
-    };
-
-    // Initiator creates offer
     if (isInitiator) {
       pc.createOffer()
         .then(offer => pc.setLocalDescription(offer))
@@ -209,7 +230,6 @@ export default function MeetingRoom() {
     return pc;
   }, [userName]);
 
-  // Enumerate devices
   const enumerateDevices = useCallback(async () => {
     try {
       const devices = await navigator.mediaDevices.enumerateDevices();
@@ -225,7 +245,6 @@ export default function MeetingRoom() {
     } catch { }
   }, []);
 
-  // Setup audio analyser for speaking detection
   const setupAudioAnalyser = useCallback((stream: MediaStream) => {
     try {
       if (audioContextRef.current) {
@@ -252,7 +271,6 @@ export default function MeetingRoom() {
     }
   }, []);
 
-  // Initialize
   useEffect(() => {
     if (initedRef.current) return;
     initedRef.current = true;
@@ -272,19 +290,27 @@ export default function MeetingRoom() {
 
       await enumerateDevices();
 
-      // Get media
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } },
-          audio: { echoCancellation: true, noiseSuppression: true },
+          video: initialSelectedCameraId
+            ? { deviceId: { exact: initialSelectedCameraId }, width: { ideal: 1280 }, height: { ideal: 720 } }
+            : { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } },
+          audio: initialSelectedMicId
+            ? { deviceId: { exact: initialSelectedMicId }, echoCancellation: true, noiseSuppression: true }
+            : { echoCancellation: true, noiseSuppression: true },
         });
         localStreamRef.current = stream;
-        setIsMuted(false);
-        setIsCameraOn(true);
+        
+        // Sync tracks with lobby state immediately
+        stream.getAudioTracks().forEach(t => t.enabled = !initialMuted);
+        stream.getVideoTracks().forEach(t => t.enabled = initialCameraOn);
+
+        setIsMuted(initialMuted);
+        setIsCameraOn(initialCameraOn);
         setHasAudioDevice(true);
         if (localVideoRef.current) localVideoRef.current.srcObject = stream;
         setupAudioAnalyser(stream);
-        await enumerateDevices(); // Re-enumerate to get labels
+        await enumerateDevices();
       } catch {
         try {
           const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -320,13 +346,11 @@ export default function MeetingRoom() {
     };
   }, []);
 
-  // Join meeting after media is ready
   useEffect(() => {
     if (loading) return;
 
     const socket = socketRef.current;
 
-    // Join meeting
     socket.emit("meeting:join", {
       meetingId: meetingCode,
       peerId: peerId.current,
@@ -334,37 +358,29 @@ export default function MeetingRoom() {
       state: { isMuted, isCameraOn, isScreenSharing, isHandRaised },
     });
 
-    // Handle existing participants
     const handleParticipants = (list: Participant[]) => {
       const others = list.filter(p => p.peerId !== peerId.current);
       setParticipants(others);
-      // Create peer connections for existing participants
-      // Only initiator if our peerId is "bigger" (prevents race)
       others.forEach(p => {
         if (!peersRef.current.has(p.peerId)) {
           const shouldInitiate = peerId.current > p.peerId;
-          console.log(`Creating peer for existing ${p.peerId}, initiator: ${shouldInitiate}`);
           createPeerConnection(p.peerId, shouldInitiate);
         }
       });
     };
 
-    // New participant joined
     const handleJoined = (data: Participant) => {
       if (data.peerId === peerId.current) return;
       setParticipants(prev => {
         if (prev.some(p => p.peerId === data.peerId)) return prev;
         return [...prev, data];
       });
-      // Create peer connection - only initiator if our peerId is "bigger" (prevents race)
       if (!peersRef.current.has(data.peerId)) {
         const shouldInitiate = peerId.current > data.peerId;
-        console.log(`Creating peer for ${data.peerId}, initiator: ${shouldInitiate}`);
         createPeerConnection(data.peerId, shouldInitiate);
       }
     };
 
-    // Participant left
     const handleLeft = (data: { peerId: string }) => {
       setParticipants(prev => prev.filter(p => p.peerId !== data.peerId));
       const peer = peersRef.current.get(data.peerId);
@@ -375,30 +391,24 @@ export default function MeetingRoom() {
       remoteVideoRefs.current.delete(data.peerId);
     };
 
-    // State update
     const handleUpdate = (data: { peerId: string; name: string; state: ParticipantState }) => {
       setParticipants(prev => prev.map(p =>
         p.peerId === data.peerId ? { ...p, state: data.state } : p
       ));
     };
 
-    // Speaking update
     const handleSpeaking = (data: { peerId: string; isSpeaking: boolean }) => {
       setParticipants(prev => prev.map(p =>
         p.peerId === data.peerId ? { ...p, isSpeaking: data.isSpeaking } : p
       ));
     };
 
-    // Chat message
     const handleChat = (msg: ChatMessage) => {
       setChatMessages(prev => prev.some(m => m.id === msg.id) ? prev : [...prev, msg]);
     };
 
-    // WebRTC: receive offer
     const handleOffer = async (data: { from: string; name: string; offer: RTCSessionDescriptionInit }) => {
       if (data.from === peerId.current) return;
-      console.log("📩 Received offer from:", data.from);
-
       let peerData = peersRef.current.get(data.from);
       let pc: RTCPeerConnection;
 
@@ -406,46 +416,30 @@ export default function MeetingRoom() {
         pc = createPeerConnection(data.from, false);
       } else {
         pc = peerData.connection;
-        // Check signaling state - if already stable, we need to handle politely
-        if (pc.signalingState !== "stable") {
-          console.log("Peer not stable, ignoring offer");
-          return;
-        }
+        if (pc.signalingState !== "stable") return;
       }
 
       try {
         await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
-
-        socket.emit("webrtc:answer", {
-          to: data.from,
-          answer: pc.localDescription,
-        });
+        socket.emit("webrtc:answer", { to: data.from, answer: pc.localDescription });
       } catch (e) {
         console.error("Error handling offer:", e);
       }
     };
 
-    // WebRTC: receive answer
     const handleAnswer = async (data: { from: string; answer: RTCSessionDescriptionInit }) => {
-      console.log("📩 Received answer from:", data.from);
       const peer = peersRef.current.get(data.from);
-      if (peer) {
-        // Only set remote description if we're expecting an answer
-        if (peer.connection.signalingState === "have-local-offer") {
-          try {
-            await peer.connection.setRemoteDescription(new RTCSessionDescription(data.answer));
-          } catch (e) {
-            console.error("Error setting answer:", e);
-          }
-        } else {
-          console.log("Ignoring answer, signaling state:", peer.connection.signalingState);
+      if (peer && peer.connection.signalingState === "have-local-offer") {
+        try {
+          await peer.connection.setRemoteDescription(new RTCSessionDescription(data.answer));
+        } catch (e) {
+          console.error("Error setting answer:", e);
         }
       }
     };
 
-    // WebRTC: receive ICE candidate
     const handleIceCandidate = async (data: { from: string; candidate: RTCIceCandidateInit }) => {
       const peer = peersRef.current.get(data.from);
       if (peer && data.candidate) {
@@ -477,7 +471,6 @@ export default function MeetingRoom() {
     };
   }, [loading, meetingCode, createPeerConnection]);
 
-  // Broadcast state changes
   useEffect(() => {
     if (loading) return;
     socketRef.current.emit("meeting:participant:update", {
@@ -488,7 +481,6 @@ export default function MeetingRoom() {
     });
   }, [isMuted, isCameraOn, isScreenSharing, isHandRaised, loading]);
 
-  // Broadcast speaking state
   useEffect(() => {
     if (loading) return;
     socketRef.current.emit("meeting:participant:speaking", {
@@ -498,21 +490,20 @@ export default function MeetingRoom() {
     });
   }, [isSpeaking, isMuted, loading]);
 
-  // Timer
   useEffect(() => {
     const t = setInterval(() => setElapsedSeconds(s => s + 1), 1000);
     return () => clearInterval(t);
   }, []);
 
-  // Auto scroll chat
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chatMessages]);
 
-  // Controls
   const toggleMute = useCallback(() => {
     const newMuted = !isMuted;
-    localStreamRef.current?.getAudioTracks().forEach(t => t.enabled = !newMuted);
+    localStreamRef.current?.getAudioTracks().forEach(t => {
+      t.enabled = !newMuted;
+    });
     setIsMuted(newMuted);
     if (newMuted) setIsSpeaking(false);
   }, [isMuted]);
@@ -530,38 +521,32 @@ export default function MeetingRoom() {
         videoTracks.forEach(t => t.enabled = true);
       } else {
         try {
-          const videoStream = await navigator.mediaDevices.getUserMedia({ video: true });
+          const videoStream = await navigator.mediaDevices.getUserMedia({ 
+            video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } } 
+          });
           const newTrack = videoStream.getVideoTracks()[0];
           stream.addTrack(newTrack);
-          // Update all peer connections
-          peersRef.current.forEach(peer => {
-            peer.connection.addTrack(newTrack, stream);
-          });
+          for (const [_, peer] of peersRef.current) {
+            const sender = peer.connection.getSenders().find(s => s.track?.kind === "video");
+            if (sender) await sender.replaceTrack(newTrack);
+            else peer.connection.addTrack(newTrack, stream);
+          }
         } catch { return; }
       }
       setIsCameraOn(true);
     }
-    if (localVideoRef.current) {
-      localVideoRef.current.srcObject = stream;
-    }
+    if (localVideoRef.current) localVideoRef.current.srcObject = stream;
   }, [isCameraOn]);
 
   const toggleScreenShare = useCallback(async () => {
     if (isScreenSharing) {
       screenStreamRef.current?.getTracks().forEach(t => t.stop());
       screenStreamRef.current = null;
-      // Restore camera or remove video
       if (localStreamRef.current && localVideoRef.current) {
         const camTrack = localStreamRef.current.getVideoTracks()[0];
         peersRef.current.forEach(peer => {
           const sender = peer.connection.getSenders().find(s => s.track?.kind === "video");
-          if (sender) {
-            if (camTrack && isCameraOn) {
-              sender.replaceTrack(camTrack);
-            } else {
-              sender.replaceTrack(null);
-            }
-          }
+          if (sender) sender.replaceTrack(camTrack && isCameraOn ? camTrack : null);
         });
         localVideoRef.current.srcObject = isCameraOn ? localStreamRef.current : null;
       }
@@ -569,44 +554,23 @@ export default function MeetingRoom() {
     } else {
       try {
         const screen = await navigator.mediaDevices.getDisplayMedia({
-          video: {
-            width: { ideal: 1920 },
-            height: { ideal: 1080 },
-            frameRate: { ideal: 30 }
-          }
+          video: { width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30 } }
         });
         screenStreamRef.current = screen;
         const screenTrack = screen.getVideoTracks()[0];
-
-        // Replace or add video track for all peers
         peersRef.current.forEach(peer => {
           const sender = peer.connection.getSenders().find(s => s.track?.kind === "video");
-          if (sender) {
-            sender.replaceTrack(screenTrack);
-          } else {
-            // No video sender exists, add the track
-            peer.connection.addTrack(screenTrack, screen);
-          }
+          if (sender) sender.replaceTrack(screenTrack);
+          else peer.connection.addTrack(screenTrack, screen);
         });
-
-        if (localVideoRef.current) {
-          localVideoRef.current.srcObject = screen;
-        }
-
-        screenTrack.onended = () => {
-          toggleScreenShare();
-        };
-
+        if (localVideoRef.current) localVideoRef.current.srcObject = screen;
+        screenTrack.onended = () => toggleScreenShare();
         setIsScreenSharing(true);
-      } catch (e) {
-        console.error("Screen share failed:", e);
-      }
+      } catch { }
     }
   }, [isScreenSharing, isCameraOn]);
 
-  const toggleHand = useCallback(() => {
-    setIsHandRaised(!isHandRaised);
-  }, [isHandRaised]);
+  const toggleHand = useCallback(() => setIsHandRaised(!isHandRaised), [isHandRaised]);
 
   const sendChat = useCallback(() => {
     if (!chatInput.trim() || !currentUser) return;
@@ -636,7 +600,74 @@ export default function MeetingRoom() {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const toggleRecording = () => setIsRecording(!isRecording);
+  const startRecording = useCallback(() => {
+    if (!localStreamRef.current) return;
+
+    recordedChunksRef.current = [];
+    const audioContext = new AudioContext();
+    const dest = audioContext.createMediaStreamDestination();
+    recordAudioContextRef.current = audioContext;
+    recordAudioDestRef.current = dest;
+
+    // Add local audio
+    const localAudioSource = audioContext.createMediaStreamSource(localStreamRef.current);
+    localAudioSource.connect(dest);
+
+    // Add remote audio from all peers
+    peersRef.current.forEach((peer) => {
+      if (peer.remoteStream && peer.remoteStream.getAudioTracks().length > 0) {
+        const remoteSource = audioContext.createMediaStreamSource(peer.remoteStream);
+        remoteSource.connect(dest);
+      }
+    });
+
+    // Capture video from canvas (or just local stream for now, but combined is better)
+    // For simplicity and stability, we'll record the combined audio with local video first
+    // In a full implementation, we'd use a canvas to mix all videos
+    const streamToRecord = new MediaStream([
+      ...localStreamRef.current.getVideoTracks(),
+      ...dest.stream.getAudioTracks(),
+    ]);
+
+    const recorder = new MediaRecorder(streamToRecord, {
+      mimeType: "video/webm;codecs=vp9,opus",
+    });
+
+    recorder.ondataavailable = (e) => {
+      if (e.data.size > 0) recordedChunksRef.current.push(e.data);
+    };
+
+    recorder.onstop = () => {
+      const blob = new Blob(recordedChunksRef.current, { type: "video/webm" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `meeting-record-${Date.now()}.webm`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+      
+      // Cleanup
+      audioContext.close();
+      recordAudioContextRef.current = null;
+      recordAudioDestRef.current = null;
+    };
+
+    recorder.start(1000);
+    mediaRecorderRef.current = recorder;
+    setIsRecording(true);
+  }, []);
+
+  const stopRecording = useCallback(() => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      mediaRecorderRef.current.stop();
+    }
+    setIsRecording(false);
+  }, []);
+
+  const toggleRecording = () => {
+    if (isRecording) stopRecording();
+    else startRecording();
+  };
 
   const leaveMeeting = useCallback(() => {
     socketRef.current.emit("meeting:leave", { meetingId: meetingCode, peerId: peerId.current });
@@ -645,107 +676,80 @@ export default function MeetingRoom() {
     navigate("/");
   }, [navigate, meetingCode]);
 
-  const formatTime = (s: number) => {
-    const m = Math.floor(s / 60);
-    const sec = s % 60;
-    return `${m.toString().padStart(2, "0")}:${sec.toString().padStart(2, "0")}`;
-  };
-
-  // Switch mic
   const switchMic = useCallback(async (deviceId: string) => {
     setSelectedMic(deviceId);
     try {
       const newStream = await navigator.mediaDevices.getUserMedia({
-        audio: { deviceId: { exact: deviceId } },
+        audio: { deviceId: { exact: deviceId }, echoCancellation: true, noiseSuppression: true },
       });
       const newTrack = newStream.getAudioTracks()[0];
       const oldTrack = localStreamRef.current?.getAudioTracks()[0];
-      if (oldTrack) {
-        localStreamRef.current?.removeTrack(oldTrack);
-        oldTrack.stop();
+      if (localStreamRef.current) {
+        if (oldTrack) {
+          localStreamRef.current.removeTrack(oldTrack);
+          oldTrack.stop();
+        }
+        localStreamRef.current.addTrack(newTrack);
       }
-      localStreamRef.current?.addTrack(newTrack);
-
-      // Update peers
-      peersRef.current.forEach(peer => {
+      for (const [_, peer] of peersRef.current) {
         const sender = peer.connection.getSenders().find(s => s.track?.kind === "audio");
-        if (sender) sender.replaceTrack(newTrack);
-      });
-
+        if (sender) await sender.replaceTrack(newTrack);
+      }
+      newTrack.enabled = !isMuted;
       setupAudioAnalyser(localStreamRef.current!);
-    } catch (e) {
-      console.error("Failed to switch mic:", e);
-    }
-  }, [setupAudioAnalyser]);
+    } catch { }
+  }, [isMuted, setupAudioAnalyser]);
 
-  // Switch camera
   const switchCamera = useCallback(async (deviceId: string) => {
     setSelectedCamera(deviceId);
-    if (!isCameraOn) return;
     try {
       const newStream = await navigator.mediaDevices.getUserMedia({
-        video: { deviceId: { exact: deviceId } },
+        video: { deviceId: { exact: deviceId }, width: { ideal: 1280 }, height: { ideal: 720 } },
       });
       const newTrack = newStream.getVideoTracks()[0];
       const oldTrack = localStreamRef.current?.getVideoTracks()[0];
-      if (oldTrack) {
-        localStreamRef.current?.removeTrack(oldTrack);
-        oldTrack.stop();
+      if (localStreamRef.current) {
+        if (oldTrack) {
+          localStreamRef.current.removeTrack(oldTrack);
+          oldTrack.stop();
+        }
+        localStreamRef.current.addTrack(newTrack);
       }
-      localStreamRef.current?.addTrack(newTrack);
-
-      if (localVideoRef.current) {
-        localVideoRef.current.srcObject = localStreamRef.current;
-      }
-
-      peersRef.current.forEach(peer => {
+      if (localVideoRef.current) localVideoRef.current.srcObject = localStreamRef.current;
+      for (const [_, peer] of peersRef.current) {
         const sender = peer.connection.getSenders().find(s => s.track?.kind === "video");
-        if (sender) sender.replaceTrack(newTrack);
-      });
-    } catch (e) {
-      console.error("Failed to switch camera:", e);
-    }
+        if (sender) await sender.replaceTrack(newTrack);
+      }
+      newTrack.enabled = isCameraOn;
+    } catch { }
   }, [isCameraOn]);
 
   const testSpeaker = useCallback(async () => {
     try {
       const audio = new Audio("/test-sound.mp3");
-      if (selectedSpeaker && (audio as any).setSinkId) {
-        await (audio as any).setSinkId(selectedSpeaker);
-      }
+      if (selectedSpeaker && (audio as any).setSinkId) await (audio as any).setSinkId(selectedSpeaker);
       audio.volume = speakerVolume[0] / 100;
       audio.play().catch(() => { });
     } catch { }
   }, [selectedSpeaker, speakerVolume]);
 
-  // Attach remote video ref
   const setRemoteVideoRef = useCallback((remotePeerId: string, el: HTMLVideoElement | null) => {
     if (el) {
       remoteVideoRefs.current.set(remotePeerId, el);
       const peer = peersRef.current.get(remotePeerId);
-      if (peer?.remoteStream) {
-        el.srcObject = peer.remoteStream;
-      }
-    } else {
-      remoteVideoRefs.current.delete(remotePeerId);
-    }
+      if (peer?.remoteStream) el.srcObject = peer.remoteStream;
+    } else remoteVideoRefs.current.delete(remotePeerId);
   }, []);
 
-  // Attach remote audio ref for audio playback
   const setRemoteAudioRef = useCallback((remotePeerId: string, el: HTMLAudioElement | null) => {
     if (el) {
       remoteAudioRefs.current.set(remotePeerId, el);
       const peer = peersRef.current.get(remotePeerId);
       if (peer?.remoteStream && el.srcObject !== peer.remoteStream) {
         el.srcObject = peer.remoteStream;
-        // Only play if paused to avoid AbortError
-        if (el.paused) {
-          el.play().catch(e => console.log("Audio play failed:", e));
-        }
+        if (el.paused) el.play().catch(() => { });
       }
-    } else {
-      remoteAudioRefs.current.delete(remotePeerId);
-    }
+    } else remoteAudioRefs.current.delete(remotePeerId);
   }, []);
 
   if (loading) {
@@ -783,7 +787,6 @@ export default function MeetingRoom() {
 
   return (
     <div ref={containerRef} className="flex flex-col h-screen bg-[#1a1a1a]">
-      {/* Header */}
       <header className="flex items-center justify-between px-4 h-12 bg-[#232323] border-b border-[#333]">
         <div className="flex items-center gap-3">
           <Lock className="w-3.5 h-3.5 text-green-500" />
@@ -804,9 +807,7 @@ export default function MeetingRoom() {
         </div>
       </header>
 
-      {/* Main */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Video Area */}
         <div className="flex-1 p-3 bg-[#1a1a1a]">
           {isScreenSharing && (
             <div className="mb-2 bg-[#0E71EB] text-white px-4 py-2 rounded-lg flex items-center justify-center gap-2">
@@ -818,17 +819,12 @@ export default function MeetingRoom() {
             </div>
           )}
 
-          {/* Video Grid */}
           <div className={cn("grid gap-2 h-full", getGridClass())}>
             {allParticipants.map((p) => {
               const initials = p.name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
               const isSpotlight = spotlightPeerId === p.peerId;
               const showTile = !spotlightPeerId || isSpotlight;
-
               if (!showTile && spotlightPeerId) return null;
-
-              const peerData = !p.isLocal ? peersRef.current.get(p.peerId) : null;
-              const hasRemoteVideo = peerData?.remoteStream?.getVideoTracks().some(t => t.enabled);
               const showRemoteVideo = !p.isLocal && (p.state.isCameraOn || p.state.isScreenSharing);
 
               return (
@@ -857,10 +853,7 @@ export default function MeetingRoom() {
                       />
                       {!showVideo && (
                         <div className="absolute inset-0 flex items-center justify-center">
-                          <div className={cn(
-                            "w-20 h-20 md:w-28 md:h-28 rounded-full bg-[#3d3d3d] flex items-center justify-center",
-                            p.isSpeaking && "ring-4 ring-green-500"
-                          )}>
+                          <div className={cn("w-20 h-20 md:w-28 md:h-28 rounded-full bg-[#3d3d3d] flex items-center justify-center", p.isSpeaking && "ring-4 ring-green-500")}>
                             <span className="text-white text-2xl md:text-4xl font-light">{initials}</span>
                           </div>
                         </div>
@@ -868,45 +861,22 @@ export default function MeetingRoom() {
                     </>
                   ) : (
                     <>
-                      <video
-                        ref={(el) => setRemoteVideoRef(p.peerId, el)}
-                        autoPlay
-                        playsInline
-                        className={cn(
-                          "absolute inset-0 w-full h-full",
-                          p.state.isScreenSharing ? "object-contain bg-black" : "object-cover",
-                          !showRemoteVideo && "hidden"
-                        )}
-                      />
-                      {/* Hidden audio element for remote audio playback */}
-                      <audio
-                        ref={(el) => setRemoteAudioRef(p.peerId, el)}
-                        autoPlay
-                        playsInline
-                      />
-
+                      <video ref={(el) => setRemoteVideoRef(p.peerId, el)} autoPlay playsInline className={cn("absolute inset-0 w-full h-full", p.state.isScreenSharing ? "object-contain bg-black" : "object-cover", !showRemoteVideo && "hidden")} />
+                      <audio ref={(el) => setRemoteAudioRef(p.peerId, el)} autoPlay playsInline />
                       {!showRemoteVideo && (
                         <div className="absolute inset-0 flex items-center justify-center">
-                          <div className={cn(
-                            "w-20 h-20 md:w-28 md:h-28 rounded-full bg-[#3d3d3d] flex items-center justify-center",
-                            p.isSpeaking && "ring-4 ring-green-500"
-                          )}>
+                          <div className={cn("w-20 h-20 md:w-28 md:h-28 rounded-full bg-[#3d3d3d] flex items-center justify-center", p.isSpeaking && "ring-4 ring-green-500")}>
                             <span className="text-white text-2xl md:text-4xl font-light">{initials}</span>
                           </div>
                         </div>
                       )}
                     </>
                   )}
-
-
-                  {/* Screen share badge */}
                   {p.state.isScreenSharing && !p.isLocal && (
                     <div className="absolute top-2 left-2 bg-blue-500 text-white px-2 py-0.5 rounded text-xs flex items-center gap-1">
                       <Monitor className="w-3 h-3" /> Sharing
                     </div>
                   )}
-
-                  {/* Name */}
                   <div className="absolute bottom-2 left-2 flex items-center gap-1.5">
                     {p.isSpeaking && (
                       <div className="flex items-center gap-0.5 mr-1">
@@ -918,7 +888,6 @@ export default function MeetingRoom() {
                     <span className="text-white text-xs bg-black/60 px-2 py-0.5 rounded">{p.name}</span>
                     {p.state.isHandRaised && <span className="text-sm">✋</span>}
                   </div>
-
                   {p.state.isMuted && (
                     <div className="absolute bottom-2 right-2 bg-red-500 rounded p-1">
                       <MicOff className="w-3 h-3 text-white" />
@@ -930,33 +899,14 @@ export default function MeetingRoom() {
           </div>
         </div>
 
-        {/* Side Panel */}
         <AnimatePresence>
           {(showParticipants || showChat) && (
-            <motion.div
-              initial={{ width: 0 }}
-              animate={{ width: 320 }}
-              exit={{ width: 0 }}
-              className="bg-[#232323] border-l border-[#333] flex flex-col overflow-hidden"
-            >
+            <motion.div initial={{ width: 0 }} animate={{ width: 320 }} exit={{ width: 0 }} className="bg-[#232323] border-l border-[#333] flex flex-col overflow-hidden">
               <div className="flex border-b border-[#333]">
-                <button
-                  className={cn("flex-1 py-3 text-sm font-medium", showParticipants ? "text-white border-b-2 border-[#0E71EB]" : "text-white/50 hover:text-white")}
-                  onClick={() => { setShowParticipants(true); setShowChat(false); }}
-                >
-                  Participants ({totalParticipants})
-                </button>
-                <button
-                  className={cn("flex-1 py-3 text-sm font-medium", showChat ? "text-white border-b-2 border-[#0E71EB]" : "text-white/50 hover:text-white")}
-                  onClick={() => { setShowChat(true); setShowParticipants(false); }}
-                >
-                  Chat
-                </button>
-                <button className="px-3 text-white/50 hover:text-white" onClick={() => { setShowParticipants(false); setShowChat(false); }}>
-                  <X className="w-4 h-4" />
-                </button>
+                <button className={cn("flex-1 py-3 text-sm font-medium", showParticipants ? "text-white border-b-2 border-[#0E71EB]" : "text-white/50 hover:text-white")} onClick={() => { setShowParticipants(true); setShowChat(false); }}>Participants ({totalParticipants})</button>
+                <button className={cn("flex-1 py-3 text-sm font-medium", showChat ? "text-white border-b-2 border-[#0E71EB]" : "text-white/50 hover:text-white")} onClick={() => { setShowChat(true); setShowParticipants(false); }}>Chat</button>
+                <button className="px-3 text-white/50 hover:text-white" onClick={() => { setShowParticipants(false); setShowChat(false); }}><X className="w-4 h-4" /></button>
               </div>
-
               <div className="flex-1 overflow-y-auto">
                 {showParticipants && (
                   <div className="p-3 space-y-1">
@@ -965,14 +915,10 @@ export default function MeetingRoom() {
                       return (
                         <div key={p.peerId} className={cn("flex items-center gap-3 p-2 rounded-lg hover:bg-white/5", p.isSpeaking && "bg-green-500/10")}>
                           <div className="relative">
-                            <div className="w-8 h-8 rounded-full bg-[#3d3d3d] flex items-center justify-center">
-                              <span className="text-white text-xs">{initials}</span>
-                            </div>
+                            <div className="w-8 h-8 rounded-full bg-[#3d3d3d] flex items-center justify-center"><span className="text-white text-xs">{initials}</span></div>
                             {p.isSpeaking && <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-green-500 border-2 border-[#232323]" />}
                           </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-white text-sm truncate">{p.name}</p>
-                          </div>
+                          <div className="flex-1 min-w-0"><p className="text-white text-sm truncate">{p.name}</p></div>
                           <div className="flex items-center gap-1">
                             {p.state.isHandRaised && <Hand className="w-4 h-4 text-yellow-500" />}
                             {p.state.isMuted ? <MicOff className="w-4 h-4 text-red-500" /> : <Mic className="w-4 h-4 text-white/50" />}
@@ -983,20 +929,13 @@ export default function MeetingRoom() {
                     })}
                   </div>
                 )}
-
                 {showChat && (
                   <div className="p-3 space-y-3">
                     {chatMessages.length === 0 ? (
-                      <div className="text-center py-16">
-                        <MessageSquare className="w-12 h-12 text-white/20 mx-auto mb-3" />
-                        <p className="text-white/40 text-sm">No messages yet</p>
-                      </div>
+                      <div className="text-center py-16"><MessageSquare className="w-12 h-12 text-white/20 mx-auto mb-3" /><p className="text-white/40 text-sm">No messages yet</p></div>
                     ) : chatMessages.map(msg => (
                       <div key={msg.id} className="text-sm">
-                        <div className="flex items-center gap-2 mb-0.5">
-                          <span className="text-white font-medium">{msg.sender}</span>
-                          <span className="text-white/40 text-xs">{msg.time}</span>
-                        </div>
+                        <div className="flex items-center gap-2 mb-0.5"><span className="text-white font-medium">{msg.sender}</span><span className="text-white/40 text-xs">{msg.time}</span></div>
                         <p className="text-white/80 break-words">{msg.text}</p>
                       </div>
                     ))}
@@ -1004,20 +943,11 @@ export default function MeetingRoom() {
                   </div>
                 )}
               </div>
-
               {showChat && (
                 <div className="p-3 border-t border-[#333]">
                   <div className="flex gap-2">
-                    <Input
-                      value={chatInput}
-                      onChange={e => setChatInput(e.target.value)}
-                      onKeyDown={e => e.key === "Enter" && sendChat()}
-                      placeholder="Type message..."
-                      className="bg-[#3d3d3d] border-0 text-white placeholder:text-white/40 h-10"
-                    />
-                    <Button size="icon" className="h-10 w-10 bg-[#0E71EB] hover:bg-[#0D65D0]" onClick={sendChat}>
-                      <Send className="w-4 h-4" />
-                    </Button>
+                    <Input value={chatInput} onChange={e => setChatInput(e.target.value)} onKeyDown={e => e.key === "Enter" && sendChat()} placeholder="Type message..." className="bg-[#3d3d3d] border-0 text-white placeholder:text-white/40 h-10" />
+                    <Button size="icon" className="h-10 w-10 bg-[#0E71EB] hover:bg-[#0D65D0]" onClick={sendChat}><Send className="w-4 h-4" /></Button>
                   </div>
                 </div>
               )}
@@ -1026,7 +956,6 @@ export default function MeetingRoom() {
         </AnimatePresence>
       </div>
 
-      {/* Controls */}
       <div className="h-16 bg-[#232323] flex items-center justify-between px-4 border-t border-[#333]">
         <div className="flex items-center gap-2">
           <Button variant="ghost" className="text-white/70 hover:text-white hover:bg-white/10 gap-2 h-10" onClick={copyMeetingLink}>
@@ -1036,7 +965,6 @@ export default function MeetingRoom() {
         </div>
 
         <div className="flex items-center gap-1">
-          {/* Mute */}
           <DropdownMenu>
             <div className="flex">
               <Button className={cn("rounded-r-none h-10 px-3 gap-1.5", isMuted ? "bg-red-500 hover:bg-red-600" : "bg-[#3d3d3d] hover:bg-[#4d4d4d]")} onClick={toggleMute} disabled={!hasAudioDevice}>
@@ -1044,27 +972,17 @@ export default function MeetingRoom() {
                 <span className="text-xs hidden md:inline">{isMuted ? "Unmute" : "Mute"}</span>
               </Button>
               <DropdownMenuTrigger asChild>
-                <Button className={cn("rounded-l-none h-10 px-1 border-l border-white/20", isMuted ? "bg-red-500 hover:bg-red-600" : "bg-[#3d3d3d] hover:bg-[#4d4d4d]")}>
-                  <ChevronUp className="w-3 h-3" />
-                </Button>
+                <Button className={cn("rounded-l-none h-10 px-1 border-l border-white/20", isMuted ? "bg-red-500 hover:bg-red-600" : "bg-[#3d3d3d] hover:bg-[#4d4d4d]")}><ChevronUp className="w-3 h-3" /></Button>
               </DropdownMenuTrigger>
             </div>
             <DropdownMenuContent className="bg-[#2d2d2d] border-[#3d3d3d] text-white w-56">
               <div className="px-3 py-1.5 text-xs text-white/50">Select Microphone</div>
-              {audioInputs.map(d => (
-                <DropdownMenuItem key={d.deviceId} className="hover:bg-white/10 text-sm" onClick={() => switchMic(d.deviceId)}>
-                  {selectedMic === d.deviceId && <Check className="w-3 h-3 mr-2" />}
-                  {d.label}
-                </DropdownMenuItem>
-              ))}
+              {audioInputs.map(d => (<DropdownMenuItem key={d.deviceId} className="hover:bg-white/10 text-sm" onClick={() => switchMic(d.deviceId)}>{selectedMic === d.deviceId && <Check className="w-3 h-3 mr-2" />}{d.label}</DropdownMenuItem>))}
               <DropdownMenuSeparator className="bg-[#3d3d3d]" />
-              <DropdownMenuItem className="hover:bg-white/10" onClick={() => setShowSettings(true)}>
-                <Settings className="w-4 h-4 mr-2" /> Audio Settings
-              </DropdownMenuItem>
+              <DropdownMenuItem className="hover:bg-white/10" onClick={() => setShowSettings(true)}><Settings className="w-4 h-4 mr-2" /> Audio Settings</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
 
-          {/* Camera */}
           <DropdownMenu>
             <div className="flex">
               <Button className={cn("rounded-r-none h-10 px-3 gap-1.5", !isCameraOn ? "bg-red-500 hover:bg-red-600" : "bg-[#3d3d3d] hover:bg-[#4d4d4d]")} onClick={toggleCamera}>
@@ -1072,75 +990,44 @@ export default function MeetingRoom() {
                 <span className="text-xs hidden md:inline">{isCameraOn ? "Stop" : "Start"}</span>
               </Button>
               <DropdownMenuTrigger asChild>
-                <Button className={cn("rounded-l-none h-10 px-1 border-l border-white/20", !isCameraOn ? "bg-red-500 hover:bg-red-600" : "bg-[#3d3d3d] hover:bg-[#4d4d4d]")}>
-                  <ChevronUp className="w-3 h-3" />
-                </Button>
+                <Button className={cn("rounded-l-none h-10 px-1 border-l border-white/20", !isCameraOn ? "bg-red-500 hover:bg-red-600" : "bg-[#3d3d3d] hover:bg-[#4d4d4d]")}><ChevronUp className="w-3 h-3" /></Button>
               </DropdownMenuTrigger>
             </div>
             <DropdownMenuContent className="bg-[#2d2d2d] border-[#3d3d3d] text-white w-56">
               <div className="px-3 py-1.5 text-xs text-white/50">Select Camera</div>
-              {videoInputs.map(d => (
-                <DropdownMenuItem key={d.deviceId} className="hover:bg-white/10 text-sm" onClick={() => switchCamera(d.deviceId)}>
-                  {selectedCamera === d.deviceId && <Check className="w-3 h-3 mr-2" />}
-                  {d.label}
-                </DropdownMenuItem>
-              ))}
+              {videoInputs.map(d => (<DropdownMenuItem key={d.deviceId} className="hover:bg-white/10 text-sm" onClick={() => switchCamera(d.deviceId)}>{selectedCamera === d.deviceId && <Check className="w-3 h-3 mr-2" />}{d.label}</DropdownMenuItem>))}
               <DropdownMenuSeparator className="bg-[#3d3d3d]" />
-              <DropdownMenuItem className="hover:bg-white/10" onClick={() => setShowSettings(true)}>
-                <Settings className="w-4 h-4 mr-2" /> Video Settings
-              </DropdownMenuItem>
+              <DropdownMenuItem className="hover:bg-white/10" onClick={() => setShowSettings(true)}><Settings className="w-4 h-4 mr-2" /> Video Settings</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
 
-          {/* Screen */}
           <Button className={cn("h-10 px-3 gap-1.5", isScreenSharing ? "bg-[#0E71EB] hover:bg-[#0D65D0]" : "bg-[#3d3d3d] hover:bg-[#4d4d4d]")} onClick={toggleScreenShare}>
             {isScreenSharing ? <MonitorOff className="w-4 h-4" /> : <Monitor className="w-4 h-4" />}
             <span className="text-xs hidden md:inline">Share</span>
           </Button>
 
-          {/* Record */}
           <Button className={cn("h-10 px-3 gap-1.5", isRecording ? "bg-red-500 hover:bg-red-600" : "bg-[#3d3d3d] hover:bg-[#4d4d4d]")} onClick={toggleRecording}>
             <Radio className={cn("w-4 h-4", isRecording && "animate-pulse")} />
             <span className="text-xs hidden md:inline">{isRecording ? "Stop" : "Record"}</span>
           </Button>
 
-          {/* Raise Hand */}
-          <Button className={cn("h-10 px-3 gap-1.5", isHandRaised ? "bg-yellow-500 hover:bg-yellow-600" : "bg-[#3d3d3d] hover:bg-[#4d4d4d]")} onClick={toggleHand}>
-            <Hand className="w-4 h-4" />
-          </Button>
+          <Button className={cn("h-10 px-3 gap-1.5", isHandRaised ? "bg-yellow-500 hover:bg-yellow-600" : "bg-[#3d3d3d] hover:bg-[#4d4d4d]")} onClick={toggleHand}><Hand className="w-4 h-4" /></Button>
 
-          {/* Participants */}
           <Button className={cn("h-10 px-3 gap-1.5 relative", showParticipants ? "bg-[#0E71EB]" : "bg-[#3d3d3d] hover:bg-[#4d4d4d]")} onClick={() => { setShowParticipants(!showParticipants); setShowChat(false); }}>
             <Users className="w-4 h-4" />
             <span className="text-xs">{totalParticipants}</span>
           </Button>
 
-          {/* Chat */}
           <Button className={cn("h-10 px-3 gap-1.5 relative", showChat ? "bg-[#0E71EB]" : "bg-[#3d3d3d] hover:bg-[#4d4d4d]")} onClick={() => { setShowChat(!showChat); setShowParticipants(false); }}>
             <MessageSquare className="w-4 h-4" />
-            {chatMessages.length > 0 && !showChat && (
-              <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-[9px] flex items-center justify-center">
-                {chatMessages.length > 9 ? "9+" : chatMessages.length}
-              </span>
-            )}
+            {chatMessages.length > 0 && !showChat && (<span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-[9px] flex items-center justify-center">{chatMessages.length > 9 ? "9+" : chatMessages.length}</span>)}
           </Button>
 
-          {/* More */}
           <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button className="h-10 px-3 gap-1.5 bg-[#3d3d3d] hover:bg-[#4d4d4d]">
-                <span className="text-xs">More</span>
-                <ChevronUp className="w-3 h-3" />
-              </Button>
-            </DropdownMenuTrigger>
+            <DropdownMenuTrigger asChild><Button className="h-10 px-3 gap-1.5 bg-[#3d3d3d] hover:bg-[#4d4d4d]"><span className="text-xs">More</span><ChevronUp className="w-3 h-3" /></Button></DropdownMenuTrigger>
             <DropdownMenuContent className="bg-[#2d2d2d] border-[#3d3d3d] text-white w-44">
-              <DropdownMenuItem className="hover:bg-white/10" onClick={toggleFullscreen}>
-                {isFullscreen ? <Minimize className="w-4 h-4 mr-2" /> : <Maximize className="w-4 h-4 mr-2" />}
-                {isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
-              </DropdownMenuItem>
-              <DropdownMenuItem className="hover:bg-white/10" onClick={() => setShowSettings(true)}>
-                <Settings className="w-4 h-4 mr-2" /> Settings
-              </DropdownMenuItem>
+              <DropdownMenuItem className="hover:bg-white/10" onClick={toggleFullscreen}>{isFullscreen ? <Minimize className="w-4 h-4 mr-2" /> : <Maximize className="w-4 h-4 mr-2" />}{isFullscreen ? "Exit Fullscreen" : "Fullscreen"}</DropdownMenuItem>
+              <DropdownMenuItem className="hover:bg-white/10" onClick={() => setShowSettings(true)}><Settings className="w-4 h-4 mr-2" /> Settings</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
@@ -1148,76 +1035,24 @@ export default function MeetingRoom() {
         <Button className="h-10 px-4 bg-red-500 hover:bg-red-600 text-sm font-medium" onClick={leaveMeeting}>Leave</Button>
       </div>
 
-      {/* Settings Dialog */}
       <Dialog open={showSettings} onOpenChange={setShowSettings}>
         <DialogContent className="bg-[#2d2d2d] border-[#3d3d3d] text-white max-w-md">
-          <DialogHeader>
-            <DialogTitle>Settings</DialogTitle>
-          </DialogHeader>
+          <DialogHeader><DialogTitle>Settings</DialogTitle></DialogHeader>
           <div className="space-y-6 py-4">
-            {/* Camera */}
             <div className="space-y-3">
-              <h4 className="text-sm font-medium text-white/70 flex items-center gap-2">
-                <VideoIcon className="w-4 h-4" /> Camera
-              </h4>
-              <Select value={selectedCamera} onValueChange={switchCamera}>
-                <SelectTrigger className="bg-[#3d3d3d] border-[#4d4d4d] text-white">
-                  <SelectValue placeholder="Select camera" />
-                </SelectTrigger>
-                <SelectContent className="bg-[#3d3d3d] border-[#4d4d4d] text-white">
-                  {videoInputs.map(d => (
-                    <SelectItem key={d.deviceId} value={d.deviceId}>{d.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <div className="flex items-center justify-between">
-                <Label className="text-sm">Mirror my video</Label>
-                <Switch checked={mirrorVideo} onCheckedChange={setMirrorVideo} />
-              </div>
+              <h4 className="text-sm font-medium text-white/70 flex items-center gap-2"><VideoIcon className="w-4 h-4" /> Camera</h4>
+              <Select value={selectedCamera} onValueChange={switchCamera}><SelectTrigger className="bg-[#3d3d3d] border-[#4d4d4d] text-white"><SelectValue placeholder="Select camera" /></SelectTrigger><SelectContent className="bg-[#3d3d3d] border-[#4d4d4d] text-white">{videoInputs.map(d => (<SelectItem key={d.deviceId} value={d.deviceId}>{d.label}</SelectItem>))}</SelectContent></Select>
+              <div className="flex items-center justify-between"><Label className="text-sm">Mirror my video</Label><Switch checked={mirrorVideo} onCheckedChange={setMirrorVideo} /></div>
             </div>
-
-            {/* Microphone */}
             <div className="space-y-3">
-              <h4 className="text-sm font-medium text-white/70 flex items-center gap-2">
-                <Mic className="w-4 h-4" /> Microphone
-              </h4>
-              <Select value={selectedMic} onValueChange={switchMic}>
-                <SelectTrigger className="bg-[#3d3d3d] border-[#4d4d4d] text-white">
-                  <SelectValue placeholder="Select microphone" />
-                </SelectTrigger>
-                <SelectContent className="bg-[#3d3d3d] border-[#4d4d4d] text-white">
-                  {audioInputs.map(d => (
-                    <SelectItem key={d.deviceId} value={d.deviceId}>{d.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <h4 className="text-sm font-medium text-white/70 flex items-center gap-2"><Mic className="w-4 h-4" /> Microphone</h4>
+              <Select value={selectedMic} onValueChange={switchMic}><SelectTrigger className="bg-[#3d3d3d] border-[#4d4d4d] text-white"><SelectValue placeholder="Select microphone" /></SelectTrigger><SelectContent className="bg-[#3d3d3d] border-[#4d4d4d] text-white">{audioInputs.map(d => (<SelectItem key={d.deviceId} value={d.deviceId}>{d.label}</SelectItem>))}</SelectContent></Select>
             </div>
-
-            {/* Speaker */}
             <div className="space-y-3">
-              <h4 className="text-sm font-medium text-white/70 flex items-center gap-2">
-                <Volume2 className="w-4 h-4" /> Speaker
-              </h4>
-              <Select value={selectedSpeaker} onValueChange={setSelectedSpeaker}>
-                <SelectTrigger className="bg-[#3d3d3d] border-[#4d4d4d] text-white">
-                  <SelectValue placeholder="Select speaker" />
-                </SelectTrigger>
-                <SelectContent className="bg-[#3d3d3d] border-[#4d4d4d] text-white">
-                  {audioOutputs.map(d => (
-                    <SelectItem key={d.deviceId} value={d.deviceId}>{d.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label className="text-sm">Volume</Label>
-                  <span className="text-xs text-white/50">{speakerVolume[0]}%</span>
-                </div>
-                <Slider value={speakerVolume} onValueChange={setSpeakerVolume} max={100} step={1} />
-              </div>
-              <Button variant="outline" size="sm" className="w-full mt-2" onClick={testSpeaker}>
-                <Volume2 className="w-4 h-4 mr-2" /> Test Speaker
-              </Button>
+              <h4 className="text-sm font-medium text-white/70 flex items-center gap-2"><Volume2 className="w-4 h-4" /> Speaker</h4>
+              <Select value={selectedSpeaker} onValueChange={setSelectedSpeaker}><SelectTrigger className="bg-[#3d3d3d] border-[#4d4d4d] text-white"><SelectValue placeholder="Select speaker" /></SelectTrigger><SelectContent className="bg-[#3d3d3d] border-[#4d4d4d] text-white">{audioOutputs.map(d => (<SelectItem key={d.deviceId} value={d.deviceId}>{d.label}</SelectItem>))}</SelectContent></Select>
+              <div className="space-y-2"><div className="flex items-center justify-between"><Label className="text-sm">Volume</Label><span className="text-xs text-white/50">{speakerVolume[0]}%</span></div><Slider value={speakerVolume} onValueChange={setSpeakerVolume} max={100} step={1} /></div>
+              <Button variant="outline" size="sm" className="w-full mt-2" onClick={testSpeaker}><Volume2 className="w-4 h-4 mr-2" /> Test Speaker</Button>
             </div>
           </div>
         </DialogContent>

@@ -7,6 +7,7 @@ import AppLayout from "@/components/layout/AppLayout";
 import CommandPalette from "@/components/shared/CommandPalette";
 import Dashboard from "./pages/Dashboard";
 import MeetingRoom from "./pages/MeetingRoom";
+import MeetingLobby from "./pages/MeetingLobby";
 import MeetingSummary from "./pages/MeetingSummary";
 import Meetings from "./pages/Meetings";
 import Chat from "./pages/Chat";
@@ -41,6 +42,7 @@ const App = () => (
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/invite" element={<InviteSetup />} />
+          <Route path="/meeting-lobby/:id" element={<ProtectedRoute><MeetingLobby /></ProtectedRoute>} />
           <Route path="/meeting-room" element={<ProtectedRoute><MeetingRoom /></ProtectedRoute>} />
           <Route path="/meeting-room/:id" element={<ProtectedRoute><MeetingRoom /></ProtectedRoute>} />
           <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>

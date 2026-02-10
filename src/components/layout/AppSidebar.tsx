@@ -1,16 +1,18 @@
 import { useState, useEffect } from "react";
-import { useLocation, Link } from "react-router-dom";
+import { useLocation, Link, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   LayoutDashboard, Video, MessageSquare, CheckSquare, Users,
   BarChart3, Settings, Bell, Shield, ChevronRight,
   Hash, Volume2, Megaphone, Plus, Search, LogOut, MapPin, Headphones,
+  Phone, Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import StatusIndicator from "@/components/shared/StatusIndicator";
 import { auth } from "@/lib/auth";
+import { usePresence } from "@/hooks/usePresence";
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
 
@@ -33,6 +35,13 @@ interface Team {
   name: string;
 }
 
+interface UserInfo {
+  id: string;
+  name: string;
+  email: string;
+  status: string;
+}
+
 interface AppSidebarProps {
   onNavigate?: () => void;
 }
@@ -40,15 +49,15 @@ interface AppSidebarProps {
 const mainNav: NavItem[] = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
   { title: "Virtual Office", url: "/virtual-office", icon: MapPin },
-  { title: "Meetings", url: "/meetings", icon: Video, badge: 2 },
-  { title: "Chat", url: "/chat", icon: MessageSquare, badge: 5 },
-  { title: "Tasks", url: "/tasks", icon: CheckSquare, badge: 3 },
+  { title: "Meetings", url: "/meetings", icon: Video },
+  { title: "Chat", url: "/chat", icon: MessageSquare },
+  { title: "Tasks", url: "/tasks", icon: CheckSquare },
   { title: "Teams", url: "/teams", icon: Users },
   { title: "Reports", url: "/reports", icon: BarChart3 },
 ];
 
 const bottomNav: NavItem[] = [
-  { title: "Notifications", url: "/notifications", icon: Bell, badge: 8 },
+  { title: "Notifications", url: "/notifications", icon: Bell },
   { title: "Admin", url: "/admin", icon: Shield },
   { title: "Settings", url: "/settings", icon: Settings },
 ];
@@ -61,21 +70,26 @@ const channelIcons: Record<string, React.ElementType> = {
 
 export default function AppSidebar({ onNavigate }: AppSidebarProps) {
   const location = useLocation();
+  const navigate = useNavigate();
   const currentUser = auth.getUser();
   const [expandedTeams, setExpandedTeams] = useState<string[]>([]);
   const [collapsed, setCollapsed] = useState(false);
   const [teams, setTeams] = useState<Team[]>([]);
   const [channels, setChannels] = useState<Channel[]>([]);
+  const [allUsers, setAllUsers] = useState<UserInfo[]>([]);
+  const { onlineUserIds, activeRooms, isUserOnline } = usePresence();
 
   useEffect(() => {
     const loadData = async () => {
       try {
-        const [teamsRes, channelsRes] = await Promise.all([
+        const [teamsRes, channelsRes, usersRes] = await Promise.all([
           fetch(`${API_BASE}/teams`).then((r) => r.json()),
           fetch(`${API_BASE}/channels`).then((r) => r.json()),
+          fetch(`${API_BASE}/users`).then((r) => r.json()),
         ]);
         setTeams(teamsRes);
         setChannels(channelsRes);
+        setAllUsers(usersRes);
         if (teamsRes.length > 0 && expandedTeams.length === 0) {
           setExpandedTeams([teamsRes[0].id]);
         }
@@ -99,7 +113,19 @@ export default function AppSidebar({ onNavigate }: AppSidebarProps) {
 
   const handleNav = () => onNavigate?.();
 
+  const handleLogout = () => {
+    auth.clear();
+    navigate("/login");
+  };
+
   const getTeamChannels = (teamId: string) => channels.filter((c) => c.teamId === teamId);
+
+  // Quick Huddle participants from active rooms
+  const quickHuddleRoom = activeRooms.find((r) => r.roomId === "quick-huddle");
+  const quickHuddleParticipants = quickHuddleRoom?.participants || [];
+
+  // Other users for DM section (exclude current user)
+  const dmUsers = allUsers.filter((u) => u.id !== currentUser?.id);
 
   return (
     <aside
@@ -144,20 +170,55 @@ export default function AppSidebar({ onNavigate }: AppSidebarProps) {
       {(!collapsed || onNavigate) && (
         <div className="px-3 pb-2">
           <Link
-            to="/meeting-room"
+            to="/meeting-lobby/quick-huddle"
             onClick={handleNav}
             className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-sidebar-primary/10 text-sidebar-primary text-xs font-medium hover:bg-sidebar-primary/20 transition-colors"
           >
             <Headphones className="w-3.5 h-3.5" />
             <span>Quick Huddle</span>
-            <div className="ml-auto flex -space-x-1">
-              {["SK", "AP"].map((initials) => (
-                <div key={initials} className="w-4 h-4 rounded-full bg-sidebar-primary/30 flex items-center justify-center">
-                  <span className="text-[7px] text-sidebar-primary-foreground font-medium">{initials}</span>
-                </div>
-              ))}
+            <div className="ml-auto flex items-center gap-1">
+              {quickHuddleParticipants.length > 0 ? (
+                <>
+                  <div className="flex -space-x-1">
+                    {quickHuddleParticipants.slice(0, 3).map((p) => (
+                      <div key={p.peerId} className="w-4 h-4 rounded-full bg-sidebar-primary/30 flex items-center justify-center">
+                        <span className="text-[7px] text-sidebar-primary-foreground font-medium">
+                          {p.name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  <span className="text-[9px] text-sidebar-primary/70">{quickHuddleParticipants.length}</span>
+                </>
+              ) : (
+                <span className="text-[9px] text-sidebar-muted">Start</span>
+              )}
             </div>
           </Link>
+        </div>
+      )}
+
+      {/* Active Meeting Rooms */}
+      {(!collapsed || onNavigate) && activeRooms.filter(r => r.roomId !== "quick-huddle").length > 0 && (
+        <div className="px-3 pb-2 space-y-1">
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-sidebar-muted px-1">Live Rooms</p>
+          {activeRooms.filter(r => r.roomId !== "quick-huddle").map((room) => (
+            <Link
+              key={room.roomId}
+              to={`/meeting-lobby/${room.roomId}`}
+              onClick={handleNav}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs text-green-400 hover:bg-green-500/10 transition-colors"
+            >
+              <div className="relative">
+                <Video className="w-3.5 h-3.5" />
+                <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+              </div>
+              <span className="flex-1 truncate">{room.name}</span>
+              <Badge className="bg-green-500/20 text-green-400 text-[9px] h-4 px-1">
+                {room.participants.length}
+              </Badge>
+            </Link>
+          ))}
         </div>
       )}
 
@@ -186,9 +247,9 @@ export default function AppSidebar({ onNavigate }: AppSidebarProps) {
             {(!collapsed || onNavigate) && (
               <>
                 <span className="flex-1">{item.title}</span>
-                {item.badge && item.badge > 0 && (
-                  <Badge variant="destructive" className="h-4.5 min-w-[18px] px-1 text-[10px] flex items-center justify-center">
-                    {item.badge}
+                {item.title === "Meetings" && activeRooms.length > 0 && (
+                  <Badge className="h-4.5 min-w-[18px] px-1 text-[10px] flex items-center justify-center bg-green-500 text-white">
+                    {activeRooms.length}
                   </Badge>
                 )}
               </>
@@ -252,6 +313,46 @@ export default function AppSidebar({ onNavigate }: AppSidebarProps) {
             })}
           </div>
         )}
+
+        {/* Direct Messages with online indicators */}
+        {(!collapsed || onNavigate) && (
+          <div className="pt-3">
+            <div className="flex items-center justify-between px-3 py-1">
+              <span className="text-[10px] font-semibold uppercase tracking-widest text-sidebar-muted">Direct Messages</span>
+              <button className="p-0.5 rounded hover:bg-sidebar-accent text-sidebar-muted hover:text-sidebar-accent-foreground">
+                <Plus className="w-3 h-3" />
+              </button>
+            </div>
+            {dmUsers.map((user) => {
+              const online = isUserOnline(user.id);
+              const initials = user.name.split(" ").map(n => n[0]).join("").toUpperCase();
+              return (
+                <Link
+                  key={user.id}
+                  to={`/chat`}
+                  onClick={handleNav}
+                  className="flex items-center gap-2 px-3 py-1.5 text-xs text-sidebar-foreground hover:bg-sidebar-accent/50 rounded-lg transition-colors"
+                >
+                  <div className="relative">
+                    <Avatar className="h-5 w-5">
+                      <AvatarFallback className="bg-sidebar-accent text-sidebar-accent-foreground text-[8px] font-medium">
+                        {initials.slice(0, 2)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <StatusIndicator
+                      status={online ? "online" : "offline"}
+                      className="absolute -bottom-0.5 -right-0.5 w-2 h-2 border-sidebar"
+                    />
+                  </div>
+                  <span className="flex-1 truncate">{user.name}</span>
+                  {online && (
+                    <span className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" />
+                  )}
+                </Link>
+              );
+            })}
+          </div>
+        )}
       </nav>
 
       {/* Bottom Nav */}
@@ -289,7 +390,7 @@ export default function AppSidebar({ onNavigate }: AppSidebarProps) {
           <div className="relative">
             <Avatar className="h-8 w-8 ring-2 ring-sidebar-primary/30">
               <AvatarFallback className="bg-sidebar-primary text-sidebar-primary-foreground text-xs font-medium">
-                {currentUser?.name ? currentUser.name.split(" ").map(n => n[0]).join("") : "SK"}
+                {currentUser?.name ? currentUser.name.split(" ").map(n => n[0]).join("") : "?"}
               </AvatarFallback>
             </Avatar>
             <StatusIndicator status="online" className="absolute -bottom-0.5 -right-0.5 glow-success" />
@@ -299,11 +400,15 @@ export default function AppSidebar({ onNavigate }: AppSidebarProps) {
               <p className="text-xs font-semibold text-sidebar-accent-foreground truncate">
                 {currentUser?.name || "Guest User"}
               </p>
-              <p className="text-[10px] text-sidebar-muted truncate">🟢 Available</p>
+              <p className="text-[10px] text-sidebar-muted truncate">🟢 Online</p>
             </div>
           )}
           {(!collapsed || onNavigate) && (
-            <button className="p-1 rounded hover:bg-sidebar-accent text-sidebar-muted hover:text-sidebar-accent-foreground transition-colors">
+            <button
+              onClick={handleLogout}
+              className="p-1 rounded hover:bg-sidebar-accent text-sidebar-muted hover:text-sidebar-accent-foreground transition-colors"
+              title="Log out"
+            >
               <LogOut className="w-3.5 h-3.5" />
             </button>
           )}

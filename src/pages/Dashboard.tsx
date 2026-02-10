@@ -18,6 +18,7 @@ import MoodCheckin from "@/components/widgets/MoodCheckin";
 import TimeZoneWidget from "@/components/widgets/TimeZoneWidget";
 import WorkHoursTracker from "@/components/widgets/WorkHoursTracker";
 import { auth } from "@/lib/auth";
+import { usePresence } from "@/hooks/usePresence";
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
 
@@ -44,6 +45,7 @@ export default function Dashboard() {
   });
   const [loading, setLoading] = useState(true);
   const currentUser = auth.getUser();
+  const { onlineCount, isUserOnline, activeRooms } = usePresence();
 
   useEffect(() => {
     const loadData = async () => {
@@ -80,12 +82,13 @@ export default function Dashboard() {
           assignee: t.assignee?.name?.split(" ").map((n: string) => n[0]).join("") || "",
         }));
 
-        const members = usersRes.slice(0, 5).map((u: any) => ({
+        const members = usersRes.slice(0, 8).map((u: any) => ({
+          id: u.id,
           name: u.name,
           initials: u.name.split(" ").map((n: string) => n[0]).join(""),
-          status: "online" as const,
-          activity: "Available",
-          room: "💻 Workspace",
+          status: u.status || "offline",
+          activity: u.activity || "Available",
+          room: u.currentRoom || null,
         }));
 
         setUpcomingMeetings(upcoming);
@@ -95,7 +98,7 @@ export default function Dashboard() {
           meetingsToday: upcoming.length,
           openTasks: tasksRes.length,
           unreadMessages: 0,
-          teamOnline: `${members.length}/${usersRes.length}`,
+          teamOnline: `${usersRes.length}`,
         });
       } catch (err) {
         console.error("Failed to load dashboard data:", err);
@@ -158,7 +161,7 @@ export default function Dashboard() {
           { label: "Meetings Today", value: stats.meetingsToday.toString(), icon: Video, trend: "", trendColor: "text-success", gradient: "from-primary/10 to-info/10" },
           { label: "Open Tasks", value: stats.openTasks.toString(), icon: CheckSquare, trend: "", trendColor: "text-warning", gradient: "from-warning/10 to-warning/5" },
           { label: "Unread Messages", value: stats.unreadMessages.toString(), icon: MessageSquare, trend: "", trendColor: "text-primary", gradient: "from-primary/5 to-info/5" },
-          { label: "Team Online", value: stats.teamOnline, icon: Users, trend: "", trendColor: "text-success", gradient: "from-success/10 to-success/5" },
+          { label: "Team Online", value: `${onlineCount}/${stats.teamOnline}`, icon: Users, trend: "", trendColor: "text-success", gradient: "from-success/10 to-success/5" },
         ].map((stat, i) => (
           <motion.div key={stat.label} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.08 + i * 0.04 }}>
             <Card className={`card-hover bg-gradient-to-br ${stat.gradient} border-0 shadow-sm`}>
@@ -258,20 +261,33 @@ export default function Dashboard() {
             ) : onlineMembers.length === 0 ? (
               <div className="text-sm text-muted-foreground">No team members</div>
             ) : (
-              onlineMembers.map((member, i) => (
+              onlineMembers.map((member, i) => {
+                const memberOnline = isUserOnline(member.id);
+                const roomNames: Record<string, string> = {
+                  workspace: "💻 Workspace",
+                  "meeting-1": "🎥 Meeting A",
+                  "meeting-2": "🎥 Meeting B",
+                  huddle: "🎧 Huddle",
+                  lounge: "☕ Lounge",
+                  phone: "📞 Phone",
+                };
+                return (
               <motion.div key={member.name} initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.2 + i * 0.04 }}
                 className="flex items-center gap-2.5">
                 <div className="relative">
                   <Avatar className="h-7 w-7"><AvatarFallback className="bg-primary/10 text-primary text-[10px]">{member.initials}</AvatarFallback></Avatar>
-                  <StatusIndicator status={member.status} className="absolute -bottom-0.5 -right-0.5 border-card" />
+                  <StatusIndicator status={memberOnline ? "online" : "offline"} className="absolute -bottom-0.5 -right-0.5 border-card" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-medium text-foreground truncate">{member.name}</p>
                   <p className="text-[10px] text-muted-foreground">{member.activity}</p>
                 </div>
-                <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">{member.room}</span>
+                <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                  {member.room ? (roomNames[member.room] || member.room) : (memberOnline ? "🟢 Online" : "⚫ Offline")}
+                </span>
               </motion.div>
-              ))
+                );
+              })
             )}
           </CardContent>
         </Card>
@@ -314,9 +330,25 @@ export default function Dashboard() {
 
         {/* Activity Feed */}
         <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm">Recent Activity</CardTitle></CardHeader>
+          <CardHeader className="pb-2"><CardTitle className="text-sm">Active Rooms</CardTitle></CardHeader>
           <CardContent className="space-y-2.5">
-            <div className="text-sm text-muted-foreground">No recent activity</div>
+            {activeRooms.length > 0 ? (
+              activeRooms.slice(0, 3).map((room, i) => (
+                <motion.div key={room.roomId} initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.2 + i * 0.04 }}
+                  className="flex items-center gap-2.5 p-2 rounded-lg hover:bg-muted/50">
+                  <div className="w-8 h-8 rounded-lg bg-green-500/10 flex items-center justify-center">
+                    <Video className="w-3.5 h-3.5 text-green-500" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium text-foreground truncate">{room.name}</p>
+                    <p className="text-[10px] text-muted-foreground">{room.participants.length} participants</p>
+                  </div>
+                  <Badge className="bg-green-500/20 text-green-600 text-[9px]">LIVE</Badge>
+                </motion.div>
+              ))
+            ) : (
+              <div className="text-sm text-muted-foreground">No active rooms</div>
+            )}
           </CardContent>
         </Card>
       </motion.div>

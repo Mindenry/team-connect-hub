@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Video, Calendar, Clock, Users, Shield, FileText, X,
 } from "lucide-react";
@@ -26,6 +27,7 @@ interface CreateMeetingDialogProps {
 }
 
 export default function CreateMeetingDialog({ open, onOpenChange }: CreateMeetingDialogProps) {
+  const navigate = useNavigate();
   const [meetingType, setMeetingType] = useState<"instant" | "scheduled">("scheduled");
   const [waitingRoom, setWaitingRoom] = useState(true);
   const [allowScreenShare, setAllowScreenShare] = useState(true);
@@ -150,13 +152,15 @@ export default function CreateMeetingDialog({ open, onOpenChange }: CreateMeetin
                   }),
                 });
 
-                if (!res.ok) throw new Error("Failed to create meeting");
+                const result = await res.json();
                 onOpenChange(false);
                 setTitle("");
                 setDescription("");
                 setDate("");
                 setTime("");
-                window.location.reload();
+                if (meetingType === "instant") {
+                  navigate(`/meeting-lobby/${result.id}`);
+                }
               } catch (err: any) {
                 setError(err.message ?? "Failed to create meeting");
               } finally {

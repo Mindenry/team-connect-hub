@@ -34,6 +34,7 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { usePresence } from "@/hooks/usePresence";
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
 
@@ -47,6 +48,7 @@ interface TeamMember {
 }
 
 interface TeamChannel {
+  id: string;
   name: string;
   type: string;
   messages: number;
@@ -63,6 +65,7 @@ interface Team {
 }
 
 export default function Teams() {
+  const { isUserOnline } = usePresence();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedTeam, setSelectedTeam] = useState<string | null>(null);
   const [showInvite, setShowInvite] = useState(false);
@@ -89,8 +92,17 @@ export default function Teams() {
               initials: m.user.name.split(" ").map((n: string) => n[0]).join(""),
               email: m.user.email,
               role: m.role === "admin" ? "lead" : "member",
-              status: "online" as const,
+              status: (isUserOnline(m.user.id) ? "online" : "offline") as const,
               joinedDate: new Date(m.createdAt).toLocaleDateString("en-US", { month: "short", year: "numeric" }),
+              userId: m.user.id,
+            }));
+
+            const channelsRes = await fetch(`${API_BASE}/channels`).then(r => r.json());
+            const teamChannels = channelsRes.filter((c: any) => c.teamId === team.id).map((c: any) => ({
+              id: c.id,
+              name: c.name,
+              type: c.type || "general",
+              messages: c._count?.messages || 0,
             }));
 
             const teamTasks = tasksRes.filter((t: any) => t.teamId === team.id);
@@ -101,7 +113,7 @@ export default function Teams() {
               name: team.name,
               description: team.description || "",
               members,
-              channels: [],
+              channels: teamChannels,
               activeTasks,
               createdDate: new Date(team.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
             };
@@ -130,10 +142,22 @@ export default function Teams() {
         body: JSON.stringify({ name: teamName }),
       });
       if (res.ok) {
+        const newTeam = await res.json();
         setShowCreateTeam(false);
         setTeamName("");
         setTeamDescription("");
-        window.location.reload();
+        // Add the new team to state immediately
+        const teamData: Team = {
+          id: newTeam.id,
+          name: newTeam.name,
+          description: newTeam.description || "",
+          members: [],
+          channels: [],
+          activeTasks: 0,
+          createdDate: new Date(newTeam.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+        };
+        setTeams(prev => [...prev, teamData]);
+        setSelectedTeam(newTeam.id);
       }
     } catch (err) {
       console.error("Failed to create team:", err);
@@ -144,7 +168,7 @@ export default function Teams() {
 
   return (
     <div className="flex h-screen">
-      <InviteUserDialog open={showInvite} onOpenChange={setShowInvite} />
+      <InviteUserDialog open={showInvite} onOpenChange={setShowInvite} teamId={selectedTeam || undefined} />
       <CreateChannelDialog open={showCreateChannel} onOpenChange={setShowCreateChannel} />
 
       {/* Create Team Dialog */}
@@ -248,25 +272,29 @@ export default function Teams() {
               </TabsList>
 
               <TabsContent value="members" className="space-y-2">
-                {activeTeam.members.map((member) => (
-                  <div key={member.name} className="flex items-center gap-3 p-3 rounded-lg border hover:bg-muted/50 transition-colors">
-                    <div className="relative">
-                      <Avatar className="h-9 w-9">
-                        <AvatarFallback className="bg-primary/10 text-primary text-xs">{member.initials}</AvatarFallback>
-                      </Avatar>
-                      <StatusIndicator status={member.status} className="absolute -bottom-0.5 -right-0.5 border-card" />
+                {activeTeam.members.map((member) => {
+                  const online = (member as any).userId ? isUserOnline((member as any).userId) : false;
+                  const status = online ? "online" : "offline";
+                  return (
+                    <div key={member.name} className="flex items-center gap-3 p-3 rounded-lg border hover:bg-muted/50 transition-colors">
+                      <div className="relative">
+                        <Avatar className="h-9 w-9">
+                          <AvatarFallback className="bg-primary/10 text-primary text-xs">{member.initials}</AvatarFallback>
+                        </Avatar>
+                        <StatusIndicator status={status as "online" | "offline" | "busy" | "away"} className="absolute -bottom-0.5 -right-0.5 border-card" />
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-foreground">{member.name}</p>
+                        <p className="text-xs text-muted-foreground">{member.email}</p>
+                      </div>
+                      <span className="text-xs text-muted-foreground">Joined {member.joinedDate}</span>
+                      <Badge variant={member.role === "lead" ? "default" : "secondary"} className="text-xs">
+                        {member.role === "lead" && <Crown className="w-3 h-3 mr-1" />}{member.role}
+                      </Badge>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground"><MoreHorizontal className="w-4 h-4" /></Button>
                     </div>
-                    <div className="flex-1">
-                      <p className="text-sm font-medium text-foreground">{member.name}</p>
-                      <p className="text-xs text-muted-foreground">{member.email}</p>
-                    </div>
-                    <span className="text-xs text-muted-foreground">Joined {member.joinedDate}</span>
-                    <Badge variant={member.role === "lead" ? "default" : "secondary"} className="text-xs">
-                      {member.role === "lead" && <Crown className="w-3 h-3 mr-1" />}{member.role}
-                    </Badge>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground"><MoreHorizontal className="w-4 h-4" /></Button>
-                  </div>
-                ))}
+                  );
+                })}
               </TabsContent>
 
               <TabsContent value="channels" className="space-y-2">

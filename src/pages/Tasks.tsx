@@ -29,6 +29,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Card, CardContent } from "@/components/ui/card";
 import CreateTaskDialog from "@/components/dialogs/CreateTaskDialog";
 import TaskDetailDialog from "@/components/dialogs/TaskDetailDialog";
+import { getSocket } from "@/lib/websocket";
 
 interface Task {
   id: string;

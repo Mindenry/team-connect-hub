@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   Monitor, Coffee, Video, Headphones, Phone,
@@ -12,6 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import StatusIndicator from "@/components/shared/StatusIndicator";
 import { auth } from "@/lib/auth";
 import { getSocket } from "@/lib/websocket";
+import { usePresence } from "@/hooks/usePresence";
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
 
@@ -54,10 +56,12 @@ const item = {
 
 export default function VirtualOffice() {
   const currentUser = auth.getUser();
+  const navigate = useNavigate();
   const [selectedRoom, setSelectedRoom] = useState<string | null>(null);
   const [people, setPeople] = useState<Person[]>([]);
   const [loading, setLoading] = useState(true);
   const [moving, setMoving] = useState(false);
+  const { isUserOnline, onlineCount } = usePresence();
 
   useEffect(() => {
     const loadData = async () => {
@@ -113,7 +117,7 @@ export default function VirtualOffice() {
   const getRoomPeople = (roomId: string) =>
     people.filter((p) => p.currentRoom === roomId);
 
-  const onlinePeople = people.filter((p) => p.status !== "offline");
+  const onlinePeople = people.filter((p) => isUserOnline(p.id));
 
   const moveToRoom = async (roomId: string) => {
     if (!currentUser || moving) return;
@@ -253,12 +257,28 @@ export default function VirtualOffice() {
                     </Button>
                   )}
                   {room.id.startsWith("meeting") && roomPeople.length === 0 && (
-                    <Button size="sm" variant="outline" className="w-full mt-2 text-xs h-7 gap-1">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="w-full mt-2 text-xs h-7 gap-1"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigate(`/meeting-lobby/${room.id}`);
+                      }}
+                    >
                       <Plus className="w-3 h-3" /> Start Meeting
                     </Button>
                   )}
                   {room.id === "huddle" && (
-                    <Button size="sm" variant="outline" className="w-full mt-2 text-xs h-7 gap-1">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="w-full mt-2 text-xs h-7 gap-1"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigate("/meeting-lobby/quick-huddle");
+                      }}
+                    >
                       <Headphones className="w-3 h-3" /> Join Huddle
                     </Button>
                   )}
@@ -272,10 +292,10 @@ export default function VirtualOffice() {
       {/* Quick Stats Footer */}
       <motion.div variants={item} className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
         {[
-          { label: "Focus Time Today", value: "4h 32m", desc: "Above average", trend: "text-success" },
-          { label: "Meetings Attended", value: "2 / 3", desc: "1 upcoming", trend: "text-primary" },
-          { label: "Messages Sent", value: "28", desc: "+12 from yesterday", trend: "text-info" },
-          { label: "Collaboration Score", value: "92%", desc: "Top 10% this week", trend: "text-success" },
+          { label: "Online Now", value: `${onlineCount}`, desc: `of ${people.length} members`, trend: "text-success" },
+          { label: "In Rooms", value: `${people.filter(p => p.currentRoom).length}`, desc: "Currently in rooms", trend: "text-primary" },
+          { label: "Available", value: `${onlinePeople.length}`, desc: "Ready to connect", trend: "text-info" },
+          { label: "Offline", value: `${people.length - onlinePeople.length}`, desc: "Not connected", trend: "text-muted-foreground" },
         ].map((stat, i) => (
           <motion.div
             key={stat.label}

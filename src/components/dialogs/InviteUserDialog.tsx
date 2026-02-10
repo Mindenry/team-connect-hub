@@ -120,7 +120,6 @@ export default function InviteUserDialog({ open, onOpenChange, teamId }: InviteU
                 onOpenChange(false);
                 setEmails([]);
                 setEmailInput("");
-                window.location.reload();
               } catch (err: any) {
                 setError(err.message ?? "Failed to invite users");
               } finally {

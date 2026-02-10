@@ -113,14 +113,12 @@ function MeetingCard({ meeting, index }: { meeting: Meeting; index: number }) {
               <Avatar className="h-7 w-7">
                 <AvatarFallback className="bg-primary/10 text-primary text-[10px]">{meeting.host.initials}</AvatarFallback>
               </Avatar>
-              {meeting.status === "live" && (
-                <Button size="sm" asChild><Link to={`/meeting-room/${meeting.id}`}>Join</Link></Button>
-              )}
-              {meeting.status === "upcoming" && (
-                <Button size="sm" variant="outline"><Copy className="w-3.5 h-3.5 mr-1" />Copy Link</Button>
-              )}
-              {meeting.status === "ended" && (
+              {meeting.status === "ended" ? (
                 <Button size="sm" variant="ghost" asChild><Link to="/meeting-summary">Summary</Link></Button>
+              ) : (
+                <Button size="sm" className="bg-green-500 hover:bg-green-600 text-white" asChild>
+                  <Link to={`/meeting-lobby/${meeting.id}`}>Join</Link>
+                </Button>
               )}
               <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground">
                 <MoreHorizontal className="w-4 h-4" />
@@ -321,11 +319,11 @@ export default function Meetings() {
   );
 
   const handleJoinRoom = (roomId: string) => {
-    navigate(`/meeting-room/${roomId}`);
+    navigate(`/meeting-lobby/${roomId}`);
   };
 
   const handleStartQuickHuddle = () => {
-    navigate("/meeting-room/quick-huddle");
+    navigate("/meeting-lobby/quick-huddle");
   };
 
   return (
