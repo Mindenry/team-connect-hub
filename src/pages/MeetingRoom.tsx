@@ -80,6 +80,10 @@ interface PeerData {
   screenStream?: MediaStream | null;
   cameraSender?: RTCRtpSender;
   screenSender?: RTCRtpSender;
+  makingOffer: boolean;
+  ignoreOffer: boolean;
+  isSettingRemoteAnswerPending: boolean;
+  iceCandidatesQueue: RTCIceCandidateInit[];
 }
 
 const ICE_SERVERS: RTCConfiguration = {
@@ -177,8 +181,45 @@ export default function MeetingRoom() {
     const socket = socketRef.current;
     const pc = new RTCPeerConnection(ICE_SERVERS);
 
-    const peerData: PeerData = { connection: pc, remoteStream: null };
+    const peerData: PeerData = {
+      connection: pc,
+      remoteStream: null,
+      cameraStream: null,
+      screenStream: null,
+      cameraSender: undefined,
+      screenSender: undefined,
+      makingOffer: false,
+      ignoreOffer: false,
+      isSettingRemoteAnswerPending: false,
+      iceCandidatesQueue: [],
+    };
     peersRef.current.set(remotePeerId, peerData);
+
+    pc.onnegotiationneeded = async () => {
+      try {
+        peerData.makingOffer = true;
+        console.log("🔄 Negotiation needed (Perfect Negotiation) with:", remotePeerId);
+        await pc.setLocalDescription();
+        socket.emit("webrtc:offer", {
+          to: remotePeerId,
+          name: userName,
+          offer: pc.localDescription,
+        });
+      } catch (err) {
+        console.error("Error during negotiation:", err);
+      } finally {
+        peerData.makingOffer = false;
+      }
+    };
+
+    pc.onicecandidate = (event) => {
+      if (event.candidate) {
+        socket.emit("webrtc:ice-candidate", {
+          to: remotePeerId,
+          candidate: event.candidate,
+        });
+      }
+    };
 
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach(track => {
@@ -202,69 +243,55 @@ export default function MeetingRoom() {
       const remoteStream = event.streams[0];
       if (!remoteStream) return;
 
-      console.log("🎥 Remote track received from:", remotePeerId, event.track.kind, event.track.label);
+      console.log("🎥 Remote track received:", remotePeerId, event.track.kind, remoteStream.id);
       
       const peerData = peersRef.current.get(remotePeerId);
-      if (peerData) {
-        const hasVideoTrack = remoteStream.getVideoTracks().length > 0;
-        const hasAudioTrack = remoteStream.getAudioTracks().length > 0;
-        
-        // Determine if this is a screen share stream or camera stream
-        // Screen share tracks typically have label containing "screen" or we can check if it's the second video stream
-        const isScreenShare = event.track.label.toLowerCase().includes("screen") || 
-                             event.track.label.toLowerCase().includes("display") ||
-                             (peerData.cameraStream && peerData.cameraStream.id !== remoteStream.id);
-        
-        if (isScreenShare) {
-          // This is a screen share stream
-          peerData.screenStream = remoteStream;
-          peerData.remoteStream = remoteStream; // Keep for backward compatibility
-        } else {
-          // This is a camera stream
+      if (!peerData) return;
+
+      // Deterministic stream mapping
+      if (event.track.kind === "video") {
+        if (!peerData.cameraStream || peerData.cameraStream.id === remoteStream.id) {
           peerData.cameraStream = remoteStream;
-          if (!peerData.remoteStream) {
-            peerData.remoteStream = remoteStream; // Set as default if no stream set yet
+          peerData.remoteStream = remoteStream;
+        } else {
+          peerData.screenStream = remoteStream;
+        }
+      } else if (event.track.kind === "audio") {
+        // Audio usually goes with the main stream
+        if (!peerData.cameraStream) {
+          peerData.remoteStream = remoteStream;
+        }
+      }
+
+      requestAnimationFrame(() => {
+        // Sync Camera
+        const videoEl = remoteVideoRefs.current.get(remotePeerId);
+        if (videoEl && peerData.cameraStream && peerData.cameraStream.getVideoTracks().length > 0) {
+          if (videoEl.srcObject !== peerData.cameraStream) {
+            videoEl.srcObject = peerData.cameraStream;
+            videoEl.play().catch(() => {});
           }
         }
 
-        // Use requestAnimationFrame to batch updates and prevent flickering
-        requestAnimationFrame(() => {
-          // Update camera video element
-          const videoEl = remoteVideoRefs.current.get(remotePeerId);
-          if (videoEl && peerData.cameraStream && peerData.cameraStream.getVideoTracks().length > 0) {
-            // Only update if different to prevent flickering
-            if (videoEl.srcObject !== peerData.cameraStream) {
-              videoEl.srcObject = peerData.cameraStream;
-              requestAnimationFrame(() => {
-                if (videoEl && videoEl.srcObject === peerData.cameraStream) {
-                  videoEl.play().catch(e => console.log("Video play failed:", e));
-                }
-              });
-            }
+        // Sync Screen (if separate tile exists)
+        const screenVideoEl = remoteVideoRefs.current.get(`${remotePeerId}-screen`);
+        if (screenVideoEl && peerData.screenStream && peerData.screenStream.getVideoTracks().length > 0) {
+          if (screenVideoEl.srcObject !== peerData.screenStream) {
+            screenVideoEl.srcObject = peerData.screenStream;
+            screenVideoEl.play().catch(() => {});
           }
+        }
 
-          // Update audio element (use camera stream for audio, or screen stream if no camera)
-          const audioEl = remoteAudioRefs.current.get(remotePeerId);
-          const audioStream = peerData.cameraStream || peerData.screenStream;
-          if (audioEl && audioStream && audioStream.getAudioTracks().length > 0) {
-            if (audioEl.srcObject !== audioStream) {
-              audioEl.srcObject = audioStream;
-              if (audioEl.paused) {
-                audioEl.play().catch(e => console.log("Audio autoplay blocked:", e));
-              }
-            }
+        // Audio
+        const audioEl = remoteAudioRefs.current.get(remotePeerId);
+        const audioStream = peerData.cameraStream || peerData.screenStream || peerData.remoteStream;
+        if (audioEl && audioStream && audioStream.getAudioTracks().length > 0) {
+          if (audioEl.srcObject !== audioStream) {
+            audioEl.srcObject = audioStream;
+            audioEl.play().catch(() => {});
           }
-        });
-      }
-    };
-
-    pc.onicecandidate = (event) => {
-      if (event.candidate) {
-        socket.emit("webrtc:ice-candidate", {
-          to: remotePeerId,
-          candidate: event.candidate,
-        });
-      }
+        }
+      });
     };
 
     if (isInitiator) {
@@ -627,30 +654,43 @@ export default function MeetingRoom() {
     const handleOffer = async (data: { from: string; name: string; offer: RTCSessionDescriptionInit }) => {
       if (data.from === peerId.current) return;
       let peerData = peersRef.current.get(data.from);
-      let pc: RTCPeerConnection;
-
       if (!peerData) {
-        pc = createPeerConnection(data.from, false);
-      } else {
-        pc = peerData.connection;
-        if (pc.signalingState !== "stable") return;
+        createPeerConnection(data.from, false);
+        peerData = peersRef.current.get(data.from);
       }
+      if (!peerData) return;
 
+      const pc = peerData.connection;
       try {
+        const offerCollision = data.offer.type === "offer" && (peerData.makingOffer || pc.signalingState !== "stable");
+        peerData.ignoreOffer = peerId.current < data.from && offerCollision;
+
+        if (peerData.ignoreOffer) {
+          console.log("⚠️ Ignoring offer to handle collision (impolite peer)");
+          return;
+        }
+
         await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
-        const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
-        socket.emit("webrtc:answer", { to: data.from, answer: pc.localDescription });
+        if (data.offer.type === "offer") {
+          await pc.setLocalDescription();
+          socket.emit("webrtc:answer", { to: data.from, answer: pc.localDescription });
+        }
+
+        // Process queued ICE candidates
+        while (peerData.iceCandidatesQueue.length) {
+          const candidate = peerData.iceCandidatesQueue.shift();
+          if (candidate) await pc.addIceCandidate(new RTCIceCandidate(candidate));
+        }
       } catch (e) {
         console.error("Error handling offer:", e);
       }
     };
 
     const handleAnswer = async (data: { from: string; answer: RTCSessionDescriptionInit }) => {
-      const peer = peersRef.current.get(data.from);
-      if (peer && peer.connection.signalingState === "have-local-offer") {
+      const peerData = peersRef.current.get(data.from);
+      if (peerData) {
         try {
-          await peer.connection.setRemoteDescription(new RTCSessionDescription(data.answer));
+          await peerData.connection.setRemoteDescription(new RTCSessionDescription(data.answer));
         } catch (e) {
           console.error("Error setting answer:", e);
         }
@@ -658,9 +698,17 @@ export default function MeetingRoom() {
     };
 
     const handleIceCandidate = async (data: { from: string; candidate: RTCIceCandidateInit }) => {
-      const peer = peersRef.current.get(data.from);
-      if (peer && data.candidate) {
-        await peer.connection.addIceCandidate(new RTCIceCandidate(data.candidate));
+      const peerData = peersRef.current.get(data.from);
+      if (!peerData) return;
+
+      try {
+        if (peerData.connection.remoteDescription) {
+          await peerData.connection.addIceCandidate(new RTCIceCandidate(data.candidate));
+        } else {
+          peerData.iceCandidatesQueue.push(data.candidate);
+        }
+      } catch (e) {
+        console.error("Error adding ICE candidate:", e);
       }
     };
 
@@ -925,7 +973,9 @@ export default function MeetingRoom() {
         }
         screenTrack.onended = () => toggleScreenShare();
         setIsScreenSharing(true);
-      } catch { }
+      } catch (err) {
+        console.error("Error starting screen share:", err);
+      }
     }
   }, [isScreenSharing, isCameraOn]);
 
@@ -1180,8 +1230,8 @@ export default function MeetingRoom() {
       isLocal: true,
   });
   
-  // If local is screen sharing and camera is on, add separate screen share tile
-  if (isScreenSharing && isCameraOn) {
+  // Create a separate tile for screen share if active (even if camera is off)
+  if (isScreenSharing) {
     allParticipants.push({
       peerId: `${peerId.current}-screen`,
       name: userName + " (You) - Screen",
@@ -1194,26 +1244,22 @@ export default function MeetingRoom() {
   
   // Add remote participants
   participants.forEach(p => {
-    if (p.state.isScreenSharing && p.state.isCameraOn) {
-      allParticipants.push({
+    // Main tile (Camera/Avatar)
+    allParticipants.push({
       ...p,
       isSpeaking: p.isSpeaking && !p.state.isMuted,
       isLocal: false,
-      });
-      
+    });
+
+    // Separate tile for remote screen share if active
+    if (p.state.isScreenSharing) {
       allParticipants.push({
         peerId: `${p.peerId}-screen`,
         name: p.name + " - Screen",
-        state: { ...p.state, isCameraOn: false },
+        state: { ...p.state, isCameraOn: false, isScreenSharing: true },
         isSpeaking: false,
         isLocal: false,
         isScreenShare: true,
-      });
-    } else {
-      allParticipants.push({
-        ...p,
-        isSpeaking: p.isSpeaking && !p.state.isMuted,
-        isLocal: false,
       });
     }
   });
