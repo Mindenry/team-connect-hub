@@ -83,9 +83,12 @@ export default function CreateMeetingDialog({ open, onOpenChange }: CreateMeetin
               </>
             )}
             <div><Label>Team</Label>
-              <Select value={teamId} onValueChange={setTeamId}><SelectTrigger className="mt-1"><SelectValue placeholder="Select a team" /></SelectTrigger>
+              <Select value={teamId || "none"} onValueChange={(v) => setTeamId(v === "none" ? "" : v)}>
+                <SelectTrigger className="mt-1">
+                  <SelectValue placeholder="Select a team" />
+                </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">No team</SelectItem>
+                  <SelectItem value="none">No team</SelectItem>
                   {teams.map((team) => (
                     <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>
                   ))}
@@ -146,7 +149,8 @@ export default function CreateMeetingDialog({ open, onOpenChange }: CreateMeetin
                     endTime: endTime.toISOString(),
                     waitingRoom,
                     allowScreenShare,
-                    status: meetingType === "instant" ? "live" : "upcoming",
+                    status: meetingType === "instant" ? "live" : "scheduled",
+                    isInstant: meetingType === "instant",
                     teamId: teamId || null,
                     hostId: user.id,
                   }),

@@ -1,4 +1,5 @@
-import { Link } from "react-router-dom";
+import { Link, useParams, useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
 import {
   Video,
   Clock,
@@ -19,7 +20,9 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
 
-const meetingSummary = {
+const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
+
+const defaultMeetingSummary = {
   title: "Sprint Planning",
   date: "February 9, 2026",
   startTime: "10:00 AM",
@@ -69,6 +72,49 @@ const priorityColors: Record<string, string> = {
 };
 
 export default function MeetingSummary() {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const [meetingData, setMeetingData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!id) {
+      navigate("/meetings");
+      return;
+    }
+
+    const loadMeeting = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/meetings/${id}`);
+        if (res.ok) {
+          const data = await res.json();
+          setMeetingData(data);
+        }
+      } catch (err) {
+        console.error("Failed to load meeting:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadMeeting();
+  }, [id, navigate]);
+
+  if (loading) {
+    return (
+      <div className="p-6 max-w-4xl mx-auto">
+        <div className="text-center py-16">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading meeting summary...</p>
+        </div>
+      </div>
+    );
+  }
+
+  const meeting = meetingData || defaultMeetingSummary;
+  const participants = meetingData?.participants || defaultMeetingSummary.participants;
+  const tasks = meetingData?.tasks || defaultMeetingSummary.tasksCreated;
+
   return (
     <div className="p-6 max-w-4xl mx-auto space-y-6">
       {/* Header */}
@@ -78,9 +124,21 @@ export default function MeetingSummary() {
             <Link to="/meetings"><ArrowLeft className="w-4 h-4" /></Link>
           </Button>
           <div>
-            <h1 className="text-xl font-bold text-foreground">{meetingSummary.title}</h1>
+            <h1 className="text-xl font-bold text-foreground">{meeting.title}</h1>
             <p className="text-sm text-muted-foreground">
-              {meetingSummary.date} · {meetingSummary.startTime} — {meetingSummary.endTime}
+              {meetingData ? (
+                <>
+                  {new Date(meeting.actualStartTime || meeting.startTime).toLocaleDateString()} ·{" "}
+                  {new Date(meeting.actualStartTime || meeting.startTime).toLocaleTimeString()} —{" "}
+                  {meeting.actualEndTime 
+                    ? new Date(meeting.actualEndTime).toLocaleTimeString()
+                    : "Ongoing"}
+                </>
+              ) : (
+                <>
+                  {meeting.date} · {meeting.startTime} — {meeting.endTime}
+                </>
+              )}
             </p>
           </div>
         </div>
@@ -99,11 +157,17 @@ export default function MeetingSummary() {
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         {[
-          { icon: Clock, label: "Duration", value: meetingSummary.duration },
-          { icon: Users, label: "Participants", value: String(meetingSummary.totalParticipants) },
-          { icon: Monitor, label: "Screen Shares", value: String(meetingSummary.stats.screenShares) },
-          { icon: Hand, label: "Hand Raises", value: String(meetingSummary.stats.handRaises) },
-          { icon: MessageSquare, label: "Chat Messages", value: String(meetingSummary.stats.chatMessages) },
+          { 
+            icon: Clock, 
+            label: "Duration", 
+            value: meetingData && meeting.actualStartTime && meeting.actualEndTime
+              ? `${Math.round((new Date(meeting.actualEndTime).getTime() - new Date(meeting.actualStartTime).getTime()) / 60000)}m`
+              : meeting.duration
+          },
+          { icon: Users, label: "Participants", value: String(participants.length || meeting.totalParticipants) },
+          { icon: Monitor, label: "Screen Shares", value: String(meeting.stats?.screenShares || 0) },
+          { icon: Hand, label: "Hand Raises", value: String(meeting.stats?.handRaises || 0) },
+          { icon: MessageSquare, label: "Chat Messages", value: String(meeting.stats?.chatMessages || 0) },
         ].map((stat) => (
           <Card key={stat.label}>
             <CardContent className="p-3 text-center">
@@ -129,20 +193,29 @@ export default function MeetingSummary() {
                 <span>Left</span>
                 <span className="text-right">Duration</span>
               </div>
-              {meetingSummary.participants.map((p) => (
-                <div key={p.name} className="grid grid-cols-5 items-center text-sm p-2 rounded-lg hover:bg-muted/50">
+              {participants.map((p: any) => {
+                const participantName = p.user?.name || p.name || "Unknown";
+                const initials = participantName.split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase();
+                const joinedAt = p.joinedAt ? new Date(p.joinedAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "?";
+                const leftAt = p.leftAt ? new Date(p.leftAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "?";
+                const duration = p.joinedAt && p.leftAt 
+                  ? `${Math.round((new Date(p.leftAt).getTime() - new Date(p.joinedAt).getTime()) / 60000)}m`
+                  : p.duration || "?";
+                return (
+                <div key={p.userId || p.id} className="grid grid-cols-5 items-center text-sm p-2 rounded-lg hover:bg-muted/50">
                   <div className="col-span-2 flex items-center gap-2">
                     <Avatar className="h-6 w-6">
-                      <AvatarFallback className="bg-primary/10 text-primary text-[10px]">{p.initials}</AvatarFallback>
+                      <AvatarFallback className="bg-primary/10 text-primary text-[10px]">{initials}</AvatarFallback>
                     </Avatar>
-                    <span className="text-foreground truncate">{p.name}</span>
-                    {p.role === "Host" && <Badge variant="secondary" className="text-[10px] px-1">Host</Badge>}
+                    <span className="text-foreground truncate">{participantName}</span>
+                    {meetingData?.hostId === p.userId && <Badge variant="secondary" className="text-[10px] px-1">Host</Badge>}
                   </div>
-                  <span className="text-muted-foreground text-xs">{p.joinedAt}</span>
-                  <span className="text-muted-foreground text-xs">{p.leftAt}</span>
-                  <span className="text-right text-muted-foreground text-xs">{p.duration}</span>
+                  <span className="text-muted-foreground text-xs">{joinedAt}</span>
+                  <span className="text-muted-foreground text-xs">{leftAt}</span>
+                  <span className="text-right text-muted-foreground text-xs">{duration}</span>
                 </div>
-              ))}
+                );
+              })}
             </div>
           </CardContent>
         </Card>
@@ -171,21 +244,27 @@ export default function MeetingSummary() {
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
             <CheckSquare className="w-4 h-4" />
-            Tasks Created from Meeting ({meetingSummary.tasksCreated.length})
+            Tasks Created from Meeting ({tasks.length})
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
-          {meetingSummary.tasksCreated.map((task, i) => (
-            <div key={i} className="flex items-center gap-3 p-2.5 rounded-lg border hover:bg-muted/50 transition-colors">
+          {tasks.map((task: any, i: number) => {
+            const taskTitle = task.title || "Untitled Task";
+            const assigneeName = task.assignee?.name || "Unassigned";
+            const priority = task.priority || "medium";
+            const dueDate = task.dueDate ? new Date(task.dueDate).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "No due date";
+            return (
+            <div key={task.id || i} className="flex items-center gap-3 p-2.5 rounded-lg border hover:bg-muted/50 transition-colors">
               <CheckSquare className="w-4 h-4 text-muted-foreground shrink-0" />
-              <span className="flex-1 text-sm font-medium text-foreground">{task.title}</span>
-              <span className="text-xs text-muted-foreground">{task.assignee}</span>
-              <Badge className={`text-xs ${priorityColors[task.priority]}`}>{task.priority}</Badge>
+              <span className="flex-1 text-sm font-medium text-foreground">{taskTitle}</span>
+              <span className="text-xs text-muted-foreground">{assigneeName}</span>
+              <Badge className={`text-xs ${priorityColors[priority]}`}>{priority}</Badge>
               <span className="text-xs text-muted-foreground flex items-center gap-1">
-                <Calendar className="w-3 h-3" />{task.dueDate}
+                <Calendar className="w-3 h-3" />{dueDate}
               </span>
             </div>
-          ))}
+            );
+          })}
         </CardContent>
       </Card>
 
@@ -198,14 +277,18 @@ export default function MeetingSummary() {
           </CardTitle>
         </CardHeader>
         <CardContent>
+          {meetingData?.summary ? (
+            <div className="text-sm text-foreground whitespace-pre-wrap">{meetingData.summary}</div>
+          ) : (
           <ul className="space-y-2">
-            {meetingSummary.notes.map((note, i) => (
+              {meeting.notes.map((note: string, i: number) => (
               <li key={i} className="flex items-start gap-2 text-sm text-foreground">
                 <span className="w-1.5 h-1.5 rounded-full bg-primary mt-1.5 shrink-0" />
                 {note}
               </li>
             ))}
           </ul>
+          )}
         </CardContent>
       </Card>
     </div>

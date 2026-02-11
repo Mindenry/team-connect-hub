@@ -29,72 +29,55 @@ export default function Reports() {
   useEffect(() => {
     const loadData = async () => {
       try {
-        const [meetings, tasks, teams] = await Promise.all([
-          fetch(`${API_BASE}/meetings`).then((r) => r.json()),
-          fetch(`${API_BASE}/tasks`).then((r) => r.json()),
+        // Use Reports API
+        const [meetingReport, taskReport, teams] = await Promise.all([
+          fetch(`${API_BASE}/reports/meetings`).then((r) => r.json()),
+          fetch(`${API_BASE}/reports/tasks`).then((r) => r.json()),
           fetch(`${API_BASE}/teams`).then((r) => r.json()),
         ]);
 
-        const now = new Date();
-        const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-        const weekMeetings = meetings.filter((m: any) => new Date(m.startTime) >= weekAgo);
+        // Process meeting report data
+        const meetingByDay = meetingReport.meetings?.slice(0, 5).map((m: any, idx: number) => ({
+          day: new Date(m.startTime).toLocaleDateString("en-US", { weekday: "short" }),
+          meetings: 1,
+          duration: m.duration || 0,
+        })) || [];
 
-        const days = ["Mon", "Tue", "Wed", "Thu", "Fri"];
-        const meetingByDay = days.map((day, idx) => {
-          const dayStart = new Date(weekAgo);
-          dayStart.setDate(dayStart.getDate() + idx);
-          const dayEnd = new Date(dayStart);
-          dayEnd.setDate(dayEnd.getDate() + 1);
-          const dayMeetings = weekMeetings.filter((m: any) => {
-            const mtgDate = new Date(m.startTime);
-            return mtgDate >= dayStart && mtgDate < dayEnd;
-          });
-          const totalDuration = dayMeetings.reduce((sum: number, m: any) => {
-            const start = new Date(m.startTime);
-            const end = new Date(m.endTime);
-            return sum + (end.getTime() - start.getTime()) / 60000;
-          }, 0);
-          return { day, meetings: dayMeetings.length, duration: totalDuration };
-        });
+        // Process task report data
+        setTaskStatusData([
+          { name: "To Do", value: taskReport.tasksByStatus?.todo || 0, color: "hsl(var(--muted-foreground))" },
+          { name: "In Progress", value: taskReport.tasksByStatus?.in_progress || 0, color: "hsl(var(--primary))" },
+          { name: "In Review", value: taskReport.tasksByStatus?.review || 0, color: "hsl(var(--warning))" },
+          { name: "Done", value: taskReport.tasksByStatus?.done || 0, color: "hsl(var(--success))" },
+        ]);
 
-        const taskStatusCounts = {
-          todo: tasks.filter((t: any) => t.status === "todo").length,
-          in_progress: tasks.filter((t: any) => t.status === "in_progress").length,
-          review: tasks.filter((t: any) => t.status === "review").length,
-          done: tasks.filter((t: any) => t.status === "done").length,
-        };
-
+        // Process team workload
         const workload = await Promise.all(
           teams.map(async (team: any) => {
-            const teamTasks = tasks.filter((t: any) => t.teamId === team.id);
-            const overdue = teamTasks.filter((t: any) => {
-              if (!t.dueDate) return false;
-              return new Date(t.dueDate) < now && t.status !== "done";
-            }).length;
-            return { team: team.name, tasks: teamTasks.length, overdue };
+            try {
+              const workloadRes = await fetch(`${API_BASE}/reports/teams/${team.id}/workload`);
+              if (workloadRes.ok) {
+                const workloadData = await workloadRes.json();
+                return {
+                  team: team.name,
+                  tasks: workloadData.workload?.reduce((sum: number, w: any) => sum + w.totalTasks, 0) || 0,
+                  overdue: workloadData.workload?.reduce((sum: number, w: any) => sum + w.overdue, 0) || 0,
+                };
+              }
+            } catch (err) {
+              console.error(`Failed to load workload for team ${team.id}:`, err);
+            }
+            return { team: team.name, tasks: 0, overdue: 0 };
           })
         );
 
         setMeetingData(meetingByDay);
-        setTaskStatusData([
-          { name: "To Do", value: taskStatusCounts.todo, color: "hsl(var(--muted-foreground))" },
-          { name: "In Progress", value: taskStatusCounts.in_progress, color: "hsl(var(--primary))" },
-          { name: "In Review", value: taskStatusCounts.review, color: "hsl(var(--warning))" },
-          { name: "Done", value: taskStatusCounts.done, color: "hsl(var(--success))" },
-        ]);
-        setTeamWorkload(workload);
+        setTeamWorkload(workload.filter(w => w.tasks > 0));
         setStats({
-          totalMeetings: weekMeetings.length,
-          avgDuration: weekMeetings.length > 0 ? Math.round(weekMeetings.reduce((sum: number, m: any) => {
-            const start = new Date(m.startTime);
-            const end = new Date(m.endTime);
-            return sum + (end.getTime() - start.getTime()) / 60000;
-          }, 0) / weekMeetings.length) : 0,
-          tasksCompleted: taskStatusCounts.done,
-          overdueTasks: tasks.filter((t: any) => {
-            if (!t.dueDate) return false;
-            return new Date(t.dueDate) < now && t.status !== "done";
-          }).length,
+          totalMeetings: meetingReport.summary?.totalMeetings || 0,
+          avgDuration: Math.round(meetingReport.summary?.avgDuration || 0),
+          tasksCompleted: taskReport.summary?.completedTasks || 0,
+          overdueTasks: taskReport.summary?.overdueTasks || 0,
         });
       } catch (err) {
         console.error("Failed to load reports:", err);
@@ -113,7 +96,41 @@ export default function Reports() {
             <Calendar className="w-4 h-4 mr-2" />
             This Week
           </Button>
-          <Button variant="outline" size="sm">
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={async () => {
+              try {
+                const [meetingReport, taskReport] = await Promise.all([
+                  fetch(`${API_BASE}/reports/meetings`).then((r) => r.json()),
+                  fetch(`${API_BASE}/reports/tasks`).then((r) => r.json()),
+                ]);
+                
+                // Convert to CSV
+                const meetingCSV = [
+                  ["Meeting Title", "Start Time", "End Time", "Duration (min)", "Host", "Participants"],
+                  ...(meetingReport.meetings || []).map((m: any) => [
+                    m.title,
+                    m.startTime,
+                    m.endTime,
+                    m.duration,
+                    m.host,
+                    m.participants,
+                  ]),
+                ].map(row => row.join(",")).join("\n");
+                
+                const blob = new Blob([meetingCSV], { type: "text/csv" });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `meeting-report-${new Date().toISOString().split("T")[0]}.csv`;
+                a.click();
+                URL.revokeObjectURL(url);
+              } catch (err) {
+                console.error("Export failed:", err);
+              }
+            }}
+          >
             <Download className="w-4 h-4 mr-2" />
             Export CSV
           </Button>

@@ -20,6 +20,9 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import CreateMeetingDialog from "@/components/dialogs/CreateMeetingDialog";
 import { getSocket } from "@/lib/websocket";
 import { auth } from "@/lib/auth";
@@ -114,10 +117,22 @@ function MeetingCard({ meeting, index }: { meeting: Meeting; index: number }) {
                 <AvatarFallback className="bg-primary/10 text-primary text-[10px]">{meeting.host.initials}</AvatarFallback>
               </Avatar>
               {meeting.status === "ended" ? (
-                <Button size="sm" variant="ghost" asChild><Link to="/meeting-summary">Summary</Link></Button>
+                <Button size="sm" variant="ghost" asChild>
+                  <Link to={`/meeting-summary/${meeting.id}`}>Summary</Link>
+                </Button>
+              ) : meeting.status === "live" ? (
+                <Button size="sm" className="bg-red-500 hover:bg-red-600 text-white animate-pulse" asChild>
+                  <Link to={`/meeting-lobby/${meeting.id}`}>
+                    <Phone className="w-3.5 h-3.5 mr-1.5" />
+                    Join Live
+                  </Link>
+                </Button>
               ) : (
                 <Button size="sm" className="bg-green-500 hover:bg-green-600 text-white" asChild>
-                  <Link to={`/meeting-lobby/${meeting.id}`}>Join</Link>
+                  <Link to={`/meeting-lobby/${meeting.id}`}>
+                    <Video className="w-3.5 h-3.5 mr-1.5" />
+                    Join
+                  </Link>
                 </Button>
               )}
               <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground">
@@ -199,10 +214,22 @@ export default function Meetings() {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
   const [showCreateMeeting, setShowCreateMeeting] = useState(false);
+  const [showFilter, setShowFilter] = useState(false);
+  const [filterStatus, setFilterStatus] = useState<string>("all");
+  const [filterTeam, setFilterTeam] = useState<string>("all");
   const [items, setItems] = useState<Meeting[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeRooms, setActiveRooms] = useState<ActiveRoom[]>([]);
+  const [teams, setTeams] = useState<any[]>([]);
+
+  // Load teams for filter
+  useEffect(() => {
+    fetch(`${API_BASE}/teams`)
+      .then((r) => r.json())
+      .then((data) => setTeams(data))
+      .catch(() => {});
+  }, []);
 
   // Fetch scheduled meetings
   useEffect(() => {
@@ -313,10 +340,13 @@ export default function Meetings() {
     };
   }, []);
 
-  const filteredMeetings = items.filter((m) =>
-    m.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    m.team.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredMeetings = items.filter((m) => {
+    const matchesSearch = m.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      m.team.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesStatus = filterStatus === "all" || m.status === filterStatus;
+    const matchesTeam = filterTeam === "all" || m.team === filterTeam;
+    return matchesSearch && matchesStatus && matchesTeam;
+  });
 
   const handleJoinRoom = (roomId: string) => {
     navigate(`/meeting-lobby/${roomId}`);
@@ -329,6 +359,54 @@ export default function Meetings() {
   return (
     <div className="flex flex-col h-screen">
       <CreateMeetingDialog open={showCreateMeeting} onOpenChange={setShowCreateMeeting} />
+      
+      {/* Filter Dialog */}
+      <Dialog open={showFilter} onOpenChange={setShowFilter}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Filter Meetings</DialogTitle>
+            <DialogDescription>Filter meetings by status and team</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div>
+              <Label>Status</Label>
+              <Select value={filterStatus} onValueChange={setFilterStatus}>
+                <SelectTrigger className="mt-1">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value="scheduled">Scheduled</SelectItem>
+                  <SelectItem value="live">Live</SelectItem>
+                  <SelectItem value="ended">Ended</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Team</Label>
+              <Select value={filterTeam} onValueChange={setFilterTeam}>
+                <SelectTrigger className="mt-1">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Teams</SelectItem>
+                  {teams.map((team) => (
+                    <SelectItem key={team.id} value={team.name}>{team.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setFilterStatus("all");
+              setFilterTeam("all");
+              setShowFilter(false);
+            }}>Clear</Button>
+            <Button onClick={() => setShowFilter(false)}>Apply</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Header */}
       <div className="flex items-center justify-between px-6 h-14 border-b shrink-0">
@@ -338,7 +416,12 @@ export default function Meetings() {
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input placeholder="Search meetings..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-9 h-8 w-48 text-sm" />
           </div>
-          <Button variant="outline" size="sm"><Filter className="w-4 h-4 mr-2" />Filter</Button>
+          <Button variant="outline" size="sm" onClick={() => setShowFilter(true)}>
+            <Filter className="w-4 h-4 mr-2" />Filter
+            {(filterStatus !== "all" || filterTeam !== "all") && (
+              <span className="ml-1.5 w-1.5 h-1.5 rounded-full bg-primary" />
+            )}
+          </Button>
           <Button size="sm" className="bg-green-500 hover:bg-green-600" onClick={handleStartQuickHuddle}>
             <Zap className="w-4 h-4 mr-2" />Quick Huddle
           </Button>

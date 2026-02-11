@@ -247,10 +247,15 @@ export default function AppSidebar({ onNavigate }: AppSidebarProps) {
             {(!collapsed || onNavigate) && (
               <>
                 <span className="flex-1">{item.title}</span>
-                {item.title === "Meetings" && activeRooms.length > 0 && (
-                  <Badge className="h-4.5 min-w-[18px] px-1 text-[10px] flex items-center justify-center bg-green-500 text-white">
-                    {activeRooms.length}
-                  </Badge>
+                {item.title === "Meetings" && (
+                  <div className="flex items-center gap-1.5">
+                    {activeRooms.filter(r => r.roomId !== "quick-huddle").length > 0 && (
+                      <Badge className="h-4.5 min-w-[18px] px-1 text-[10px] flex items-center justify-center bg-green-500 text-white animate-pulse">
+                        {activeRooms.filter(r => r.roomId !== "quick-huddle").length}
+                      </Badge>
+                    )}
+                    <ChevronRight className="w-3 h-3 text-sidebar-muted opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </div>
                 )}
               </>
             )}

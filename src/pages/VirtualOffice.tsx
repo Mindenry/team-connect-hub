@@ -66,18 +66,24 @@ export default function VirtualOffice() {
   useEffect(() => {
     const loadData = async () => {
       try {
-        const users = await fetch(`${API_BASE}/users`).then((r) => r.json());
+        const response = await fetch(`${API_BASE}/users`);
+        if (!response.ok) {
+          throw new Error(`Failed to load users: ${response.status} ${response.statusText}`);
+        }
+        const users = await response.json();
         const mapped: Person[] = users.map((u: any) => ({
           id: u.id,
           name: u.name,
           initials: u.name.split(" ").map((n: string) => n[0]).join(""),
-          status: u.status || "online",
+          status: u.status || "offline",
           currentRoom: u.currentRoom || null,
           activity: u.activity || "Available",
         }));
         setPeople(mapped);
       } catch (err) {
         console.error("Failed to load users:", err);
+        // Set empty array on error to prevent UI issues
+        setPeople([]);
       } finally {
         setLoading(false);
       }
@@ -117,20 +123,37 @@ export default function VirtualOffice() {
   const getRoomPeople = (roomId: string) =>
     people.filter((p) => p.currentRoom === roomId);
 
-  const onlinePeople = people.filter((p) => isUserOnline(p.id));
+  // Combine WebSocket presence with user status from database
+  const onlinePeople = people.filter((p) => {
+    const isOnlineViaPresence = isUserOnline(p.id);
+    const isOnlineViaStatus = p.status === "online";
+    return isOnlineViaPresence || isOnlineViaStatus;
+  });
 
   const moveToRoom = async (roomId: string) => {
     if (!currentUser || moving) return;
 
     setMoving(true);
     try {
-      await fetch(`${API_BASE}/users/${currentUser.id}/status`, {
+      const response = await fetch(`${API_BASE}/users/${currentUser.id}/status`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ currentRoom: roomId }),
       });
+      
+      if (!response.ok) {
+        throw new Error(`Failed to update room: ${response.status} ${response.statusText}`);
+      }
+      
+      // Update local state immediately for better UX
+      setPeople((prev) =>
+        prev.map((p) =>
+          p.id === currentUser.id ? { ...p, currentRoom: roomId } : p
+        )
+      );
     } catch (err) {
       console.error("Failed to move to room:", err);
+      // Show error to user (you can add a toast notification here)
     } finally {
       setMoving(false);
     }

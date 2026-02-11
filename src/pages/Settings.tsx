@@ -12,6 +12,8 @@ import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAuth } from "@/lib/auth";
 
+const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
+
 const sections = [
   { id: "profile", label: "Profile", icon: User },
   { id: "devices", label: "Audio & Video", icon: Camera },
@@ -26,6 +28,26 @@ export default function SettingsPage() {
   const [status, setStatus] = useState("online");
   const [name, setName] = useState(user?.name || "");
   const [email, setEmail] = useState(user?.email || "");
+  const [saving, setSaving] = useState(false);
+  
+  // Device settings
+  const [selectedMic, setSelectedMic] = useState("default");
+  const [selectedSpeaker, setSelectedSpeaker] = useState("default");
+  const [selectedCamera, setSelectedCamera] = useState("default");
+  const [mirrorVideo, setMirrorVideo] = useState(false);
+  const [noiseCancellation, setNoiseCancellation] = useState(true);
+  
+  // Notification settings
+  const [meetingReminders, setMeetingReminders] = useState(true);
+  const [mentions, setMentions] = useState(true);
+  const [taskAssignments, setTaskAssignments] = useState(true);
+  const [channelMessages, setChannelMessages] = useState(false);
+  const [announcements, setAnnouncements] = useState(true);
+  
+  // Privacy settings
+  const [showOnlineStatus, setShowOnlineStatus] = useState(true);
+  const [showActivityStatus, setShowActivityStatus] = useState(true);
+  const [readReceipts, setReadReceipts] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -65,7 +87,36 @@ export default function SettingsPage() {
                       </SelectContent>
                     </Select>
                   </div>
-                  <Button><Save className="w-4 h-4 mr-2" />Save Changes</Button>
+                  <Button onClick={async () => {
+                    if (!user?.id) return;
+                    setSaving(true);
+                    try {
+                      await Promise.all([
+                        fetch(`${API_BASE}/users/${user.id}`, {
+                          method: "PATCH",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ name }),
+                        }),
+                        fetch(`${API_BASE}/users/${user.id}/status`, {
+                          method: "PATCH",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ status }),
+                        }),
+                      ]);
+                      // Update local auth
+                      const updatedUser = { ...user, name, status };
+                      localStorage.setItem("collabhub_auth", JSON.stringify(updatedUser));
+                      // Show success message
+                      alert("Profile updated successfully!");
+                    } catch (err) {
+                      console.error("Failed to save:", err);
+                      alert("Failed to save changes. Please try again.");
+                    } finally {
+                      setSaving(false);
+                    }
+                  }} disabled={saving}>
+                    <Save className="w-4 h-4 mr-2" />{saving ? "Saving..." : "Save Changes"}
+                  </Button>
                 </CardContent>
               </Card>
             </div>
@@ -76,27 +127,70 @@ export default function SettingsPage() {
               <h2 className="text-xl font-bold text-foreground">Audio & Video</h2>
               <Card>
                 <CardContent className="p-6 space-y-6">
-                  {[
-                    { label: "Microphone", options: [{ v: "default", l: "Default — Built-in Microphone" }, { v: "headset", l: "Headset Microphone" }] },
-                    { label: "Speaker", options: [{ v: "default", l: "Default — Built-in Speakers" }, { v: "headset", l: "Headset" }] },
-                    { label: "Camera", options: [{ v: "default", l: "Built-in Camera" }, { v: "external", l: "External Webcam" }] },
-                  ].map((d) => (
-                    <div key={d.label}>
-                      <Label>{d.label}</Label>
-                      <Select defaultValue="default"><SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
-                        <SelectContent>{d.options.map((o) => <SelectItem key={o.v} value={o.v}>{o.l}</SelectItem>)}</SelectContent>
+                  <div>
+                    <Label>Microphone</Label>
+                    <Select value={selectedMic} onValueChange={setSelectedMic}>
+                      <SelectTrigger className="mt-1">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="default">Default — Built-in Microphone</SelectItem>
+                        <SelectItem value="headset">Headset Microphone</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Speaker</Label>
+                    <Select value={selectedSpeaker} onValueChange={setSelectedSpeaker}>
+                      <SelectTrigger className="mt-1">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="default">Default — Built-in Speakers</SelectItem>
+                        <SelectItem value="headset">Headset</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Camera</Label>
+                    <Select value={selectedCamera} onValueChange={setSelectedCamera}>
+                      <SelectTrigger className="mt-1">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="default">Built-in Camera</SelectItem>
+                        <SelectItem value="external">External Webcam</SelectItem>
+                      </SelectContent>
                       </Select>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-foreground">Mirror my video</p>
+                      <p className="text-xs text-muted-foreground">Flip the preview of your camera</p>
                     </div>
-                  ))}
-                  {[
-                    { label: "Mirror my video", desc: "Flip the preview of your camera", checked: false },
-                    { label: "Noise cancellation", desc: "Reduce background noise", checked: true },
-                  ].map((s) => (
-                    <div key={s.label} className="flex items-center justify-between">
-                      <div><p className="text-sm font-medium text-foreground">{s.label}</p><p className="text-xs text-muted-foreground">{s.desc}</p></div>
-                      <Switch defaultChecked={s.checked} />
+                    <Switch checked={mirrorVideo} onCheckedChange={setMirrorVideo} />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-foreground">Noise cancellation</p>
+                      <p className="text-xs text-muted-foreground">Reduce background noise</p>
                     </div>
-                  ))}
+                    <Switch checked={noiseCancellation} onCheckedChange={setNoiseCancellation} />
+                  </div>
+                  <Button onClick={async () => {
+                    // Save device preferences to localStorage
+                    const prefs = {
+                      mic: selectedMic,
+                      speaker: selectedSpeaker,
+                      camera: selectedCamera,
+                      mirrorVideo,
+                      noiseCancellation,
+                    };
+                    localStorage.setItem("device_preferences", JSON.stringify(prefs));
+                    alert("Device settings saved!");
+                  }}>
+                    <Save className="w-4 h-4 mr-2" />Save Device Settings
+                  </Button>
                 </CardContent>
               </Card>
             </div>
@@ -107,18 +201,54 @@ export default function SettingsPage() {
               <h2 className="text-xl font-bold text-foreground">Notifications</h2>
               <Card>
                 <CardContent className="p-6 space-y-4">
-                  {[
-                    { label: "Meeting reminders", desc: "Get notified before meetings start", defaultChecked: true },
-                    { label: "Mentions", desc: "When someone @mentions you", defaultChecked: true },
-                    { label: "Task assignments", desc: "When a task is assigned to you", defaultChecked: true },
-                    { label: "Channel messages", desc: "New messages in your channels", defaultChecked: false },
-                    { label: "Announcements", desc: "Company-wide announcements", defaultChecked: true },
-                  ].map((item) => (
-                    <div key={item.label} className="flex items-center justify-between py-1">
-                      <div><p className="text-sm font-medium text-foreground">{item.label}</p><p className="text-xs text-muted-foreground">{item.desc}</p></div>
-                      <Switch defaultChecked={item.defaultChecked} />
+                  <div className="flex items-center justify-between py-1">
+                    <div>
+                      <p className="text-sm font-medium text-foreground">Meeting reminders</p>
+                      <p className="text-xs text-muted-foreground">Get notified before meetings start</p>
                     </div>
-                  ))}
+                    <Switch checked={meetingReminders} onCheckedChange={setMeetingReminders} />
+                  </div>
+                  <div className="flex items-center justify-between py-1">
+                    <div>
+                      <p className="text-sm font-medium text-foreground">Mentions</p>
+                      <p className="text-xs text-muted-foreground">When someone @mentions you</p>
+                    </div>
+                    <Switch checked={mentions} onCheckedChange={setMentions} />
+                  </div>
+                  <div className="flex items-center justify-between py-1">
+                    <div>
+                      <p className="text-sm font-medium text-foreground">Task assignments</p>
+                      <p className="text-xs text-muted-foreground">When a task is assigned to you</p>
+                    </div>
+                    <Switch checked={taskAssignments} onCheckedChange={setTaskAssignments} />
+                  </div>
+                  <div className="flex items-center justify-between py-1">
+                    <div>
+                      <p className="text-sm font-medium text-foreground">Channel messages</p>
+                      <p className="text-xs text-muted-foreground">New messages in your channels</p>
+                    </div>
+                    <Switch checked={channelMessages} onCheckedChange={setChannelMessages} />
+                  </div>
+                  <div className="flex items-center justify-between py-1">
+                    <div>
+                      <p className="text-sm font-medium text-foreground">Announcements</p>
+                      <p className="text-xs text-muted-foreground">Company-wide announcements</p>
+                    </div>
+                    <Switch checked={announcements} onCheckedChange={setAnnouncements} />
+                  </div>
+                  <Button onClick={async () => {
+                    const prefs = {
+                      meetingReminders,
+                      mentions,
+                      taskAssignments,
+                      channelMessages,
+                      announcements,
+                    };
+                    localStorage.setItem("notification_preferences", JSON.stringify(prefs));
+                    alert("Notification settings saved!");
+                  }}>
+                    <Save className="w-4 h-4 mr-2" />Save Notification Settings
+                  </Button>
                 </CardContent>
               </Card>
             </div>
@@ -129,16 +259,38 @@ export default function SettingsPage() {
               <h2 className="text-xl font-bold text-foreground">Privacy</h2>
               <Card>
                 <CardContent className="p-6 space-y-4">
-                  {[
-                    { label: "Show online status", desc: "Others can see when you're online", defaultChecked: true },
-                    { label: "Show activity status", desc: "Show if you're in a meeting or away", defaultChecked: true },
-                    { label: "Read receipts", desc: "Show when you've read messages", defaultChecked: false },
-                  ].map((item) => (
-                    <div key={item.label} className="flex items-center justify-between py-1">
-                      <div><p className="text-sm font-medium text-foreground">{item.label}</p><p className="text-xs text-muted-foreground">{item.desc}</p></div>
-                      <Switch defaultChecked={item.defaultChecked} />
+                  <div className="flex items-center justify-between py-1">
+                    <div>
+                      <p className="text-sm font-medium text-foreground">Show online status</p>
+                      <p className="text-xs text-muted-foreground">Others can see when you're online</p>
                     </div>
-                  ))}
+                    <Switch checked={showOnlineStatus} onCheckedChange={setShowOnlineStatus} />
+                  </div>
+                  <div className="flex items-center justify-between py-1">
+                    <div>
+                      <p className="text-sm font-medium text-foreground">Show activity status</p>
+                      <p className="text-xs text-muted-foreground">Show if you're in a meeting or away</p>
+                    </div>
+                    <Switch checked={showActivityStatus} onCheckedChange={setShowActivityStatus} />
+                  </div>
+                  <div className="flex items-center justify-between py-1">
+                    <div>
+                      <p className="text-sm font-medium text-foreground">Read receipts</p>
+                      <p className="text-xs text-muted-foreground">Show when you've read messages</p>
+                    </div>
+                    <Switch checked={readReceipts} onCheckedChange={setReadReceipts} />
+                  </div>
+                  <Button onClick={async () => {
+                    const prefs = {
+                      showOnlineStatus,
+                      showActivityStatus,
+                      readReceipts,
+                    };
+                    localStorage.setItem("privacy_preferences", JSON.stringify(prefs));
+                    alert("Privacy settings saved!");
+                  }}>
+                    <Save className="w-4 h-4 mr-2" />Save Privacy Settings
+                  </Button>
                 </CardContent>
               </Card>
             </div>

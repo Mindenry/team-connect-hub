@@ -63,6 +63,8 @@ export default function Chat() {
   const [activeChannel, setActiveChannel] = useState<string | null>(null);
   const [messageInput, setMessageInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<Message[]>([]);
+  const [showSearchResults, setShowSearchResults] = useState(false);
   const [showCreateChannel, setShowCreateChannel] = useState(false);
   const [showPinned, setShowPinned] = useState(false);
   const [showMembers, setShowMembers] = useState(false);
@@ -87,6 +89,20 @@ export default function Chat() {
   const [mentionQuery, setMentionQuery] = useState("");
   const [mentionStartPos, setMentionStartPos] = useState<number | null>(null);
   const [attachments, setAttachments] = useState<Array<{ url: string; name: string; type: string }>>([]);
+
+  const handleSearch = async (query: string) => {
+    if (query.length < 3) return;
+    try {
+      const res = await fetch(`${API_BASE}/messages/search?query=${encodeURIComponent(query)}&limit=20`);
+      if (res.ok) {
+        const results = await res.json();
+        setSearchResults(results);
+        setShowSearchResults(true);
+      }
+    } catch (err) {
+      console.error("Search failed:", err);
+    }
+  };
 
   // Load channels from API
   useEffect(() => {
@@ -416,8 +432,45 @@ export default function Chat() {
         <div className="p-3 border-b">
           <div className="relative">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input placeholder="Search messages..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-9 h-8 text-sm" />
+            <Input 
+              placeholder="Search messages..." 
+              value={searchQuery} 
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                if (e.target.value.length > 2) {
+                  handleSearch(e.target.value);
+                } else {
+                  setShowSearchResults(false);
+                }
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && searchQuery.length > 2) {
+                  handleSearch(searchQuery);
+                }
+              }}
+              className="pl-9 h-8 text-sm" 
+            />
           </div>
+          {showSearchResults && searchResults.length > 0 && (
+            <div className="mt-2 p-2 bg-muted rounded-lg max-h-60 overflow-y-auto">
+              <p className="text-xs text-muted-foreground mb-2">Search Results ({searchResults.length})</p>
+              {searchResults.map((msg) => (
+                <button
+                  key={msg.id}
+                  onClick={() => {
+                    setActiveChannel(msg.channelId);
+                    setShowSearchResults(false);
+                    setSearchQuery("");
+                  }}
+                  className="w-full text-left p-2 rounded hover:bg-muted-foreground/10 mb-1"
+                >
+                  <p className="text-xs font-medium text-foreground">{msg.sender.name}</p>
+                  <p className="text-xs text-muted-foreground truncate">{msg.text}</p>
+                  <p className="text-[10px] text-muted-foreground">{new Date(msg.createdAt).toLocaleDateString()}</p>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
         <div className="flex-1 overflow-y-auto scrollbar-thin p-2 space-y-3">
           {Object.entries(groupedChannels).map(([team, chs]) => (

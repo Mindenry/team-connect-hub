@@ -71,12 +71,21 @@ export default function InviteUserDialog({ open, onOpenChange, teamId }: InviteU
               </div>
             )}
             <div className="grid grid-cols-2 gap-3">
-              <div><Label>Role</Label><Select value={role} onValueChange={setRole}><SelectTrigger className="mt-1"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="admin">Admin</SelectItem><SelectItem value="member">Member</SelectItem></SelectContent></Select></div>
-              <div><Label>Team</Label><Select value={selectedTeamId} onValueChange={setSelectedTeamId}><SelectTrigger className="mt-1"><SelectValue placeholder="Select" /></SelectTrigger><SelectContent>
-                {teams.map((team) => (
-                  <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>
-                ))}
-              </SelectContent></Select></div>
+              <div><Label>Role</Label><Select value={role} onValueChange={setRole}><SelectTrigger className="mt-1"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="admin">Admin</SelectItem><SelectItem value="manager">Manager</SelectItem><SelectItem value="employee">Employee</SelectItem></SelectContent></Select></div>
+              <div>
+                <Label>Team (Optional)</Label>
+                <Select value={selectedTeamId || "none"} onValueChange={(v) => setSelectedTeamId(v === "none" ? "" : v)}>
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder="Select" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No team</SelectItem>
+                    {teams.map((team) => (
+                      <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </div>
           {error && <div className="text-sm text-destructive bg-destructive/10 p-2 rounded">{error}</div>}
@@ -87,39 +96,47 @@ export default function InviteUserDialog({ open, onOpenChange, teamId }: InviteU
                 setError("Please add at least one email");
                 return;
               }
-              if (!selectedTeamId) {
-                setError("Please select a team");
-                return;
-              }
               setLoading(true);
               setError(null);
               try {
-                const users = await fetch(`${API_BASE}/users`).then((r) => r.json());
+                // Get current user for organizationId and invitedBy
+                const currentUserStr = localStorage.getItem("collabhub_auth");
+                if (!currentUserStr) {
+                  throw new Error("Not authenticated");
+                }
+                const currentUser = JSON.parse(currentUserStr);
+                
+                // Get user's organization
+                const userRes = await fetch(`${API_BASE}/users/${currentUser.id}`);
+                if (!userRes.ok) throw new Error("Failed to get user info");
+                const userData = await userRes.json();
+                const organizationId = userData.organizationId || "default-org"; // TODO: Get from user data
+
+                // Create invites
                 const results = await Promise.all(
                   emails.map(async (email) => {
-                    let user = users.find((u: any) => u.email === email);
-                    if (!user) {
-                      const name = email.split("@")[0];
-                      const createRes = await fetch(`${API_BASE}/users`, {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ email, name }),
-                      });
-                      if (!createRes.ok) throw new Error(`Failed to create user ${email}`);
-                      user = await createRes.json();
-                    }
-                    const addRes = await fetch(`${API_BASE}/teams/${selectedTeamId}/members`, {
+                    const inviteRes = await fetch(`${API_BASE}/invites`, {
                       method: "POST",
                       headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ userId: user.id, role }),
+                      body: JSON.stringify({
+                        email,
+                        organizationId,
+                        invitedBy: currentUser.id,
+                        role: role === "admin" ? "admin" : "employee",
+                        teamId: selectedTeamId || undefined,
+                      }),
                     });
-                    if (!addRes.ok) throw new Error(`Failed to add ${email} to team`);
-                    return user;
+                    if (!inviteRes.ok) {
+                      const errorData = await inviteRes.json().catch(() => ({ message: "Failed to create invite" }));
+                      throw new Error(errorData.message || `Failed to invite ${email}`);
+                    }
+                    return await inviteRes.json();
                   })
                 );
                 onOpenChange(false);
                 setEmails([]);
                 setEmailInput("");
+                // TODO: Show success message with invite links
               } catch (err: any) {
                 setError(err.message ?? "Failed to invite users");
               } finally {

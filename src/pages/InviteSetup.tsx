@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Video, Eye, EyeOff, Check, ChevronRight, User, Lock, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -7,22 +7,102 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { auth } from "@/lib/auth";
+
+const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
 
 export default function InviteSetup() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const token = searchParams.get("token");
   const [step, setStep] = useState(1);
   const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [inviteData, setInviteData] = useState<any>(null);
+  const [teams, setTeams] = useState<any[]>([]);
   const [formData, setFormData] = useState({
     firstName: "", lastName: "", password: "", confirmPassword: "", selectedTeam: "",
   });
 
-  const teams = [
-    { id: "1", name: "Engineering", members: 8, icon: "🛠️" },
-    { id: "2", name: "Design", members: 4, icon: "🎨" },
-    { id: "3", name: "Operations", members: 5, icon: "📋" },
-  ];
+  useEffect(() => {
+    if (!token) {
+      setError("Invalid invite link");
+      return;
+    }
 
-  const handleComplete = () => navigate("/");
+    // Fetch invite data
+    fetch(`${API_BASE}/auth/invite/${token}`)
+      .then((r) => r.json())
+      .then((data) => {
+        setInviteData(data);
+        // Fetch teams if teamId is provided
+        if (data.teamId) {
+          fetch(`${API_BASE}/teams`)
+            .then((r) => r.json())
+            .then((teamsData) => setTeams(teamsData));
+        }
+      })
+      .catch((err) => {
+        setError("Failed to load invite data");
+        console.error(err);
+      });
+  }, [token]);
+
+  const handleComplete = async () => {
+    if (!token) {
+      setError("Invalid invite token");
+      return;
+    }
+
+    if (formData.password !== formData.confirmPassword) {
+      setError("Passwords do not match");
+      return;
+    }
+
+    if (formData.password.length < 8 || !/[A-Z]/.test(formData.password) || !/[!@#$%^&*]/.test(formData.password)) {
+      setError("Password does not meet requirements");
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const response = await fetch(`${API_BASE}/auth/invite/accept`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          token,
+          name: `${formData.firstName} ${formData.lastName}`.trim(),
+          password: formData.password,
+          teamId: formData.selectedTeam || inviteData?.teamId,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: "Setup failed" }));
+        setError(errorData.message || "Failed to complete setup");
+        setLoading(false);
+        return;
+      }
+
+      const data = await response.json();
+      auth.setUser({
+        id: data.user.id,
+        email: data.user.email,
+        name: data.user.name,
+      });
+
+      navigate("/", { replace: true });
+    } catch (err: any) {
+      setError(err.message ?? "Setup failed");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const stepVariants = {
     initial: { opacity: 0, x: 30 },
@@ -40,7 +120,7 @@ export default function InviteSetup() {
                 <Video className="w-6 h-6 text-primary-foreground" />
               </div>
               <h1 className="text-xl font-bold text-sidebar-accent-foreground">Welcome to CollabHub</h1>
-              <p className="text-sm text-sidebar-muted mt-1">You've been invited to join Acme Corp</p>
+              <p className="text-sm text-sidebar-muted mt-1">You've been invited to join {inviteData?.organization || "the organization"}</p>
             </div>
 
             {/* Steps indicator */}
@@ -75,7 +155,12 @@ export default function InviteSetup() {
                     <div><Label className="text-sidebar-accent-foreground text-xs">First Name</Label><Input value={formData.firstName} onChange={(e) => setFormData({ ...formData, firstName: e.target.value })} placeholder="First name" className="mt-1 bg-sidebar border-sidebar-border text-sidebar-accent-foreground placeholder:text-sidebar-muted" /></div>
                     <div><Label className="text-sidebar-accent-foreground text-xs">Last Name</Label><Input value={formData.lastName} onChange={(e) => setFormData({ ...formData, lastName: e.target.value })} placeholder="Last name" className="mt-1 bg-sidebar border-sidebar-border text-sidebar-accent-foreground placeholder:text-sidebar-muted" /></div>
                   </div>
-                  <div className="bg-sidebar/50 rounded-lg p-3 border border-sidebar-border"><p className="text-xs text-sidebar-muted">Invited email</p><p className="text-sm text-sidebar-accent-foreground font-medium">newuser@acme.com</p></div>
+                  <div className="bg-sidebar/50 rounded-lg p-3 border border-sidebar-border"><p className="text-xs text-sidebar-muted">Invited email</p><p className="text-sm text-sidebar-accent-foreground font-medium">{inviteData?.email || "Loading..."}</p></div>
+                  {error && (
+                    <div className="text-sm text-destructive bg-destructive/10 p-2 rounded">
+                      {error}
+                    </div>
+                  )}
                   <Button className="w-full" onClick={() => setStep(2)}>Continue <ChevronRight className="w-4 h-4 ml-1" /></Button>
                 </motion.div>
               )}
@@ -133,9 +218,16 @@ export default function InviteSetup() {
                       </motion.button>
                     ))}
                   </div>
+                  {error && (
+                    <div className="text-sm text-destructive bg-destructive/10 p-2 rounded">
+                      {error}
+                    </div>
+                  )}
                   <div className="flex gap-2">
                     <Button variant="outline" className="flex-1 border-sidebar-border text-sidebar-accent-foreground" onClick={() => setStep(2)}>Back</Button>
-                    <Button className="flex-1" onClick={handleComplete}>Get Started 🚀</Button>
+                    <Button className="flex-1" onClick={handleComplete} disabled={loading || !formData.selectedTeam}>
+                      {loading ? "Setting up..." : "Get Started 🚀"}
+                    </Button>
                   </div>
                 </motion.div>
               )}

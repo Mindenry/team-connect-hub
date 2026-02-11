@@ -27,9 +27,26 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import CreateTaskDialog from "@/components/dialogs/CreateTaskDialog";
 import TaskDetailDialog from "@/components/dialogs/TaskDetailDialog";
 import { getSocket } from "@/lib/websocket";
+import { auth } from "@/lib/auth";
 
 interface Task {
   id: string;
@@ -245,6 +262,9 @@ export default function Tasks() {
   const [columns, setColumns] = useState<Column[]>(initialColumns);
   const [searchQuery, setSearchQuery] = useState("");
   const [showCreateTask, setShowCreateTask] = useState(false);
+  const [showFilter, setShowFilter] = useState(false);
+  const [filterStatus, setFilterStatus] = useState<string>("all");
+  const [filterPriority, setFilterPriority] = useState<string>("all");
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [viewMode, setViewMode] = useState<"kanban" | "list">("kanban");
   const [activeTask, setActiveTask] = useState<Task | null>(null);
@@ -426,14 +446,32 @@ export default function Tasks() {
 
     // If moved to different column, update status via API
     if (activeCol.id !== overCol.id) {
+      const currentUser = auth.getUser();
       try {
         await fetch(`${API_BASE}/tasks/${activeId}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ status: overCol.id }),
+          body: JSON.stringify({ 
+            status: overCol.id,
+            userId: currentUser?.id,
+          }),
         });
       } catch (err) {
         console.error("Failed to update task status:", err);
+        // Revert on error
+        setColumns((prev) => {
+          const activeTask = overCol.tasks.find((t) => t.id === activeId);
+          if (!activeTask) return prev;
+          return prev.map((c) => {
+            if (c.id === overCol.id) {
+              return { ...c, tasks: c.tasks.filter((t) => t.id !== activeId) };
+            }
+            if (c.id === activeCol.id) {
+              return { ...c, tasks: [...c.tasks, activeTask] };
+            }
+            return c;
+          });
+        });
       }
     } else {
       // Same column, just reorder
@@ -448,7 +486,16 @@ export default function Tasks() {
     }
   };
 
-  const allTasks = columns.flatMap((col) => col.tasks.map((t) => ({ ...t, column: col.title })));
+  const allTasks = columns.flatMap((col) => col.tasks.map((t) => ({ ...t, column: col.title, status: col.id })));
+  
+  // Filter tasks
+  const filteredTasks = allTasks.filter((task) => {
+    const matchesSearch = searchQuery === "" || task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (task.description && task.description.toLowerCase().includes(searchQuery.toLowerCase()));
+    const matchesStatus = filterStatus === "all" || task.status === filterStatus;
+    const matchesPriority = filterPriority === "all" || task.priority === filterPriority;
+    return matchesSearch && matchesStatus && matchesPriority;
+  });
 
   return (
     <div className="flex flex-col h-screen">
@@ -458,13 +505,63 @@ export default function Tasks() {
         onOpenChange={(open) => !open && setSelectedTask(null)}
         task={selectedTask || undefined}
       />
+      
+      {/* Filter Dialog */}
+      <Dialog open={showFilter} onOpenChange={setShowFilter}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Filter Tasks</DialogTitle>
+            <DialogDescription>Filter tasks by status and priority</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div>
+              <Label>Status</Label>
+              <Select value={filterStatus} onValueChange={setFilterStatus}>
+                <SelectTrigger className="mt-1">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value="todo">To Do</SelectItem>
+                  <SelectItem value="in_progress">In Progress</SelectItem>
+                  <SelectItem value="review">In Review</SelectItem>
+                  <SelectItem value="done">Done</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Priority</Label>
+              <Select value={filterPriority} onValueChange={setFilterPriority}>
+                <SelectTrigger className="mt-1">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Priorities</SelectItem>
+                  <SelectItem value="urgent">Urgent</SelectItem>
+                  <SelectItem value="high">High</SelectItem>
+                  <SelectItem value="medium">Medium</SelectItem>
+                  <SelectItem value="low">Low</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setFilterStatus("all");
+              setFilterPriority("all");
+              setShowFilter(false);
+            }}>Clear</Button>
+            <Button onClick={() => setShowFilter(false)}>Apply</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Header */}
       <div className="flex items-center justify-between px-6 h-14 border-b shrink-0">
         <div className="flex items-center gap-3">
           <h1 className="text-lg font-semibold text-foreground">Tasks</h1>
           <Badge variant="secondary" className="text-xs">
-            {columns.reduce((acc, col) => acc + col.tasks.length, 0)} total
+            {filteredTasks.length} {filteredTasks.length === allTasks.length ? "total" : `of ${allTasks.length}`}
           </Badge>
         </div>
         <div className="flex items-center gap-2">
@@ -480,8 +577,21 @@ export default function Tasks() {
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input placeholder="Search tasks..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-9 h-8 w-48 text-sm" />
           </div>
-          <Button variant="outline" size="sm"><Filter className="w-4 h-4 mr-2" />Filter</Button>
-          <Button size="sm" onClick={() => setShowCreateTask(true)}>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={() => setShowFilter(true)}
+          >
+            <Filter className="w-4 h-4 mr-2" />Filter
+            {(filterStatus !== "all" || filterPriority !== "all") && (
+              <span className="ml-1.5 w-1.5 h-1.5 rounded-full bg-primary" />
+            )}
+          </Button>
+          <Button 
+            size="sm" 
+            onClick={() => setShowCreateTask(true)}
+            className="bg-primary hover:bg-primary/90"
+          >
             <Plus className="w-4 h-4 mr-2" />Add Task
           </Button>
         </div>
@@ -540,7 +650,7 @@ export default function Tasks() {
                 </tr>
               </thead>
               <tbody>
-                {allTasks.map((task) => {
+                {filteredTasks.map((task) => {
                   const PriorityIcon = priorityIcons[task.priority].icon;
                   return (
                     <tr key={task.id} className="border-t hover:bg-muted/30 transition-colors cursor-pointer" onClick={() => setSelectedTask(task)}>

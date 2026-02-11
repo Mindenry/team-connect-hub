@@ -55,23 +55,37 @@ export default function Dashboard() {
         const tomorrow = new Date(today);
         tomorrow.setDate(tomorrow.getDate() + 1);
 
-        const [meetingsRes, tasksRes, usersRes, teamsRes] = await Promise.all([
-          fetch(`${API_BASE}/meetings?status=upcoming`).then((r) => r.json()),
-          fetch(`${API_BASE}/tasks?status=todo,in_progress`).then((r) => r.json()),
+        const currentUser = auth.getUser();
+        const [meetingsRes, tasksRes, usersRes, teamsRes, channelsRes, unreadCountRes] = await Promise.all([
+          fetch(`${API_BASE}/meetings?status=scheduled`).then((r) => r.json()),
+          fetch(`${API_BASE}/tasks?assigneeId=${currentUser?.id || ""}`).then((r) => r.json()),
           fetch(`${API_BASE}/users`).then((r) => r.json()),
           fetch(`${API_BASE}/teams`).then((r) => r.json()),
+          fetch(`${API_BASE}/channels`).then((r) => r.json()),
+          currentUser?.id ? Promise.all(
+            (await fetch(`${API_BASE}/channels`).then((r) => r.json())).map((ch: any) =>
+              fetch(`${API_BASE}/channels/${ch.id}/unread-count?userId=${currentUser.id}`)
+                .then((r) => r.json())
+                .catch(() => ({ count: 0 }))
+            )
+          ).then(counts => counts.reduce((sum, c) => sum + (c.count || 0), 0)) : Promise.resolve(0),
         ]);
 
         const upcoming = meetingsRes
-          .filter((m: any) => new Date(m.startTime) >= today && new Date(m.startTime) < tomorrow)
+          .filter((m: any) => {
+            const start = new Date(m.startTime);
+            return start >= today && start < tomorrow;
+          })
+          .sort((a: any, b: any) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime())
           .slice(0, 3)
           .map((m: any) => ({
             id: m.id,
             title: m.title,
             time: new Date(m.startTime).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
             team: m.team?.name || "",
-            participants: 0,
+            participants: m.participants?.length || 0,
             isNow: m.status === "live",
+            meetingCode: m.meetingCode,
           }));
 
         const tasks = tasksRes.slice(0, 4).map((t: any) => ({
@@ -96,8 +110,8 @@ export default function Dashboard() {
         setOnlineMembers(members);
         setStats({
           meetingsToday: upcoming.length,
-          openTasks: tasksRes.length,
-          unreadMessages: 0,
+          openTasks: tasksRes.filter((t: any) => t.status !== "done").length,
+          unreadMessages: unreadCountRes || 0,
           teamOnline: `${usersRes.length}`,
         });
       } catch (err) {
@@ -262,7 +276,11 @@ export default function Dashboard() {
               <div className="text-sm text-muted-foreground">No team members</div>
             ) : (
               onlineMembers.map((member, i) => {
-                const memberOnline = isUserOnline(member.id);
+                // Combine WebSocket presence with user status from database
+                const memberOnlineViaPresence = isUserOnline(member.id);
+                const memberOnlineViaStatus = member.status === "online";
+                const memberOnline = memberOnlineViaPresence || memberOnlineViaStatus;
+                
                 const roomNames: Record<string, string> = {
                   workspace: "💻 Workspace",
                   "meeting-1": "🎥 Meeting A",

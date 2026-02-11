@@ -87,14 +87,23 @@ export default function Admin() {
           const userTeams = teamsRes
             .filter((t: any) => t.members?.some((m: any) => m.userId === u.id))
             .map((t: any) => t.name);
+          
+          // Map role from database to display name
+          const roleMap: Record<string, string> = {
+            org_owner: "Admin",
+            admin: "Admin",
+            manager: "Manager",
+            employee: "Member",
+          };
+          
           return {
             id: u.id,
             name: u.name,
             email: u.email,
-            role: "Member", // Default role, can be enhanced with role management
-            status: "online" as const, // Mock status for now
-            lastActive: "Now",
-            isActive: true,
+            role: roleMap[u.role] || "Member",
+            status: (u.status || "offline") as "online" | "busy" | "away" | "offline",
+            lastActive: "Now", // TODO: Calculate from last activity
+            isActive: u.isActive !== false,
             teams: userTeams,
             joinedDate: new Date(u.createdAt).toLocaleDateString(),
           };
