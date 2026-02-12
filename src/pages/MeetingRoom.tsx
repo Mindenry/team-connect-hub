@@ -128,8 +128,13 @@ export default function MeetingRoom() {
 
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [waitingRoomParticipants, setWaitingRoomParticipants] = useState<any[]>([]);
+  const [meetingData, setMeetingData] = useState<any>(null);
+  const [meetingChannelId, setMeetingChannelId] = useState<string | null>(null);
   const [isHost, setIsHost] = useState(false);
+  const [isLocked, setIsLocked] = useState(false);
   const [showWaitingRoom, setShowWaitingRoom] = useState(false);
+  const [dbParticipants, setDbParticipants] = useState<any[]>([]);
+  const [kickLoadingUserId, setKickLoadingUserId] = useState<string | null>(null);
 
   const [isMuted, setIsMuted] = useState(initialMuted);
   const [isCameraOn, setIsCameraOn] = useState(initialCameraOn);
@@ -310,18 +315,21 @@ export default function MeetingRoom() {
     return pc;
   }, [userName]);
 
-  const loadWaitingRoom = useCallback(async () => {
-    if (!meetingId || meetingId === "quick-huddle" || !isHost) return;
+  const loadDbParticipants = useCallback(async () => {
+    if (!meetingId || meetingId === "quick-huddle") return;
     try {
-      const res = await fetch(`${API_BASE}/meetings/${meetingId}/participants/waiting-room`);
+      const res = await fetch(`${API_BASE}/meetings/${meetingId}/participants?includeWaitingRoom=true`);
       if (res.ok) {
         const data = await res.json();
-        setWaitingRoomParticipants(data);
+        setDbParticipants(data);
+        
+        // Also update waiting room participants specifically
+        setWaitingRoomParticipants(data.filter((p: any) => p.waitingRoom));
       }
     } catch (err) {
-      console.error("Failed to load waiting room:", err);
+      console.error("Failed to load DB participants:", err);
     }
-  }, [meetingId, isHost]);
+  }, [meetingId]);
 
   const admitParticipant = useCallback(async (userId: string) => {
     if (!meetingId || !isHost) return;
@@ -330,13 +338,12 @@ export default function MeetingRoom() {
         method: "POST",
       });
       if (res.ok) {
-        await loadWaitingRoom();
-        // Refresh participants list
+        await loadDbParticipants();
       }
     } catch (err) {
       console.error("Failed to admit participant:", err);
     }
-  }, [meetingId, isHost, loadWaitingRoom]);
+  }, [meetingId, isHost, loadDbParticipants]);
 
   const denyParticipant = useCallback(async (userId: string) => {
     if (!meetingId || !isHost) return;
@@ -345,12 +352,12 @@ export default function MeetingRoom() {
         method: "POST",
       });
       if (res.ok) {
-        await loadWaitingRoom();
+        await loadDbParticipants();
       }
     } catch (err) {
       console.error("Failed to deny participant:", err);
     }
-  }, [meetingId, isHost, loadWaitingRoom]);
+  }, [meetingId, isHost, loadDbParticipants]);
 
   const enumerateDevices = useCallback(async () => {
     try {
@@ -580,6 +587,53 @@ export default function MeetingRoom() {
       peerName: userName,
       state: { isMuted, isCameraOn, isScreenSharing, isHandRaised },
     });
+
+    // Load persistent chat history (Discord-style) if meeting has a team
+    const loadChatHistory = async () => {
+      if (!meetingId || meetingId === "quick-huddle") return;
+      try {
+        const meetingRes = await fetch(`${API_BASE}/meetings/${meetingId}`);
+        if (!meetingRes.ok) return;
+        const meeting = await meetingRes.json();
+        setMeetingData(meeting);
+        setIsLocked(!!meeting.isLocked);
+        setIsHost(meeting.hostId === currentUser?.id);
+
+        if (!meeting.teamId) return;
+
+        const channelName = `meeting-${meeting.meetingCode || meeting.id.slice(0, 8)}`;
+        const channelsRes = await fetch(`${API_BASE}/channels?teamId=${meeting.teamId}`);
+        if (!channelsRes.ok) return;
+        const channels = await channelsRes.json();
+        const channel = channels.find((c: any) => c.name === channelName);
+        if (!channel?.id) return;
+
+        setMeetingChannelId(channel.id);
+        const messagesRes = await fetch(`${API_BASE}/channels/${channel.id}/messages?limit=50`);
+        if (!messagesRes.ok) return;
+        const msgs = await messagesRes.json();
+
+        const mapped: ChatMessage[] = (msgs || []).map((m: any) => ({
+          id: m.id,
+          sender: m.sender?.name || "Unknown",
+          time: new Date(m.createdAt).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" }),
+          text: m.text,
+        }));
+
+        setChatMessages((prev) => {
+          const seen = new Set(prev.map((p) => p.id));
+          const merged = [...prev];
+          mapped.forEach((m) => {
+            if (!seen.has(m.id)) merged.push(m);
+          });
+          return merged;
+        });
+      } catch (e) {
+        console.error("Failed to load meeting chat history:", e);
+      }
+    };
+
+    loadChatHistory();
 
     const handleParticipants = (list: Participant[]) => {
       const others = list.filter(p => p.peerId !== peerId.current);
@@ -1009,13 +1063,29 @@ export default function MeetingRoom() {
 
   const sendChat = useCallback(() => {
     if (!chatInput.trim() || !currentUser) return;
-    const msg: ChatMessage = {
-      id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+
+    const msgId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const msgText = chatInput.trim();
+
+    // Optimistic UI
+    const optimistic: ChatMessage = {
+      id: msgId,
       sender: currentUser.name,
       time: new Date().toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" }),
-      text: chatInput.trim(),
+      text: msgText,
     };
-    socketRef.current.emit("meeting:chat:send", { meetingId: meetingCode, message: msg });
+    setChatMessages((prev) => (prev.some((m) => m.id === optimistic.id) ? prev : [...prev, optimistic]));
+
+    socketRef.current.emit("meeting:chat:send", {
+      meetingId: meetingCode,
+      message: {
+        id: msgId,
+        senderId: currentUser.id,
+        senderName: currentUser.name,
+        text: msgText,
+      },
+    });
+
     setChatInput("");
   }, [chatInput, currentUser, meetingCode]);
 
@@ -1123,6 +1193,53 @@ export default function MeetingRoom() {
     localStreamRef.current?.getTracks().forEach(t => t.stop());
     navigate("/");
   }, [navigate, meetingCode]);
+
+  const handleMuteAll = async () => {
+    if (!isHost || !meetingId) return;
+    try {
+      const res = await fetch(`${API_BASE}/meetings/${meetingId}/participants/mute-all`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ hostId: currentUser?.id }),
+      });
+      if (res.ok) {
+        // Socket will broadcast the update
+      }
+    } catch (e) {
+      console.error("Mute all error:", e);
+    }
+  };
+
+  const handleKickParticipant = async (targetUserId: string) => {
+    if (!isHost || !meetingId) return;
+    try {
+      const res = await fetch(`${API_BASE}/meetings/${meetingId}/participants/${targetUserId}/remove`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ hostId: currentUser?.id }),
+      });
+      if (res.ok) {
+        // Participant will be removed from DB and socket will handle the rest
+      }
+    } catch (e) {
+      console.error("Kick error:", e);
+    }
+  };
+
+  const toggleRoomLock = async () => {
+    if (!isHost || !meetingId) return;
+    const action = isLocked ? "unlock" : "lock";
+    try {
+      const res = await fetch(`${API_BASE}/meetings/${meetingId}/${action}`, {
+        method: "POST",
+      });
+      if (res.ok) {
+        setIsLocked(!isLocked);
+      }
+    } catch (e) {
+      console.error("Lock error:", e);
+    }
+  };
 
   const switchMic = useCallback(async (deviceId: string) => {
     setSelectedMic(deviceId);

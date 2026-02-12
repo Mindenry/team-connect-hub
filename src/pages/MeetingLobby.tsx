@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -61,6 +62,9 @@ export default function MeetingLobby() {
   const [selectedMic, setSelectedMic] = useState("");
   const [selectedCamera, setSelectedCamera] = useState("");
   const [selectedSpeaker, setSelectedSpeaker] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPasswordInput, setShowPasswordInput] = useState(false);
+  const [meetingData, setMeetingData] = useState<any>(null);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -94,7 +98,8 @@ export default function MeetingLobby() {
       ]).then(([byId, byCode]) => {
         const meeting = byId || byCode;
         if (meeting) {
-          setMeetingInfo(meeting);
+          setMeetingData(meeting);
+          setShowPasswordInput(!!meeting.password);
           if (meeting.title) {
             setMeetingTitle(meeting.title);
           } else {
@@ -425,24 +430,33 @@ export default function MeetingLobby() {
     
     // Pass states to meeting room via navigate state
     if (!currentUser) return;
-    
+
     // Join meeting via API if it's a real meeting
-    if (meetingCode && meetingCode !== "quick-huddle" && meetingInfo) {
+    if (meetingCode && meetingCode !== "quick-huddle" && meetingData) {
       try {
-        await fetch(`${API_BASE}/meetings/${meetingInfo.id}/participants`, {
+        const res = await fetch(`${API_BASE}/meetings/${meetingData.id}/participants`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             userId: currentUser.id,
+            password: password || undefined,
             skipWaitingRoom: false, // Will be in waiting room if enabled
           }),
         });
-      } catch (err) {
+
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data?.message || `Failed to join (${res.status})`);
+        }
+      } catch (err: any) {
         console.error("Failed to join meeting:", err);
+        setError(err?.message || "Failed to join meeting");
+        setJoining(false);
+        return;
       }
     }
 
-    navigate(`/meeting-room/${meetingInfo?.id || meetingCode}`, {
+    navigate(`/meeting-room/${meetingData?.id || meetingCode}`, {
       state: {
         initialMuted: isMuted,
         initialCameraOn: isCameraOn,
@@ -467,7 +481,7 @@ export default function MeetingLobby() {
     );
   }
 
-  const meetingInfo =
+  const participantsInfo =
     participantCount > 0
       ? `${participantNames.slice(0, 3).join(", ")}${
           participantCount > 3 ? ` +${participantCount - 3}` : ""
@@ -492,7 +506,7 @@ export default function MeetingLobby() {
             </h1>
             <div className="flex items-center justify-center lg:justify-start gap-2 text-white/60">
               <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-            <span className="text-sm font-medium">{meetingInfo}</span>
+            <span className="text-sm font-medium">{participantsInfo}</span>
           </div>
           </motion.div>
 
@@ -728,6 +742,24 @@ export default function MeetingLobby() {
                       </Button>
                   </div>
                 </div>
+
+                {showPasswordInput && (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between px-1">
+                      <span className="text-sm font-medium text-white/80">Meeting Password</span>
+                    </div>
+                    <div className="flex items-center gap-3 p-4 rounded-xl border bg-white/5 border-white/10">
+                      <Shield className="w-5 h-5 text-[#0E71EB]" />
+                      <Input 
+                        type="password" 
+                        placeholder="Enter room password" 
+                        className="bg-transparent border-0 focus-visible:ring-0 text-white placeholder:text-white/20 p-0 h-auto"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                )}
 
                 {/* Camera Control */}
                 <div className="space-y-2">

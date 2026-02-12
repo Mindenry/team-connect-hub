@@ -135,25 +135,62 @@ export default function VirtualOffice() {
 
     setMoving(true);
     try {
-      const response = await fetch(`${API_BASE}/users/${currentUser.id}/status`, {
+      // 1. Update Backend Database first
+      const res = await fetch(`${API_BASE}/users/${currentUser.id}/status`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ currentRoom: roomId }),
       });
       
-      if (!response.ok) {
-        throw new Error(`Failed to update room: ${response.status} ${response.statusText}`);
+      if (!res.ok) {
+        throw new Error(`Failed to update room: ${res.status}`);
       }
       
-      // Update local state immediately for better UX
+      // 2. Update Local UI State
       setPeople((prev) =>
         prev.map((p) =>
           p.id === currentUser.id ? { ...p, currentRoom: roomId } : p
         )
       );
+
+      // 3. Notify others via dedicated socket event (don't use presence:online for room changes)
+      getSocket().emit("user:room:change", { 
+        userId: currentUser.id, 
+        room: roomId 
+      });
+
     } catch (err) {
       console.error("Failed to move to room:", err);
-      // Show error to user (you can add a toast notification here)
+    } finally {
+      setMoving(false);
+    }
+  };
+
+  const startRoomMeeting = async (room: Room) => {
+    if (!currentUser || moving) return;
+    setMoving(true);
+    try {
+      const res = await fetch(`${API_BASE}/meetings`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: room.name,
+          description: `Meeting started from Virtual Office: ${room.name}`,
+          startTime: new Date().toISOString(),
+          endTime: new Date(Date.now() + 3600000).toISOString(),
+          waitingRoom: false,
+          allowScreenShare: true,
+          status: "live",
+          isInstant: true,
+          hostId: currentUser.id,
+        }),
+      });
+
+      if (!res.ok) throw new Error("Failed to create meeting");
+      const meeting = await res.json();
+      navigate(`/meeting-lobby/${meeting.id}`);
+    } catch (err) {
+      console.error("Failed to start meeting:", err);
     } finally {
       setMoving(false);
     }
@@ -279,14 +316,14 @@ export default function VirtualOffice() {
                       {moving ? "Moving..." : "Move here"}
                     </Button>
                   )}
-                  {room.id.startsWith("meeting") && roomPeople.length === 0 && (
+                  {room.id.startsWith("meeting") && (
                     <Button
                       size="sm"
                       variant="outline"
                       className="w-full mt-2 text-xs h-7 gap-1"
                       onClick={(e) => {
                         e.stopPropagation();
-                        navigate(`/meeting-lobby/${room.id}`);
+                        startRoomMeeting(room);
                       }}
                     >
                       <Plus className="w-3 h-3" /> Start Meeting

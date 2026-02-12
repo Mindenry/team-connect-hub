@@ -14,6 +14,24 @@ import { Separator } from "@/components/ui/separator";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import StatusIndicator from "@/components/shared/StatusIndicator";
 import CreateChannelDialog from "@/components/dialogs/CreateChannelDialog";
+import DeleteChannelDialog from "@/components/dialogs/DeleteChannelDialog";
+import EditChannelDialog from "@/components/dialogs/EditChannelDialog";
+import InviteUserDialog from "@/components/dialogs/InviteUserDialog";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Mic, Headphones, Settings, Trash2, LogOut, ChevronDown } from "lucide-react";
 import { slidePanel } from "@/components/shared/PageTransition";
 import { auth } from "@/lib/auth";
 import { getSocket } from "@/lib/websocket";
@@ -66,6 +84,11 @@ export default function Chat() {
   const [searchResults, setSearchResults] = useState<Message[]>([]);
   const [showSearchResults, setShowSearchResults] = useState(false);
   const [showCreateChannel, setShowCreateChannel] = useState(false);
+  const [showDeleteChannel, setShowDeleteChannel] = useState(false);
+  const [showEditChannel, setShowEditChannel] = useState(false);
+  const [showInviteUser, setShowInviteUser] = useState(false);
+  const [channelToDelete, setChannelToDelete] = useState<Channel | null>(null);
+  const [channelToEdit, setChannelToEdit] = useState<Channel | null>(null);
   const [showPinned, setShowPinned] = useState(false);
   const [showMembers, setShowMembers] = useState(false);
   const [showChannelList, setShowChannelList] = useState(!isMobile);
@@ -89,6 +112,9 @@ export default function Chat() {
   const [mentionQuery, setMentionQuery] = useState("");
   const [mentionStartPos, setMentionStartPos] = useState<number | null>(null);
   const [attachments, setAttachments] = useState<Array<{ url: string; name: string; type: string }>>([]);
+  const [replyingTo, setReplyingTo] = useState<Message | null>(null);
+  const [showSearchBar, setShowSearchBar] = useState(false);
+  const [channelSearchQuery, setChannelSearchQuery] = useState("");
 
   const handleSearch = async (query: string) => {
     if (query.length < 3) return;
@@ -193,10 +219,33 @@ export default function Chat() {
     socket.on("message:updated", handleMessageUpdated);
     socket.on("dm:message", handleDmMessage);
 
+    // Channel events
+    const handleChannelCreated = (channel: any) => {
+      setChannels((prev) => [...prev, channel as Channel]);
+    };
+
+    const handleChannelUpdated = (updatedChannel: any) => {
+      setChannels((prev) => prev.map((c) => c.id === updatedChannel.id ? (updatedChannel as Channel) : c));
+    };
+
+    const handleChannelDeleted = (channelId: string) => {
+      setChannels((prev) => prev.filter((c) => c.id !== channelId));
+      if (activeChannel === channelId) {
+        setActiveChannel(null);
+      }
+    };
+
+    socket.on("channel:created", handleChannelCreated);
+    socket.on("channel:updated", handleChannelUpdated);
+    socket.on("channel:deleted", handleChannelDeleted);
+
     return () => {
       socket.off("message:created", handleNewMessage);
       socket.off("message:updated", handleMessageUpdated);
       socket.off("dm:message", handleDmMessage);
+      socket.off("channel:created", handleChannelCreated);
+      socket.off("channel:updated", handleChannelUpdated);
+      socket.off("channel:deleted", handleChannelDeleted);
     };
   }, [activeChannel, activeDm, currentUser]);
 
@@ -348,12 +397,14 @@ export default function Chat() {
         body: JSON.stringify({
           text: messageText,
           senderId: currentUser.id,
+          replyToId: replyingTo?.id || undefined,
           attachments: attachments.length > 0 ? attachments : undefined,
           mentions: mentions.length > 0 ? mentions : undefined,
         }),
       });
       setMessageInput("");
       setAttachments([]);
+      setReplyingTo(null);
     } catch (err) {
       console.error("Failed to send message:", err);
     } finally {
@@ -416,108 +467,238 @@ export default function Chat() {
   // 成员列表（使用实时在线状态）
   const membersOnline = allUsers.filter((u) => isUserOnline(u.id));
   const membersOffline = allUsers.filter((u) => !isUserOnline(u.id));
+  // Delete channel handler
+  const handleDeleteChannel = async () => {
+    if (!channelToDelete) return;
+
+    try {
+      const res = await fetch(`${API_BASE}/channels/${channelToDelete.id}`, {
+        method: "DELETE",
+      });
+
+      if (res.ok) {
+        setChannels(prev => prev.filter(c => c.id !== channelToDelete.id));
+        if (activeChannel === channelToDelete.id) {
+          setActiveChannel(null);
+        }
+        setShowDeleteChannel(false);
+        setChannelToDelete(null);
+      }
+    } catch (err) {
+      console.error("Failed to delete channel:", err);
+    }
+  };
+
+  const getConnectionStatusText = (isOnline: boolean) => {
+    return isOnline ? "Online" : "Offline";
+  };
+
+  // Message action handlers
+  const handlePinMessage = async (msg: Message) => {
+    try {
+      const res = await fetch(`${API_BASE}/messages/${msg.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isPinned: !msg.isPinned }),
+      });
+      if (res.ok) {
+        setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, isPinned: !m.isPinned } : m));
+      }
+    } catch (err) {
+      console.error("Failed to pin message:", err);
+    }
+  };
+
+  const handleDeleteMessage = async (msg: Message) => {
+    try {
+      const res = await fetch(`${API_BASE}/messages/${msg.id}`, { method: "DELETE" });
+      if (res.ok) {
+        setMessages(prev => prev.filter(m => m.id !== msg.id));
+      }
+    } catch (err) {
+      console.error("Failed to delete message:", err);
+    }
+  };
+
+  const handleReplyMessage = (msg: Message) => {
+    setReplyingTo(msg);
+    inputRef.current?.focus();
+  };
+
+  const handleChannelSearch = async (query: string) => {
+    setChannelSearchQuery(query);
+    if (query.length < 2) return;
+    try {
+      const params = new URLSearchParams({ query, limit: "30" });
+      if (activeChannel) params.append("channelId", activeChannel);
+      const res = await fetch(`${API_BASE}/messages/search?${params}`);
+      if (res.ok) {
+        const data = await res.json();
+        setSearchResults(data);
+        setShowSearchResults(true);
+      }
+    } catch (err) {
+      console.error("Search failed:", err);
+    }
+  };
 
   return (
     <div className="flex h-screen">
       <CreateChannelDialog open={showCreateChannel} onOpenChange={setShowCreateChannel} />
+      <DeleteChannelDialog 
+        open={showDeleteChannel} 
+        onOpenChange={setShowDeleteChannel} 
+        onConfirm={handleDeleteChannel}
+        channelName={channelToDelete?.name || ""}
+      />
+      <EditChannelDialog
+        open={showEditChannel}
+        onOpenChange={setShowEditChannel}
+        channel={channelToEdit}
+        onChannelUpdated={(updated) => {
+          setChannels(prev => prev.map(c => c.id === updated.id ? (updated as unknown as Channel) : c));
+        }}
+      />
+      <InviteUserDialog 
+        open={showInviteUser} 
+        onOpenChange={setShowInviteUser} 
+      />
 
-      {/* Channel List */}
-      <div className={cn("bg-card border-r flex flex-col shrink-0 transition-all", isMobile ? (showChannelList ? "w-full absolute inset-0 z-20" : "hidden") : "w-60")}>
-        {isMobile && (
-          <div className="flex items-center justify-between px-3 py-2 border-b">
-            <span className="text-sm font-medium text-foreground">Channels</span>
-            <Button variant="ghost" size="sm" onClick={() => setShowChannelList(false)} className="text-xs">Close</Button>
-          </div>
-        )}
-        <div className="p-3 border-b">
-          <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input 
-              placeholder="Search messages..." 
-              value={searchQuery} 
-              onChange={(e) => {
-                setSearchQuery(e.target.value);
-                if (e.target.value.length > 2) {
-                  handleSearch(e.target.value);
-                } else {
-                  setShowSearchResults(false);
-                }
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && searchQuery.length > 2) {
-                  handleSearch(searchQuery);
-                }
-              }}
-              className="pl-9 h-8 text-sm" 
-            />
-          </div>
-          {showSearchResults && searchResults.length > 0 && (
-            <div className="mt-2 p-2 bg-muted rounded-lg max-h-60 overflow-y-auto">
-              <p className="text-xs text-muted-foreground mb-2">Search Results ({searchResults.length})</p>
-              {searchResults.map((msg) => (
+      <div className={cn("bg-card border-r flex flex-col shrink-0 transition-all z-20", isMobile ? (showChannelList ? "w-full absolute inset-0" : "hidden") : "w-60")}>
+        {/* Server Header */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <div className="h-12 border-b flex items-center px-4 font-semibold shadow-sm hover:bg-accent/50 cursor-pointer transition-colors shrink-0">
+              <span className="truncate flex-1">Team Connect Server</span>
+              {isMobile ? (
+                 <Button variant="ghost" size="icon" className="h-8 w-8 -mr-2" onClick={(e) => { e.stopPropagation(); setShowChannelList(false); }}>
+                   <X className="w-4 h-4" />
+                 </Button>
+              ) : (
+                 <ChevronDown className="w-4 h-4 ml-2 opacity-50" />
+              )}
+            </div>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent className="w-56" align="start">
+            <DropdownMenuLabel>Server Options</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => setShowCreateChannel(true)}>
+              <Plus className="w-4 h-4 mr-2" /> Create Channel
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setShowInviteUser(true)}>
+              <Users className="w-4 h-4 mr-2" /> Invite People
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem>
+              <Settings className="w-4 h-4 mr-2" /> Server Settings
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        <div className="flex-1 overflow-y-auto scrollbar-thin p-2 space-y-4">
+           {/* Channels Categories */}
+           {Object.entries(groupedChannels).map(([team, chs]) => (
+            <div key={team} className="mb-2">
+              <div className="flex items-center justify-between px-1 mb-0.5 group">
+                <button className="flex items-center text-xs font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors">
+                  <ChevronDown className="w-3 h-3 mr-0.5" />
+                  {team}
+                </button>
+                <button onClick={() => setShowCreateChannel(true)} className="text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity">
+                  <Plus className="w-3.5 h-3.5" />
+                </button>
+              </div>
+              <div className="space-y-[1px]">
+                {chs.map((ch) => {
+                  const Icon = channelIcons[ch.type] || Hash;
+                  return (
+                    <ContextMenu key={ch.id}>
+                      <ContextMenuTrigger>
+                        <button 
+                          onClick={() => selectChannel(ch.id)}
+                          className={cn("w-full flex items-center gap-1.5 px-2 py-[5px] rounded-md text-sm transition-colors group relative",
+                            activeChannel === ch.id 
+                              ? "bg-accent text-accent-foreground font-medium" 
+                              : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+                          )}>
+                          <Icon className="w-4 h-4 shrink-0 opacity-70" />
+                          <span className="flex-1 text-left truncate">{ch.name}</span>
+                          {/* Unread indicator placeholder - if we had read tracking */}
+                          {/* <div className="w-1.5 h-1.5 rounded-full bg-foreground absolute left-0 -ml-1" /> */}
+                        </button>
+                      </ContextMenuTrigger>
+                      <ContextMenuContent>
+                        <ContextMenuItem onClick={() => {
+                          setChannelToDelete(ch);
+                          setShowDeleteChannel(true);
+                        }} className="text-destructive focus:text-destructive">
+                          <Trash2 className="w-4 h-4 mr-2" />
+                          Delete Channel
+                        </ContextMenuItem>
+                        <ContextMenuItem onClick={() => {
+                          setChannelToEdit(ch);
+                          setShowEditChannel(true);
+                        }}>
+                          <Settings className="w-4 h-4 mr-2" />
+                          Edit Channel
+                        </ContextMenuItem>
+                      </ContextMenuContent>
+                    </ContextMenu>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+
+          {/* Direct Messages */}
+          <div className="mt-4">
+             <div className="flex items-center justify-between px-1 mb-0.5 group">
+                <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground pl-4">Direct Messages</span>
+                <button className="text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity">
+                  <Plus className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            <div className="space-y-[1px]">
+              {dmContactsWithStatus.map((dm) => (
                 <button
-                  key={msg.id}
-                  onClick={() => {
-                    setActiveChannel(msg.channelId);
-                    setShowSearchResults(false);
-                    setSearchQuery("");
-                  }}
-                  className="w-full text-left p-2 rounded hover:bg-muted-foreground/10 mb-1"
+                  key={dm.id}
+                  onClick={() => selectDm(dm.id)}
+                  className={cn(
+                    "w-full flex items-center gap-2 px-2 py-[5px] rounded-md text-sm transition-colors",
+                    activeDm === dm.id
+                      ? "bg-accent text-accent-foreground font-medium"
+                      : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+                  )}
                 >
-                  <p className="text-xs font-medium text-foreground">{msg.sender.name}</p>
-                  <p className="text-xs text-muted-foreground truncate">{msg.text}</p>
-                  <p className="text-[10px] text-muted-foreground">{new Date(msg.createdAt).toLocaleDateString()}</p>
+                  <div className="relative">
+                    <Avatar className="h-6 w-6"><AvatarFallback className="bg-primary/10 text-primary text-[10px]">{dm.initials}</AvatarFallback></Avatar>
+                    <StatusIndicator status={dm.status as "online" | "offline" | "busy" | "away"} className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 border-card ring-2 ring-card" />
+                  </div>
+                  <span className="flex-1 text-left truncate opacity-90">{dm.name}</span>
                 </button>
               ))}
             </div>
-          )}
+          </div>
         </div>
-        <div className="flex-1 overflow-y-auto scrollbar-thin p-2 space-y-3">
-          {Object.entries(groupedChannels).map(([team, chs]) => (
-            <div key={team}>
-              <div className="flex items-center justify-between px-2 py-1">
-                <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{team}</span>
-                <button onClick={() => setShowCreateChannel(true)} className="text-muted-foreground hover:text-foreground"><Plus className="w-3.5 h-3.5" /></button>
-              </div>
-              {chs.map((ch) => {
-                const Icon = channelIcons[ch.type] || Hash;
-                return (
-                  <button key={ch.id} onClick={() => selectChannel(ch.id)}
-                    className={cn("w-full flex items-center gap-2 px-3 py-1.5 rounded-md text-sm transition-colors",
-                      activeChannel === ch.id ? "bg-chat-active text-primary font-medium" : "text-muted-foreground hover:bg-chat-hover hover:text-foreground"
-                    )}>
-                    <Icon className="w-4 h-4 shrink-0" />
-                    <span className="flex-1 text-left truncate">{ch.name}</span>
-                  </button>
-                );
-              })}
-            </div>
-          ))}
-          <div>
-            <div className="flex items-center justify-between px-2 py-1">
-              <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Direct Messages</span>
-              <button className="text-muted-foreground hover:text-foreground"><Plus className="w-3.5 h-3.5" /></button>
-            </div>
-            {dmContactsWithStatus.map((dm) => (
-              <button
-                key={dm.id}
-                onClick={() => selectDm(dm.id)}
-                className={cn(
-                  "w-full flex items-center gap-2 px-3 py-1.5 rounded-md text-sm transition-colors",
-                  activeDm === dm.id
-                    ? "bg-chat-active text-primary font-medium"
-                    : "text-muted-foreground hover:bg-chat-hover hover:text-foreground"
-                )}
-              >
-                <div className="relative">
-                  <Avatar className="h-6 w-6"><AvatarFallback className="bg-primary/10 text-primary text-[10px]">{dm.initials}</AvatarFallback></Avatar>
-                  <StatusIndicator status={dm.status as "online" | "offline" | "busy" | "away"} className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 border-card" />
-                </div>
-                <div className="flex-1 text-left min-w-0">
-                  <span className="block truncate">{dm.name}</span>
-                </div>
-              </button>
-            ))}
+
+        {/* User Bar */}
+        <div className="p-2 bg-muted/40 border-t flex items-center gap-2 shrink-0">
+          <div className="relative group cursor-pointer hover:opacity-80 transition-opacity">
+            <Avatar className="h-8 w-8">
+              <AvatarFallback className="bg-primary text-primary-foreground text-xs">
+                 {currentUser?.name ? getInitials(currentUser.name) : "ME"}
+              </AvatarFallback>
+            </Avatar>
+            <StatusIndicator status="online" className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 border-card ring-2 ring-card" />
+          </div>
+          <div className="flex-1 min-w-0 flex flex-col -space-y-0.5">
+             <span className="text-sm font-semibold truncate">{currentUser?.name || "Guest"}</span>
+             <span className="text-xs text-muted-foreground truncate">{getConnectionStatusText(!!currentUser)}</span>
+          </div>
+          <div className="flex items-center">
+             <Button variant="ghost" size="icon" className="h-7 w-7 rounded-sm"><Mic className="w-4 h-4" /></Button>
+             <Button variant="ghost" size="icon" className="h-7 w-7 rounded-sm"><Headphones className="w-4 h-4" /></Button>
+             <Button variant="ghost" size="icon" className="h-7 w-7 rounded-sm"><Settings className="w-4 h-4" /></Button>
           </div>
         </div>
       </div>
@@ -550,8 +731,47 @@ export default function Chat() {
           <div className="flex items-center gap-1">
             <Button variant={showPinned ? "default" : "ghost"} size="icon" className="h-8 w-8 hidden md:flex" onClick={() => { setShowPinned(!showPinned); setShowMembers(false); }}><Pin className="w-4 h-4" /></Button>
             <Button variant={showMembers ? "default" : "ghost"} size="icon" className="h-8 w-8 hidden md:flex" onClick={() => { setShowMembers(!showMembers); setShowPinned(false); }}><Users className="w-4 h-4" /></Button>
-            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground"><Search className="w-4 h-4" /></Button>
+            <Button variant={showSearchBar ? "default" : "ghost"} size="icon" className="h-8 w-8 text-muted-foreground" onClick={() => { setShowSearchBar(!showSearchBar); if (showSearchBar) { setChannelSearchQuery(""); setShowSearchResults(false); } }}><Search className="w-4 h-4" /></Button>
           </div>
+          {/* Inline Search Bar */}
+          <AnimatePresence>
+            {showSearchBar && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: "auto", opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                className="border-b overflow-hidden"
+              >
+                <div className="px-4 py-2 flex items-center gap-2">
+                  <Search className="w-4 h-4 text-muted-foreground shrink-0" />
+                  <Input
+                    value={channelSearchQuery}
+                    onChange={(e) => handleChannelSearch(e.target.value)}
+                    placeholder="Search messages in this channel..."
+                    className="border-0 bg-transparent shadow-none focus-visible:ring-0 h-8"
+                    autoFocus
+                  />
+                  <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={() => { setShowSearchBar(false); setChannelSearchQuery(""); setShowSearchResults(false); }}>
+                    <X className="w-4 h-4" />
+                  </Button>
+                </div>
+                {showSearchResults && searchResults.length > 0 && (
+                  <div className="max-h-48 overflow-y-auto px-4 pb-2 space-y-1">
+                    {searchResults.map((r) => (
+                      <div key={r.id} className="p-2 rounded hover:bg-muted/50 cursor-pointer text-sm" onClick={() => { setShowSearchBar(false); setShowSearchResults(false); setChannelSearchQuery(""); }}>
+                        <span className="font-medium text-xs text-primary">{r.sender.name}</span>
+                        <span className="text-xs text-muted-foreground ml-2">{formatTime(r.createdAt)}</span>
+                        <p className="text-xs text-foreground truncate">{r.text}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {showSearchResults && searchResults.length === 0 && channelSearchQuery.length >= 2 && (
+                  <div className="px-4 pb-2 text-xs text-muted-foreground">No results found</div>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
 
         <div className="flex-1 flex overflow-hidden">
@@ -617,11 +837,13 @@ export default function Chat() {
                           </div>
                         )}
                       </div>
-                      <div className="opacity-0 group-hover:opacity-100 flex items-start gap-0.5 transition-opacity">
-                        <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground"><Smile className="w-3.5 h-3.5" /></Button>
-                        <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground"><Reply className="w-3.5 h-3.5" /></Button>
-                        <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground"><Bookmark className="w-3.5 h-3.5" /></Button>
-                        <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground"><MoreHorizontal className="w-3.5 h-3.5" /></Button>
+                      <div className="opacity-0 group-hover:opacity-100 flex items-start gap-0.5 transition-opacity bg-card border rounded-md shadow-sm -mt-3 mr-2">
+                        <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-primary" title="Reply" onClick={() => handleReplyMessage(msg)}><Reply className="w-3.5 h-3.5" /></Button>
+                        <Button variant="ghost" size="icon" className={cn("h-7 w-7", msg.isPinned ? "text-warning" : "text-muted-foreground hover:text-warning")} title={msg.isPinned ? "Unpin" : "Pin"} onClick={() => handlePinMessage(msg)}><Pin className="w-3.5 h-3.5" /></Button>
+                        <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-primary" title="Bookmark"><Bookmark className="w-3.5 h-3.5" /></Button>
+                        {msg.senderId === currentUser?.id && (
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" title="Delete" onClick={() => handleDeleteMessage(msg)}><Trash2 className="w-3.5 h-3.5" /></Button>
+                        )}
                       </div>
                     </motion.div>
                   );
@@ -630,6 +852,19 @@ export default function Chat() {
               <div ref={messagesEndRef} />
             </div>
             <div className="p-4 border-t">
+              {/* Reply Banner */}
+              {replyingTo && (
+                <div className="mb-2 flex items-center gap-2 bg-primary/5 border-l-2 border-primary px-3 py-2 rounded-r-lg">
+                  <Reply className="w-4 h-4 text-primary shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <span className="text-xs font-medium text-primary">{replyingTo.sender.name}</span>
+                    <p className="text-xs text-muted-foreground truncate">{replyingTo.text}</p>
+                  </div>
+                  <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={() => setReplyingTo(null)}>
+                    <X className="w-3 h-3" />
+                  </Button>
+                </div>
+              )}
               {/* Attachments preview */}
               {attachments.length > 0 && (
                 <div className="mb-2 flex flex-wrap gap-2">
