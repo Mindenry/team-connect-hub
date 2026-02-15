@@ -23,6 +23,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import CreateMeetingDialog from "@/components/dialogs/CreateMeetingDialog";
 import { getSocket } from "@/lib/websocket";
 import { auth } from "@/lib/auth";
+import { apiGet } from "@/lib/api";
 
 interface Meeting {
   id: string;
@@ -44,7 +45,6 @@ interface ActiveRoom {
   createdAt: Date;
 }
 
-const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
 
 const statusStyles: Record<string, string> = {
   live: "bg-success text-success-foreground",
@@ -114,7 +114,7 @@ function MeetingCard({ meeting, index }: { meeting: Meeting; index: number }) {
                 <AvatarFallback className="bg-primary/10 text-primary text-[10px]">{meeting.host.initials}</AvatarFallback>
               </Avatar>
               {meeting.status === "ended" ? (
-                <Button size="sm" variant="ghost" asChild><Link to="/meeting-summary">Summary</Link></Button>
+                <Button size="sm" variant="ghost" asChild><Link to={`/meeting-summary?id=${meeting.id}`}>Summary</Link></Button>
               ) : (
                 <Button size="sm" className="bg-green-500 hover:bg-green-600 text-white" asChild>
                   <Link to={`/meeting-lobby/${meeting.id}`}>Join</Link>
@@ -211,15 +211,14 @@ export default function Meetings() {
       setLoading(true);
       setError(null);
       try {
-        const res = await fetch(`${API_BASE}/meetings`);
-        if (!res.ok) throw new Error(`Failed to load meetings (${res.status})`);
-        const data = await res.json();
-        const mapped: Meeting[] = data.map(mapMeeting);
+        const data = await apiGet<any[]>("/meetings").catch(() => []);
+        const mapped: Meeting[] = Array.isArray(data) ? data.map(mapMeeting) : [];
         if (!cancelled) setItems(mapped);
       } catch (e: any) {
         if (!cancelled) {
-          console.error(e);
+          console.error("Failed to load meetings:", e);
           setError(e.message ?? "Failed to load meetings");
+          setItems([]);
         }
       } finally {
         if (!cancelled) setLoading(false);

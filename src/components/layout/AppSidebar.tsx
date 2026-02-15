@@ -5,7 +5,7 @@ import {
   LayoutDashboard, Video, MessageSquare, CheckSquare, Users,
   BarChart3, Settings, Bell, Shield, ChevronRight,
   Hash, Volume2, Megaphone, Plus, Search, LogOut, MapPin, Headphones,
-  Phone, Zap,
+  Phone, Zap, Folder, Clock, FileText, Code, Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -13,8 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import StatusIndicator from "@/components/shared/StatusIndicator";
 import { auth } from "@/lib/auth";
 import { usePresence } from "@/hooks/usePresence";
-
-const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
+import { apiGet } from "@/lib/api";
 
 interface NavItem {
   title: string;
@@ -51,12 +50,19 @@ const mainNav: NavItem[] = [
   { title: "Virtual Office", url: "/virtual-office", icon: MapPin },
   { title: "Meetings", url: "/meetings", icon: Video },
   { title: "Chat", url: "/chat", icon: MessageSquare },
+  { title: "AI Chat", url: "/ai-chat", icon: Sparkles },
   { title: "Tasks", url: "/tasks", icon: CheckSquare },
+  { title: "Repositories", url: "/repositories", icon: Code },
+  { title: "Workflows", url: "/workflows", icon: Zap },
+  { title: "Documents", url: "/documents", icon: Folder },
+  { title: "Time Tracking", url: "/time-tracking", icon: Clock },
   { title: "Teams", url: "/teams", icon: Users },
+  { title: "Analytics", url: "/analytics", icon: BarChart3 },
   { title: "Reports", url: "/reports", icon: BarChart3 },
 ];
 
 const bottomNav: NavItem[] = [
+  { title: "Reminders", url: "/reminders", icon: FileText },
   { title: "Notifications", url: "/notifications", icon: Bell },
   { title: "Admin", url: "/admin", icon: Shield },
   { title: "Settings", url: "/settings", icon: Settings },
@@ -77,21 +83,26 @@ export default function AppSidebar({ onNavigate }: AppSidebarProps) {
   const [teams, setTeams] = useState<Team[]>([]);
   const [channels, setChannels] = useState<Channel[]>([]);
   const [allUsers, setAllUsers] = useState<UserInfo[]>([]);
-  const { onlineUserIds, activeRooms, isUserOnline } = usePresence();
+  const { onlineUserIds, activeRooms } = usePresence();
 
   useEffect(() => {
     const loadData = async () => {
       try {
         const [teamsRes, channelsRes, usersRes] = await Promise.all([
-          fetch(`${API_BASE}/teams`).then((r) => r.json()),
-          fetch(`${API_BASE}/channels`).then((r) => r.json()),
-          fetch(`${API_BASE}/users`).then((r) => r.json()),
+          apiGet<Team[]>("/teams").catch(() => []),
+          apiGet<Channel[]>("/channels").catch(() => []),
+          apiGet<UserInfo[]>("/users").catch(() => []),
         ]);
-        setTeams(teamsRes);
-        setChannels(channelsRes);
-        setAllUsers(usersRes);
-        if (teamsRes.length > 0 && expandedTeams.length === 0) {
-          setExpandedTeams([teamsRes[0].id]);
+
+        const safeTeams = Array.isArray(teamsRes) ? teamsRes : [];
+        const safeChannels = Array.isArray(channelsRes) ? channelsRes : [];
+        const safeUsers = Array.isArray(usersRes) ? usersRes : [];
+
+        setTeams(safeTeams);
+        setChannels(safeChannels);
+        setAllUsers(safeUsers);
+        if (safeTeams.length > 0 && expandedTeams.length === 0) {
+          setExpandedTeams([safeTeams[0].id]);
         }
       } catch (err) {
         console.error("Failed to load sidebar data:", err);
@@ -123,9 +134,6 @@ export default function AppSidebar({ onNavigate }: AppSidebarProps) {
   // Quick Huddle participants from active rooms
   const quickHuddleRoom = activeRooms.find((r) => r.roomId === "quick-huddle");
   const quickHuddleParticipants = quickHuddleRoom?.participants || [];
-
-  // Other users for DM section (exclude current user)
-  const dmUsers = allUsers.filter((u) => u.id !== currentUser?.id);
 
   return (
     <aside
@@ -309,46 +317,6 @@ export default function AppSidebar({ onNavigate }: AppSidebarProps) {
                     )}
                   </AnimatePresence>
                 </div>
-              );
-            })}
-          </div>
-        )}
-
-        {/* Direct Messages with online indicators */}
-        {(!collapsed || onNavigate) && (
-          <div className="pt-3">
-            <div className="flex items-center justify-between px-3 py-1">
-              <span className="text-[10px] font-semibold uppercase tracking-widest text-sidebar-muted">Direct Messages</span>
-              <button className="p-0.5 rounded hover:bg-sidebar-accent text-sidebar-muted hover:text-sidebar-accent-foreground">
-                <Plus className="w-3 h-3" />
-              </button>
-            </div>
-            {dmUsers.map((user) => {
-              const online = isUserOnline(user.id);
-              const initials = user.name.split(" ").map(n => n[0]).join("").toUpperCase();
-              return (
-                <Link
-                  key={user.id}
-                  to={`/chat`}
-                  onClick={handleNav}
-                  className="flex items-center gap-2 px-3 py-1.5 text-xs text-sidebar-foreground hover:bg-sidebar-accent/50 rounded-lg transition-colors"
-                >
-                  <div className="relative">
-                    <Avatar className="h-5 w-5">
-                      <AvatarFallback className="bg-sidebar-accent text-sidebar-accent-foreground text-[8px] font-medium">
-                        {initials.slice(0, 2)}
-                      </AvatarFallback>
-                    </Avatar>
-                    <StatusIndicator
-                      status={online ? "online" : "offline"}
-                      className="absolute -bottom-0.5 -right-0.5 w-2 h-2 border-sidebar"
-                    />
-                  </div>
-                  <span className="flex-1 truncate">{user.name}</span>
-                  {online && (
-                    <span className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" />
-                  )}
-                </Link>
               );
             })}
           </div>

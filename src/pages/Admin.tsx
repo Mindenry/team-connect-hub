@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/lib/auth";
+import { usePresence } from "@/hooks/usePresence";
 import {
   Search,
   MoreHorizontal,
@@ -67,6 +68,7 @@ const adminSections = [
 
 export default function Admin() {
   const { user } = useAuth();
+  const { isUserOnline } = usePresence();
   const [activeSection, setActiveSection] = useState("users");
   const [searchQuery, setSearchQuery] = useState("");
   const [showInvite, setShowInvite] = useState(false);
@@ -78,9 +80,10 @@ export default function Admin() {
   useEffect(() => {
     const loadData = async () => {
       try {
-        const [usersRes, teamsRes] = await Promise.all([
-          fetch(`${API_BASE}/users`).then((r) => r.json()),
-          fetch(`${API_BASE}/teams`).then((r) => r.json()),
+        const [usersRes, teamsRes, auditLogsRes] = await Promise.all([
+          fetch(`${API_BASE}/users`).then((r) => r.json()).catch(() => []),
+          fetch(`${API_BASE}/teams`).then((r) => r.json()).catch(() => []),
+          fetch(`${API_BASE}/audit-logs?limit=50`).then((r) => r.json()).catch(() => []),
         ]);
 
         const usersData: UserRecord[] = usersRes.map((u: any) => {
@@ -92,15 +95,16 @@ export default function Admin() {
             name: u.name,
             email: u.email,
             role: "Member", // Default role, can be enhanced with role management
-            status: "online" as const, // Mock status for now
+            status: (isUserOnline(u.id) ? "online" : "offline") as const,
             lastActive: "Now",
             isActive: true,
             teams: userTeams,
             joinedDate: new Date(u.createdAt).toLocaleDateString(),
           };
         });
+        
         setUsers(usersData);
-        setAuditLogs([]); // Audit logs would need a separate API endpoint
+        setAuditLogs(auditLogsRes || []);
       } catch (err) {
         console.error("Failed to load admin data:", err);
       } finally {

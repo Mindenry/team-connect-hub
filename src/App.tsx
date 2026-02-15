@@ -14,6 +14,9 @@ import Chat from "./pages/Chat";
 import Tasks from "./pages/Tasks";
 import Teams from "./pages/Teams";
 import Reports from "./pages/Reports";
+import Documents from "./pages/Documents";
+import TimeTracking from "./pages/TimeTracking";
+import Reminders from "./pages/Reminders";
 import Notifications from "./pages/Notifications";
 import SettingsPage from "./pages/Settings";
 import Admin from "./pages/Admin";
@@ -21,6 +24,11 @@ import Login from "./pages/Login";
 import InviteSetup from "./pages/InviteSetup";
 import VirtualOffice from "./pages/VirtualOffice";
 import NotFound from "./pages/NotFound";
+import Repositories from "./pages/Repositories";
+import RepositoryView from "./pages/RepositoryView";
+import AIChat from "./pages/AIChat";
+import Workflows from "./pages/Workflows";
+import Analytics from "./pages/Analytics";
 import { auth } from "@/lib/auth";
 
 const queryClient = new QueryClient();
@@ -52,8 +60,16 @@ const App = () => (
             <Route path="/meeting-summary" element={<MeetingSummary />} />
             <Route path="/chat" element={<Chat />} />
             <Route path="/tasks" element={<Tasks />} />
+            <Route path="/documents" element={<Documents />} />
+            <Route path="/time-tracking" element={<TimeTracking />} />
             <Route path="/teams" element={<Teams />} />
+            <Route path="/repositories" element={<Repositories />} />
+            <Route path="/repositories/:id" element={<RepositoryView />} />
+            <Route path="/ai-chat" element={<AIChat />} />
+            <Route path="/workflows" element={<Workflows />} />
+            <Route path="/analytics" element={<Analytics />} />
             <Route path="/reports" element={<Reports />} />
+            <Route path="/reminders" element={<Reminders />} />
             <Route path="/notifications" element={<Notifications />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/admin" element={<Admin />} />

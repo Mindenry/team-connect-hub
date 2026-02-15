@@ -30,6 +30,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import CreateTaskDialog from "@/components/dialogs/CreateTaskDialog";
 import TaskDetailDialog from "@/components/dialogs/TaskDetailDialog";
 import { getSocket } from "@/lib/websocket";
+import { apiGet, apiPatch } from "@/lib/api";
 
 interface Task {
   id: string;
@@ -50,7 +51,6 @@ interface Column {
   tasks: Task[];
 }
 
-const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
 
 const initialColumns: Column[] = [
   {
@@ -292,9 +292,11 @@ export default function Tasks() {
       setLoading(true);
       setError(null);
       try {
-        const res = await fetch(`${API_BASE}/tasks`);
-        if (!res.ok) throw new Error(`Failed to load tasks (${res.status})`);
-        const data = await res.json();
+        const data = await apiGet<any[]>("/tasks").catch(() => []);
+        
+        if (!Array.isArray(data)) {
+          throw new Error("Invalid response format");
+        }
 
         const mappedTasks: Task[] = data.map((t: any) => ({
           ...mapTask(t),
@@ -427,11 +429,7 @@ export default function Tasks() {
     // If moved to different column, update status via API
     if (activeCol.id !== overCol.id) {
       try {
-        await fetch(`${API_BASE}/tasks/${activeId}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ status: overCol.id }),
-        });
+        await apiPatch(`/tasks/${activeId}`, { status: overCol.id });
       } catch (err) {
         console.error("Failed to update task status:", err);
       }

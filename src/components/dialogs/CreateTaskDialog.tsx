@@ -15,8 +15,7 @@ import {
   AnimatedDialogHeader as DialogHeader,
   AnimatedDialogTitle as DialogTitle,
 } from "@/components/shared/AnimatedDialog";
-
-const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
+import { apiGet, apiPost } from "@/lib/api";
 
 interface CreateTaskDialogProps { open: boolean; onOpenChange: (open: boolean) => void; }
 
@@ -42,14 +41,18 @@ export default function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialo
   useEffect(() => {
     if (open) {
       Promise.all([
-        fetch(`${API_BASE}/users`).then((r) => r.json()),
-        fetch(`${API_BASE}/teams`).then((r) => r.json()),
-        fetch(`${API_BASE}/meetings`).then((r) => r.json()),
+        apiGet<any[]>("/users").catch(() => []),
+        apiGet<any[]>("/teams").catch(() => []),
+        apiGet<any[]>("/meetings").catch(() => []),
       ]).then(([usersData, teamsData, meetingsData]) => {
-        setUsers(usersData);
-        setTeams(teamsData);
-        setMeetings(meetingsData);
-      }).catch(() => {});
+        setUsers(Array.isArray(usersData) ? usersData : []);
+        setTeams(Array.isArray(teamsData) ? teamsData : []);
+        setMeetings(Array.isArray(meetingsData) ? meetingsData : []);
+      }).catch(() => {
+        setUsers([]);
+        setTeams([]);
+        setMeetings([]);
+      });
     }
   }, [open]);
 
@@ -68,7 +71,7 @@ export default function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialo
               <div><Label className="flex items-center gap-1"><User className="w-3 h-3" /> Assignee</Label>
                 <Select value={assigneeId} onValueChange={setAssigneeId}><SelectTrigger className="mt-1"><SelectValue placeholder="Select" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Unassigned</SelectItem>
+                    <SelectItem value="none">Unassigned</SelectItem>
                     {users.map((user) => (
                       <SelectItem key={user.id} value={user.id}>{user.name}</SelectItem>
                     ))}
@@ -82,7 +85,7 @@ export default function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialo
               <div><Label className="flex items-center gap-1"><LinkIcon className="w-3 h-3" /> Team</Label>
                 <Select value={teamId} onValueChange={setTeamId}><SelectTrigger className="mt-1"><SelectValue placeholder="Select" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">No team</SelectItem>
+                    <SelectItem value="none">No team</SelectItem>
                     {teams.map((team) => (
                       <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>
                     ))}
@@ -91,7 +94,7 @@ export default function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialo
             <div><Label className="flex items-center gap-1"><LinkIcon className="w-3 h-3" /> Link to Meeting (optional)</Label>
               <Select value={meetingId} onValueChange={setMeetingId}><SelectTrigger className="mt-1"><SelectValue placeholder="None" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">None</SelectItem>
+                  <SelectItem value="none">None</SelectItem>
                   {meetings.map((meeting) => (
                     <SelectItem key={meeting.id} value={meeting.id}>{meeting.title}</SelectItem>
                   ))}
@@ -118,23 +121,17 @@ export default function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialo
               setLoading(true);
               setError(null);
               try {
-                const res = await fetch(`${API_BASE}/tasks`, {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    title,
-                    description: taskDescription || null,
-                    priority,
-                    status: "todo",
-                    dueDate: dueDate ? new Date(dueDate).toISOString() : null,
-                    tags: selectedTags,
-                    assigneeId: assigneeId || null,
-                    teamId: teamId || null,
-                    meetingId: meetingId || null,
-                  }),
+                await apiPost("/tasks", {
+                  title,
+                  description: taskDescription || null,
+                  priority,
+                  status: "todo",
+                  dueDate: dueDate ? new Date(dueDate).toISOString() : null,
+                  tags: selectedTags,
+                  assigneeId: assigneeId && assigneeId !== "none" ? assigneeId : null,
+                  teamId: teamId && teamId !== "none" ? teamId : null,
+                  meetingId: meetingId && meetingId !== "none" ? meetingId : null,
                 });
-
-                if (!res.ok) throw new Error("Failed to create task");
                 onOpenChange(false);
                 setTitle("");
                 setTaskDescription("");

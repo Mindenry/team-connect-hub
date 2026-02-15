@@ -13,12 +13,11 @@ import {
   AnimatedDialogHeader as DialogHeader,
   AnimatedDialogTitle as DialogTitle,
 } from "@/components/shared/AnimatedDialog";
+import { apiGet, apiPost } from "@/lib/api";
 
-const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
+interface InviteUserDialogProps { open: boolean; onOpenChange: (open: boolean) => void; teamId?: string; onInviteSuccess?: () => void; }
 
-interface InviteUserDialogProps { open: boolean; onOpenChange: (open: boolean) => void; teamId?: string; }
-
-export default function InviteUserDialog({ open, onOpenChange, teamId }: InviteUserDialogProps) {
+export default function InviteUserDialog({ open, onOpenChange, teamId, onInviteSuccess }: InviteUserDialogProps) {
   const [emails, setEmails] = useState<string[]>([]);
   const [emailInput, setEmailInput] = useState("");
   const [role, setRole] = useState("member");
@@ -29,13 +28,12 @@ export default function InviteUserDialog({ open, onOpenChange, teamId }: InviteU
 
   useEffect(() => {
     if (open) {
-      fetch(`${API_BASE}/teams`)
-        .then((r) => r.json())
+      apiGet<any[]>("/teams")
         .then((data) => {
-          setTeams(data);
+          setTeams(Array.isArray(data) ? data : []);
           if (teamId) setSelectedTeamId(teamId);
         })
-        .catch(() => {});
+        .catch(() => setTeams([]));
     }
   }, [open, teamId]);
 
@@ -94,32 +92,22 @@ export default function InviteUserDialog({ open, onOpenChange, teamId }: InviteU
               setLoading(true);
               setError(null);
               try {
-                const users = await fetch(`${API_BASE}/users`).then((r) => r.json());
+                const users = await apiGet<any[]>("/users").catch(() => []);
                 const results = await Promise.all(
                   emails.map(async (email) => {
-                    let user = users.find((u: any) => u.email === email);
+                    let user = Array.isArray(users) ? users.find((u: any) => u.email === email) : null;
                     if (!user) {
                       const name = email.split("@")[0];
-                      const createRes = await fetch(`${API_BASE}/users`, {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ email, name }),
-                      });
-                      if (!createRes.ok) throw new Error(`Failed to create user ${email}`);
-                      user = await createRes.json();
+                      user = await apiPost("/users", { email, name });
                     }
-                    const addRes = await fetch(`${API_BASE}/teams/${selectedTeamId}/members`, {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ userId: user.id, role }),
-                    });
-                    if (!addRes.ok) throw new Error(`Failed to add ${email} to team`);
+                    await apiPost(`/teams/${selectedTeamId}/members`, { userId: user.id, role });
                     return user;
                   })
                 );
                 onOpenChange(false);
                 setEmails([]);
                 setEmailInput("");
+                onInviteSuccess?.();
               } catch (err: any) {
                 setError(err.message ?? "Failed to invite users");
               } finally {

@@ -13,8 +13,7 @@ import {
   AnimatedDialogHeader as DialogHeader,
   AnimatedDialogTitle as DialogTitle,
 } from "@/components/shared/AnimatedDialog";
-
-const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
+import { apiGet, apiPost } from "@/lib/api";
 
 interface Team {
   id: string;
@@ -44,10 +43,9 @@ export default function CreateChannelDialog({ open, onOpenChange, onChannelCreat
 
   useEffect(() => {
     if (open) {
-      fetch(`${API_BASE}/teams`)
-        .then((r) => r.json())
-        .then(setTeams)
-        .catch(console.error);
+      apiGet<any[]>("/teams")
+        .then((data) => setTeams(Array.isArray(data) ? data : []))
+        .catch(() => setTeams([]));
     }
   }, [open]);
 
@@ -61,20 +59,12 @@ export default function CreateChannelDialog({ open, onOpenChange, onChannelCreat
     setError("");
 
     try {
-      const res = await fetch(`${API_BASE}/channels`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: channelName.toLowerCase().replace(/\s+/g, "-"),
-          type: channelType,
-          teamId,
-          description: description || undefined,
-        }),
+      const channel = await apiPost("/channels", {
+        name: channelName.toLowerCase().replace(/\s+/g, "-"),
+        type: channelType,
+        teamId,
+        description: description || undefined,
       });
-
-      if (!res.ok) throw new Error("Failed to create channel");
-
-      const channel = await res.json();
       onChannelCreated?.(channel);
       onOpenChange(false);
       setChannelName("");
@@ -149,11 +139,15 @@ export default function CreateChannelDialog({ open, onOpenChange, onChannelCreat
                   <SelectValue placeholder="Select team" />
                 </SelectTrigger>
                 <SelectContent>
-                  {teams.map((team) => (
-                    <SelectItem key={team.id} value={team.id}>
-                      {team.name}
-                    </SelectItem>
-                  ))}
+                  {Array.isArray(teams) && teams.length > 0 ? (
+                    teams.map((team) => (
+                      <SelectItem key={team.id} value={team.id}>
+                        {team.name}
+                      </SelectItem>
+                    ))
+                  ) : (
+                    <SelectItem value="none" disabled>No teams available</SelectItem>
+                  )}
                 </SelectContent>
               </Select>
             </div>

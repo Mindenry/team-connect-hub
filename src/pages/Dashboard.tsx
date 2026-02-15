@@ -19,8 +19,7 @@ import TimeZoneWidget from "@/components/widgets/TimeZoneWidget";
 import WorkHoursTracker from "@/components/widgets/WorkHoursTracker";
 import { auth } from "@/lib/auth";
 import { usePresence } from "@/hooks/usePresence";
-
-const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
+import { apiGet } from "@/lib/api";
 
 const priorityColors: Record<string, string> = {
   high: "bg-destructive/10 text-destructive border-destructive/20",
@@ -55,14 +54,25 @@ export default function Dashboard() {
         const tomorrow = new Date(today);
         tomorrow.setDate(tomorrow.getDate() + 1);
 
-        const [meetingsRes, tasksRes, usersRes, teamsRes] = await Promise.all([
-          fetch(`${API_BASE}/meetings?status=upcoming`).then((r) => r.json()),
-          fetch(`${API_BASE}/tasks?status=todo,in_progress`).then((r) => r.json()),
-          fetch(`${API_BASE}/users`).then((r) => r.json()),
-          fetch(`${API_BASE}/teams`).then((r) => r.json()),
+        const [meetingsRes, tasksRes, usersRes, teamsRes, notificationsRes] = await Promise.all([
+          apiGet<any[]>("/meetings?status=upcoming").catch(() => []),
+          apiGet<any[]>("/tasks").catch(() => []).then((tasks: any[]) => 
+            Array.isArray(tasks) ? tasks.filter((t: any) => t.status === "todo" || t.status === "in_progress") : []
+          ),
+          apiGet<any[]>("/users").catch(() => []),
+          apiGet<any[]>("/teams").catch(() => []),
+          currentUser?.id
+            ? apiGet<any>(`/notifications?userId=${currentUser.id}&read=false`).catch(() => []).then((res: any) => 
+                Array.isArray(res) ? res.length : 0
+              )
+            : Promise.resolve(0),
         ]);
 
-        const upcoming = meetingsRes
+        const safeMeetings = Array.isArray(meetingsRes) ? meetingsRes : [];
+        const safeTasks = Array.isArray(tasksRes) ? tasksRes : [];
+        const safeUsers = Array.isArray(usersRes) ? usersRes : [];
+
+        const upcoming = safeMeetings
           .filter((m: any) => new Date(m.startTime) >= today && new Date(m.startTime) < tomorrow)
           .slice(0, 3)
           .map((m: any) => ({
@@ -74,7 +84,7 @@ export default function Dashboard() {
             isNow: m.status === "live",
           }));
 
-        const tasks = tasksRes.slice(0, 4).map((t: any) => ({
+        const tasks = safeTasks.slice(0, 4).map((t: any) => ({
           id: t.id,
           title: t.title,
           priority: t.priority,
@@ -82,7 +92,7 @@ export default function Dashboard() {
           assignee: t.assignee?.name?.split(" ").map((n: string) => n[0]).join("") || "",
         }));
 
-        const members = usersRes.slice(0, 8).map((u: any) => ({
+        const members = safeUsers.slice(0, 8).map((u: any) => ({
           id: u.id,
           name: u.name,
           initials: u.name.split(" ").map((n: string) => n[0]).join(""),
@@ -96,9 +106,9 @@ export default function Dashboard() {
         setOnlineMembers(members);
         setStats({
           meetingsToday: upcoming.length,
-          openTasks: tasksRes.length,
-          unreadMessages: 0,
-          teamOnline: `${usersRes.length}`,
+          openTasks: safeTasks.length,
+          unreadMessages: notificationsRes || 0,
+          teamOnline: `${onlineCount}/${safeUsers.length}`,
         });
       } catch (err) {
         console.error("Failed to load dashboard data:", err);
@@ -111,7 +121,12 @@ export default function Dashboard() {
   }, []);
 
   return (
-    <motion.div className="p-4 md:p-6 space-y-4 md:space-y-5 max-w-[1400px]" variants={container} initial="initial" animate="animate">
+    <motion.div
+      className="p-4 md:p-6 space-y-4 md:space-y-5 w-full max-w-7xl mx-auto"
+      variants={container}
+      initial="initial"
+      animate="animate"
+    >
       <CreateMeetingDialog open={showCreateMeeting} onOpenChange={setShowCreateMeeting} />
       <CreateTaskDialog open={showCreateTask} onOpenChange={setShowCreateTask} />
 
@@ -156,7 +171,10 @@ export default function Dashboard() {
       </motion.div>
 
       {/* Stats Cards */}
-      <motion.div variants={item} className="grid grid-cols-2 gap-3">
+      <motion.div
+        variants={item}
+        className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4"
+      >
         {[
           { label: "Meetings Today", value: stats.meetingsToday.toString(), icon: Video, trend: "", trendColor: "text-success", gradient: "from-primary/10 to-info/10" },
           { label: "Open Tasks", value: stats.openTasks.toString(), icon: CheckSquare, trend: "", trendColor: "text-warning", gradient: "from-warning/10 to-warning/5" },

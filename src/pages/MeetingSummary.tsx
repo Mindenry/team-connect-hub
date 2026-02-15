@@ -1,4 +1,5 @@
-import { Link } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import {
   Video,
   Clock,
@@ -18,49 +19,10 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
+import { auth } from "@/lib/auth";
+import { toast } from "sonner";
 
-const meetingSummary = {
-  title: "Sprint Planning",
-  date: "February 9, 2026",
-  startTime: "10:00 AM",
-  endTime: "10:42 AM",
-  duration: "42 minutes",
-  host: { name: "สมชาย K.", initials: "SK" },
-  team: "Engineering",
-  totalParticipants: 6,
-  participants: [
-    { name: "สมชาย K.", initials: "SK", role: "Host", joinedAt: "10:00", leftAt: "10:42", duration: "42m" },
-    { name: "อริสา P.", initials: "AP", role: "Participant", joinedAt: "10:00", leftAt: "10:42", duration: "42m" },
-    { name: "จิรวัฒน์ W.", initials: "JW", role: "Participant", joinedAt: "10:01", leftAt: "10:42", duration: "41m" },
-    { name: "พิมพ์ L.", initials: "PL", role: "Participant", joinedAt: "10:00", leftAt: "10:40", duration: "40m" },
-    { name: "ธนา S.", initials: "TS", role: "Participant", joinedAt: "10:03", leftAt: "10:42", duration: "39m" },
-    { name: "นภา M.", initials: "NM", role: "Participant", joinedAt: "10:05", leftAt: "10:42", duration: "37m" },
-  ],
-  stats: {
-    screenShares: 3,
-    handRaises: 5,
-    chatMessages: 12,
-    waitingRoomAdmits: 1,
-  },
-  agenda: [
-    { topic: "Review previous sprint outcomes", duration: "8m", completed: true },
-    { topic: "Discuss API v2 migration plan", duration: "15m", completed: true },
-    { topic: "Mobile responsive fixes review", duration: "10m", completed: true },
-    { topic: "Assign tasks for next sprint", duration: "9m", completed: true },
-  ],
-  tasksCreated: [
-    { title: "Fix Safari upload bug", assignee: "จิรวัฒน์ W.", priority: "high", dueDate: "Feb 10" },
-    { title: "Update API documentation", assignee: "อริสา P.", priority: "medium", dueDate: "Feb 12" },
-    { title: "Design new onboarding flow", assignee: "พิมพ์ L.", priority: "medium", dueDate: "Feb 15" },
-    { title: "Database migration v2.3", assignee: "ธนา S.", priority: "high", dueDate: "Feb 10" },
-  ],
-  notes: [
-    "API v2 migration needs to be backward-compatible",
-    "Safari upload bug is a CORS issue — จิรวัฒน์ will investigate",
-    "New onboarding flow should reduce signup time by 30%",
-    "Next standup moved to 10:30 AM starting tomorrow",
-  ],
-};
+const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
 
 const priorityColors: Record<string, string> = {
   high: "bg-destructive text-destructive-foreground",
@@ -68,7 +30,76 @@ const priorityColors: Record<string, string> = {
   low: "bg-secondary text-secondary-foreground",
 };
 
+const getInitials = (name: string) => name.split(" ").map((n) => n[0]).join("").toUpperCase();
+
 export default function MeetingSummary() {
+  const [searchParams] = useSearchParams();
+  const meetingId = searchParams.get("id");
+  const [loading, setLoading] = useState(true);
+  const [meeting, setMeeting] = useState<any>(null);
+  const [tasks, setTasks] = useState<any[]>([]);
+
+  useEffect(() => {
+    const loadData = async () => {
+      if (!meetingId) {
+        toast.error("Meeting ID is required");
+        setLoading(false);
+        return;
+      }
+
+      try {
+        const headers = await auth.getAuthHeaders();
+        const [meetingRes, tasksRes] = await Promise.all([
+          fetch(`${API_BASE}/meetings/${meetingId}`, { headers }).then((r) => {
+            if (!r.ok) throw new Error("Failed to load meeting");
+            return r.json();
+          }),
+          fetch(`${API_BASE}/tasks?meetingId=${meetingId}`, { headers }).then((r) => r.json()).catch(() => []),
+        ]);
+
+        setMeeting(meetingRes);
+        setTasks(tasksRes || []);
+      } catch (err: any) {
+        console.error("Failed to load meeting summary:", err);
+        toast.error("Failed to load meeting summary");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadData();
+  }, [meetingId]);
+
+  if (loading) {
+    return (
+      <div className="p-6 max-w-4xl mx-auto">
+        <div className="text-center text-muted-foreground">Loading meeting summary...</div>
+      </div>
+    );
+  }
+
+  if (!meeting) {
+    return (
+      <div className="p-6 max-w-4xl mx-auto">
+        <div className="text-center text-muted-foreground">Meeting not found</div>
+        <Button asChild className="mt-4">
+          <Link to="/meetings">Back to Meetings</Link>
+        </Button>
+      </div>
+    );
+  }
+
+  const startTime = new Date(meeting.startTime);
+  const endTime = new Date(meeting.endTime);
+  const durationMs = endTime.getTime() - startTime.getTime();
+  const durationMins = Math.floor(durationMs / 60000);
+  const duration = `${Math.floor(durationMins / 60)}h ${durationMins % 60}m`;
+
+  const dateStr = startTime.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+  const startTimeStr = startTime.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  const endTimeStr = endTime.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+
+  const hostInitials = getInitials(meeting.host?.name || "Unknown");
   return (
     <div className="p-6 max-w-4xl mx-auto space-y-6">
       {/* Header */}
@@ -78,9 +109,9 @@ export default function MeetingSummary() {
             <Link to="/meetings"><ArrowLeft className="w-4 h-4" /></Link>
           </Button>
           <div>
-            <h1 className="text-xl font-bold text-foreground">{meetingSummary.title}</h1>
+            <h1 className="text-xl font-bold text-foreground">{meeting.title}</h1>
             <p className="text-sm text-muted-foreground">
-              {meetingSummary.date} · {meetingSummary.startTime} — {meetingSummary.endTime}
+              {dateStr} · {startTimeStr} — {endTimeStr}
             </p>
           </div>
         </div>
@@ -99,11 +130,11 @@ export default function MeetingSummary() {
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         {[
-          { icon: Clock, label: "Duration", value: meetingSummary.duration },
-          { icon: Users, label: "Participants", value: String(meetingSummary.totalParticipants) },
-          { icon: Monitor, label: "Screen Shares", value: String(meetingSummary.stats.screenShares) },
-          { icon: Hand, label: "Hand Raises", value: String(meetingSummary.stats.handRaises) },
-          { icon: MessageSquare, label: "Chat Messages", value: String(meetingSummary.stats.chatMessages) },
+          { icon: Clock, label: "Duration", value: duration },
+          { icon: Users, label: "Team", value: meeting.team?.name || "No team" },
+          { icon: Video, label: "Status", value: meeting.status },
+          { icon: User, label: "Host", value: meeting.host?.name || "Unknown" },
+          { icon: CheckSquare, label: "Tasks", value: String(tasks.length) },
         ].map((stat) => (
           <Card key={stat.label}>
             <CardContent className="p-3 text-center">
@@ -116,98 +147,95 @@ export default function MeetingSummary() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Participants */}
+        {/* Host Info */}
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">Participants</CardTitle>
+            <CardTitle className="text-base">Meeting Host</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-2">
-              <div className="grid grid-cols-5 text-xs font-medium text-muted-foreground px-2 pb-1">
-                <span className="col-span-2">Name</span>
-                <span>Joined</span>
-                <span>Left</span>
-                <span className="text-right">Duration</span>
+            <div className="flex items-center gap-3">
+              <Avatar className="h-10 w-10">
+                <AvatarFallback className="bg-primary/10 text-primary">{hostInitials}</AvatarFallback>
+              </Avatar>
+              <div>
+                <p className="text-sm font-medium text-foreground">{meeting.host?.name || "Unknown"}</p>
+                <p className="text-xs text-muted-foreground">{meeting.host?.email || ""}</p>
               </div>
-              {meetingSummary.participants.map((p) => (
-                <div key={p.name} className="grid grid-cols-5 items-center text-sm p-2 rounded-lg hover:bg-muted/50">
-                  <div className="col-span-2 flex items-center gap-2">
-                    <Avatar className="h-6 w-6">
-                      <AvatarFallback className="bg-primary/10 text-primary text-[10px]">{p.initials}</AvatarFallback>
-                    </Avatar>
-                    <span className="text-foreground truncate">{p.name}</span>
-                    {p.role === "Host" && <Badge variant="secondary" className="text-[10px] px-1">Host</Badge>}
-                  </div>
-                  <span className="text-muted-foreground text-xs">{p.joinedAt}</span>
-                  <span className="text-muted-foreground text-xs">{p.leftAt}</span>
-                  <span className="text-right text-muted-foreground text-xs">{p.duration}</span>
-                </div>
-              ))}
             </div>
+            {meeting.description && (
+              <div className="mt-4 pt-4 border-t">
+                <p className="text-sm text-muted-foreground">{meeting.description}</p>
+              </div>
+            )}
           </CardContent>
         </Card>
 
-        {/* Agenda */}
+        {/* Meeting Settings */}
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">Agenda</CardTitle>
+            <CardTitle className="text-base">Settings</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
-            {meetingSummary.agenda.map((item, i) => (
-              <div key={i} className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50">
-                <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 ${item.completed ? "bg-success" : "bg-muted"}`}>
-                  {item.completed && <CheckSquare className="w-3 h-3 text-success-foreground" />}
-                </div>
-                <span className="flex-1 text-sm text-foreground">{item.topic}</span>
-                <span className="text-xs text-muted-foreground">{item.duration}</span>
-              </div>
-            ))}
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">Waiting Room</span>
+              <Badge variant={meeting.waitingRoom ? "default" : "secondary"}>
+                {meeting.waitingRoom ? "Enabled" : "Disabled"}
+              </Badge>
+            </div>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">Screen Share</span>
+              <Badge variant={meeting.allowScreenShare ? "default" : "secondary"}>
+                {meeting.allowScreenShare ? "Allowed" : "Not Allowed"}
+              </Badge>
+            </div>
           </CardContent>
         </Card>
       </div>
 
       {/* Tasks Created */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <CheckSquare className="w-4 h-4" />
-            Tasks Created from Meeting ({meetingSummary.tasksCreated.length})
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          {meetingSummary.tasksCreated.map((task, i) => (
-            <div key={i} className="flex items-center gap-3 p-2.5 rounded-lg border hover:bg-muted/50 transition-colors">
-              <CheckSquare className="w-4 h-4 text-muted-foreground shrink-0" />
-              <span className="flex-1 text-sm font-medium text-foreground">{task.title}</span>
-              <span className="text-xs text-muted-foreground">{task.assignee}</span>
-              <Badge className={`text-xs ${priorityColors[task.priority]}`}>{task.priority}</Badge>
-              <span className="text-xs text-muted-foreground flex items-center gap-1">
-                <Calendar className="w-3 h-3" />{task.dueDate}
-              </span>
-            </div>
-          ))}
-        </CardContent>
-      </Card>
-
-      {/* Meeting Notes */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <FileText className="w-4 h-4" />
-            Meeting Notes
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ul className="space-y-2">
-            {meetingSummary.notes.map((note, i) => (
-              <li key={i} className="flex items-start gap-2 text-sm text-foreground">
-                <span className="w-1.5 h-1.5 rounded-full bg-primary mt-1.5 shrink-0" />
-                {note}
-              </li>
+      {tasks.length > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <CheckSquare className="w-4 h-4" />
+              Tasks Created from Meeting ({tasks.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {tasks.map((task) => (
+              <div key={task.id} className="flex items-center gap-3 p-2.5 rounded-lg border hover:bg-muted/50 transition-colors">
+                <CheckSquare className="w-4 h-4 text-muted-foreground shrink-0" />
+                <span className="flex-1 text-sm font-medium text-foreground">{task.title}</span>
+                <span className="text-xs text-muted-foreground">{task.assignee?.name || "Unassigned"}</span>
+                <Badge className={`text-xs ${priorityColors[task.priority] || priorityColors.medium}`}>
+                  {task.priority}
+                </Badge>
+                {task.dueDate && (
+                  <span className="text-xs text-muted-foreground flex items-center gap-1">
+                    <Calendar className="w-3 h-3" />
+                    {new Date(task.dueDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                  </span>
+                )}
+              </div>
             ))}
-          </ul>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Meeting Description as Notes */}
+      {meeting.description && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <FileText className="w-4 h-4" />
+              Meeting Description
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-foreground whitespace-pre-line">{meeting.description}</p>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

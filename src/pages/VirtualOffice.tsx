@@ -14,8 +14,7 @@ import StatusIndicator from "@/components/shared/StatusIndicator";
 import { auth } from "@/lib/auth";
 import { getSocket } from "@/lib/websocket";
 import { usePresence } from "@/hooks/usePresence";
-
-const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
+import { apiGet, apiPatch } from "@/lib/api";
 
 interface Person {
   id: string;
@@ -66,8 +65,9 @@ export default function VirtualOffice() {
   useEffect(() => {
     const loadData = async () => {
       try {
-        const users = await fetch(`${API_BASE}/users`).then((r) => r.json());
-        const mapped: Person[] = users.map((u: any) => ({
+        const users = await apiGet<any[]>("/users").catch(() => []);
+        const safeUsers = Array.isArray(users) ? users : [];
+        const mapped: Person[] = safeUsers.map((u: any) => ({
           id: u.id,
           name: u.name,
           initials: u.name.split(" ").map((n: string) => n[0]).join(""),
@@ -124,11 +124,7 @@ export default function VirtualOffice() {
 
     setMoving(true);
     try {
-      await fetch(`${API_BASE}/users/${currentUser.id}/status`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ currentRoom: roomId }),
-      });
+      await apiPatch(`/users/${currentUser.id}/status`, { currentRoom: roomId });
     } catch (err) {
       console.error("Failed to move to room:", err);
     } finally {

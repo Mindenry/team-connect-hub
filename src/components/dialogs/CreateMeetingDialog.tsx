@@ -18,8 +18,7 @@ import {
   AnimatedDialogTitle as DialogTitle,
 } from "@/components/shared/AnimatedDialog";
 import { auth } from "@/lib/auth";
-
-const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
+import { apiGet, apiPost } from "@/lib/api";
 
 interface CreateMeetingDialogProps {
   open: boolean;
@@ -43,10 +42,9 @@ export default function CreateMeetingDialog({ open, onOpenChange }: CreateMeetin
 
   useEffect(() => {
     if (open) {
-      fetch(`${API_BASE}/teams`)
-        .then((r) => r.json())
-        .then((data) => setTeams(data))
-        .catch(() => {});
+      apiGet<any[]>("/teams")
+        .then((data) => setTeams(Array.isArray(data) ? data : []))
+        .catch(() => setTeams([]));
     }
   }, [open]);
 
@@ -85,7 +83,7 @@ export default function CreateMeetingDialog({ open, onOpenChange }: CreateMeetin
             <div><Label>Team</Label>
               <Select value={teamId} onValueChange={setTeamId}><SelectTrigger className="mt-1"><SelectValue placeholder="Select a team" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">No team</SelectItem>
+                  <SelectItem value="none">No team</SelectItem>
                   {teams.map((team) => (
                     <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>
                   ))}
@@ -136,23 +134,17 @@ export default function CreateMeetingDialog({ open, onOpenChange }: CreateMeetin
                   endTime = new Date(startTime.getTime() + parseInt(duration) * 60000);
                 }
 
-                const res = await fetch(`${API_BASE}/meetings`, {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    title,
-                    description: description || null,
-                    startTime: startTime.toISOString(),
-                    endTime: endTime.toISOString(),
-                    waitingRoom,
-                    allowScreenShare,
-                    status: meetingType === "instant" ? "live" : "upcoming",
-                    teamId: teamId || null,
-                    hostId: user.id,
-                  }),
+                const result = await apiPost("/meetings", {
+                  title,
+                  description: description || null,
+                  startTime: startTime.toISOString(),
+                  endTime: endTime.toISOString(),
+                  waitingRoom,
+                  allowScreenShare,
+                  status: meetingType === "instant" ? "live" : "upcoming",
+                  teamId: teamId && teamId !== "none" ? teamId : null,
+                  hostId: user.id,
                 });
-
-                const result = await res.json();
                 onOpenChange(false);
                 setTitle("");
                 setDescription("");
