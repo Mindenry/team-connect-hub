@@ -54,7 +54,7 @@ export default function Login() {
         data.accessToken,
         data.refreshToken
       );
-      
+
       navigate("/", { replace: true });
     } catch (err: any) {
       setError(err.message ?? "Login failed");

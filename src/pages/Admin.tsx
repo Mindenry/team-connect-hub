@@ -90,19 +90,28 @@ export default function Admin() {
           const userTeams = teamsRes
             .filter((t: any) => t.members?.some((m: any) => m.userId === u.id))
             .map((t: any) => t.name);
+
+          // Map role from database to display name
+          const roleMap: Record<string, string> = {
+            org_owner: "Admin",
+            admin: "Admin",
+            manager: "Manager",
+            employee: "Member",
+          };
+
           return {
             id: u.id,
             name: u.name,
             email: u.email,
-            role: "Member", // Default role, can be enhanced with role management
-            status: (isUserOnline(u.id) ? "online" : "offline") as const,
+            role: roleMap[u.role] || "Member",
+            status: isUserOnline(u.id) ? "online" : "offline",
             lastActive: "Now",
-            isActive: true,
+            isActive: u.isActive !== false,
             teams: userTeams,
             joinedDate: new Date(u.createdAt).toLocaleDateString(),
           };
         });
-        
+
         setUsers(usersData);
         setAuditLogs(auditLogsRes || []);
       } catch (err) {

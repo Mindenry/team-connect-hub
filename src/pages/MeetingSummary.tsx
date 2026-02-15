@@ -10,15 +10,11 @@ import {
   ArrowLeft,
   Calendar,
   User,
-  MessageSquare,
-  Hand,
-  Monitor,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Separator } from "@/components/ui/separator";
 import { auth } from "@/lib/auth";
 import { toast } from "sonner";
 
@@ -100,6 +96,7 @@ export default function MeetingSummary() {
   const endTimeStr = endTime.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
 
   const hostInitials = getInitials(meeting.host?.name || "Unknown");
+
   return (
     <div className="p-6 max-w-4xl mx-auto space-y-6">
       {/* Header */}

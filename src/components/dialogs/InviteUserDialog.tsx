@@ -69,12 +69,21 @@ export default function InviteUserDialog({ open, onOpenChange, teamId, onInviteS
               </div>
             )}
             <div className="grid grid-cols-2 gap-3">
-              <div><Label>Role</Label><Select value={role} onValueChange={setRole}><SelectTrigger className="mt-1"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="admin">Admin</SelectItem><SelectItem value="member">Member</SelectItem></SelectContent></Select></div>
-              <div><Label>Team</Label><Select value={selectedTeamId} onValueChange={setSelectedTeamId}><SelectTrigger className="mt-1"><SelectValue placeholder="Select" /></SelectTrigger><SelectContent>
-                {teams.map((team) => (
-                  <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>
-                ))}
-              </SelectContent></Select></div>
+              <div><Label>Role</Label><Select value={role} onValueChange={setRole}><SelectTrigger className="mt-1"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="admin">Admin</SelectItem><SelectItem value="manager">Manager</SelectItem><SelectItem value="employee">Employee</SelectItem></SelectContent></Select></div>
+              <div>
+                <Label>Team (Optional)</Label>
+                <Select value={selectedTeamId || "none"} onValueChange={(v) => setSelectedTeamId(v === "none" ? "" : v)}>
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder="Select" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No team</SelectItem>
+                    {teams.map((team) => (
+                      <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </div>
           {error && <div className="text-sm text-destructive bg-destructive/10 p-2 rounded">{error}</div>}
@@ -83,10 +92,6 @@ export default function InviteUserDialog({ open, onOpenChange, teamId, onInviteS
             <Button onClick={async () => {
               if (emails.length === 0) {
                 setError("Please add at least one email");
-                return;
-              }
-              if (!selectedTeamId) {
-                setError("Please select a team");
                 return;
               }
               setLoading(true);

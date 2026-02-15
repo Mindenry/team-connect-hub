@@ -32,6 +32,7 @@ export default function CreateMeetingDialog({ open, onOpenChange }: CreateMeetin
   const [allowScreenShare, setAllowScreenShare] = useState(true);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [password, setPassword] = useState("");
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
   const [duration, setDuration] = useState("60");
@@ -81,7 +82,10 @@ export default function CreateMeetingDialog({ open, onOpenChange }: CreateMeetin
               </>
             )}
             <div><Label>Team</Label>
-              <Select value={teamId} onValueChange={setTeamId}><SelectTrigger className="mt-1"><SelectValue placeholder="Select a team" /></SelectTrigger>
+              <Select value={teamId || "none"} onValueChange={(v) => setTeamId(v === "none" ? "" : v)}>
+                <SelectTrigger className="mt-1">
+                  <SelectValue placeholder="Select a team" />
+                </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">No team</SelectItem>
                   {teams.map((team) => (
@@ -91,6 +95,17 @@ export default function CreateMeetingDialog({ open, onOpenChange }: CreateMeetin
               </Select>
             </div>
             <div><Label>Agenda (optional)</Label><Textarea placeholder="Add meeting agenda items..." className="mt-1 min-h-[80px]" value={description} onChange={(e) => setDescription(e.target.value)} /></div>
+            <div>
+              <Label>Meeting Password (optional)</Label>
+              <Input
+                type="password"
+                placeholder="Set a password for this meeting"
+                className="mt-1"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+              <p className="text-[10px] text-muted-foreground mt-1">If set, participants must enter this password to join.</p>
+            </div>
             <div className="space-y-3 pt-2 border-t">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2"><Shield className="w-4 h-4 text-muted-foreground" /><div><p className="text-sm font-medium text-foreground">Waiting Room</p><p className="text-xs text-muted-foreground">Participants need to be admitted</p></div></div>
@@ -139,6 +154,7 @@ export default function CreateMeetingDialog({ open, onOpenChange }: CreateMeetin
                   description: description || null,
                   startTime: startTime.toISOString(),
                   endTime: endTime.toISOString(),
+                  password: password.trim() ? password.trim() : undefined,
                   waitingRoom,
                   allowScreenShare,
                   status: meetingType === "instant" ? "live" : "upcoming",

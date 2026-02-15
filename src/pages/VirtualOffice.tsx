@@ -16,6 +16,8 @@ import { getSocket } from "@/lib/websocket";
 import { usePresence } from "@/hooks/usePresence";
 import { apiGet, apiPatch } from "@/lib/api";
 
+const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
+
 interface Person {
   id: string;
   name: string;
@@ -71,13 +73,15 @@ export default function VirtualOffice() {
           id: u.id,
           name: u.name,
           initials: u.name.split(" ").map((n: string) => n[0]).join(""),
-          status: u.status || "online",
+          status: u.status || "offline",
           currentRoom: u.currentRoom || null,
           activity: u.activity || "Available",
         }));
         setPeople(mapped);
       } catch (err) {
         console.error("Failed to load users:", err);
+        // Set empty array on error to prevent UI issues
+        setPeople([]);
       } finally {
         setLoading(false);
       }
@@ -117,7 +121,12 @@ export default function VirtualOffice() {
   const getRoomPeople = (roomId: string) =>
     people.filter((p) => p.currentRoom === roomId);
 
-  const onlinePeople = people.filter((p) => isUserOnline(p.id));
+  // Combine WebSocket presence with user status from database
+  const onlinePeople = people.filter((p) => {
+    const isOnlineViaPresence = isUserOnline(p.id);
+    const isOnlineViaStatus = p.status === "online";
+    return isOnlineViaPresence || isOnlineViaStatus;
+  });
 
   const moveToRoom = async (roomId: string) => {
     if (!currentUser || moving) return;
@@ -127,6 +136,36 @@ export default function VirtualOffice() {
       await apiPatch(`/users/${currentUser.id}/status`, { currentRoom: roomId });
     } catch (err) {
       console.error("Failed to move to room:", err);
+    } finally {
+      setMoving(false);
+    }
+  };
+
+  const startRoomMeeting = async (room: Room) => {
+    if (!currentUser || moving) return;
+    setMoving(true);
+    try {
+      const res = await fetch(`${API_BASE}/meetings`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: room.name,
+          description: `Meeting started from Virtual Office: ${room.name}`,
+          startTime: new Date().toISOString(),
+          endTime: new Date(Date.now() + 3600000).toISOString(),
+          waitingRoom: false,
+          allowScreenShare: true,
+          status: "live",
+          isInstant: true,
+          hostId: currentUser.id,
+        }),
+      });
+
+      if (!res.ok) throw new Error("Failed to create meeting");
+      const meeting = await res.json();
+      navigate(`/meeting-lobby/${meeting.id}`);
+    } catch (err) {
+      console.error("Failed to start meeting:", err);
     } finally {
       setMoving(false);
     }
@@ -252,14 +291,14 @@ export default function VirtualOffice() {
                       {moving ? "Moving..." : "Move here"}
                     </Button>
                   )}
-                  {room.id.startsWith("meeting") && roomPeople.length === 0 && (
+                  {room.id.startsWith("meeting") && (
                     <Button
                       size="sm"
                       variant="outline"
                       className="w-full mt-2 text-xs h-7 gap-1"
                       onClick={(e) => {
                         e.stopPropagation();
-                        navigate(`/meeting-lobby/${room.id}`);
+                        startRoomMeeting(room);
                       }}
                     >
                       <Plus className="w-3 h-3" /> Start Meeting

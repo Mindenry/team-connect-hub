@@ -56,15 +56,15 @@ export default function Dashboard() {
 
         const [meetingsRes, tasksRes, usersRes, teamsRes, notificationsRes] = await Promise.all([
           apiGet<any[]>("/meetings?status=upcoming").catch(() => []),
-          apiGet<any[]>("/tasks").catch(() => []).then((tasks: any[]) => 
+          apiGet<any[]>("/tasks").catch(() => []).then((tasks: any[]) =>
             Array.isArray(tasks) ? tasks.filter((t: any) => t.status === "todo" || t.status === "in_progress") : []
           ),
           apiGet<any[]>("/users").catch(() => []),
           apiGet<any[]>("/teams").catch(() => []),
           currentUser?.id
-            ? apiGet<any>(`/notifications?userId=${currentUser.id}&read=false`).catch(() => []).then((res: any) => 
-                Array.isArray(res) ? res.length : 0
-              )
+            ? apiGet<any>(`/notifications?userId=${currentUser.id}&read=false`).catch(() => []).then((res: any) =>
+              Array.isArray(res) ? res.length : 0
+            )
             : Promise.resolve(0),
         ]);
 
@@ -73,15 +73,20 @@ export default function Dashboard() {
         const safeUsers = Array.isArray(usersRes) ? usersRes : [];
 
         const upcoming = safeMeetings
-          .filter((m: any) => new Date(m.startTime) >= today && new Date(m.startTime) < tomorrow)
+          .filter((m: any) => {
+            const start = new Date(m.startTime);
+            return start >= today && start < tomorrow;
+          })
+          .sort((a: any, b: any) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime())
           .slice(0, 3)
           .map((m: any) => ({
             id: m.id,
             title: m.title,
             time: new Date(m.startTime).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
             team: m.team?.name || "",
-            participants: 0,
+            participants: m.participants?.length || 0,
             isNow: m.status === "live",
+            meetingCode: m.meetingCode,
           }));
 
         const tasks = safeTasks.slice(0, 4).map((t: any) => ({
@@ -155,7 +160,7 @@ export default function Dashboard() {
         {[
           { label: "New Meeting", icon: Video, action: () => setShowCreateMeeting(true) },
           { label: "New Task", icon: CheckSquare, action: () => setShowCreateTask(true) },
-          { label: "Join by Code", icon: Zap, action: () => {} },
+          { label: "Join by Code", icon: Zap, action: () => { } },
           { label: "Virtual Office", icon: MapPin, href: "/virtual-office" },
         ].map((qa) => (
           qa.href ? (
@@ -225,22 +230,22 @@ export default function Dashboard() {
               <div className="text-sm text-muted-foreground">No upcoming meetings</div>
             ) : (
               upcomingMeetings.map((meeting, i) => (
-              <motion.div key={meeting.id} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.15 + i * 0.05 }}
-                className="flex items-center gap-3 p-2.5 rounded-lg border bg-card hover:bg-muted/30 transition-all">
-                <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                  <Video className="w-4 h-4 text-primary" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <p className="text-sm font-medium text-foreground truncate">{meeting.title}</p>
-                    {meeting.isNow && <Badge className="bg-success text-success-foreground text-[10px] h-4 animate-pulse">LIVE</Badge>}
+                <motion.div key={meeting.id} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.15 + i * 0.05 }}
+                  className="flex items-center gap-3 p-2.5 rounded-lg border bg-card hover:bg-muted/30 transition-all">
+                  <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                    <Video className="w-4 h-4 text-primary" />
                   </div>
-                  <p className="text-xs text-muted-foreground">{meeting.time} · {meeting.team || "Personal"} · {meeting.participants}p</p>
-                </div>
-                <Button size="sm" variant={meeting.isNow ? "default" : "outline"} className={meeting.isNow ? "gradient-primary text-xs h-7" : "text-xs h-7"} asChild>
-                  <Link to="/meeting-room">{meeting.isNow ? "Join" : "View"}</Link>
-                </Button>
-              </motion.div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium text-foreground truncate">{meeting.title}</p>
+                      {meeting.isNow && <Badge className="bg-success text-success-foreground text-[10px] h-4 animate-pulse">LIVE</Badge>}
+                    </div>
+                    <p className="text-xs text-muted-foreground">{meeting.time} · {meeting.team || "Personal"} · {meeting.participants}p</p>
+                  </div>
+                  <Button size="sm" variant={meeting.isNow ? "default" : "outline"} className={meeting.isNow ? "gradient-primary text-xs h-7" : "text-xs h-7"} asChild>
+                    <Link to="/meeting-room">{meeting.isNow ? "Join" : "View"}</Link>
+                  </Button>
+                </motion.div>
               ))
             )}
           </CardContent>
@@ -280,7 +285,11 @@ export default function Dashboard() {
               <div className="text-sm text-muted-foreground">No team members</div>
             ) : (
               onlineMembers.map((member, i) => {
-                const memberOnline = isUserOnline(member.id);
+                // Combine WebSocket presence with user status from database
+                const memberOnlineViaPresence = isUserOnline(member.id);
+                const memberOnlineViaStatus = member.status === "online";
+                const memberOnline = memberOnlineViaPresence || memberOnlineViaStatus;
+
                 const roomNames: Record<string, string> = {
                   workspace: "💻 Workspace",
                   "meeting-1": "🎥 Meeting A",
@@ -290,20 +299,20 @@ export default function Dashboard() {
                   phone: "📞 Phone",
                 };
                 return (
-              <motion.div key={member.name} initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.2 + i * 0.04 }}
-                className="flex items-center gap-2.5">
-                <div className="relative">
-                  <Avatar className="h-7 w-7"><AvatarFallback className="bg-primary/10 text-primary text-[10px]">{member.initials}</AvatarFallback></Avatar>
-                  <StatusIndicator status={memberOnline ? "online" : "offline"} className="absolute -bottom-0.5 -right-0.5 border-card" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-medium text-foreground truncate">{member.name}</p>
-                  <p className="text-[10px] text-muted-foreground">{member.activity}</p>
-                </div>
-                <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
-                  {member.room ? (roomNames[member.room] || member.room) : (memberOnline ? "🟢 Online" : "⚫ Offline")}
-                </span>
-              </motion.div>
+                  <motion.div key={member.name} initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.2 + i * 0.04 }}
+                    className="flex items-center gap-2.5">
+                    <div className="relative">
+                      <Avatar className="h-7 w-7"><AvatarFallback className="bg-primary/10 text-primary text-[10px]">{member.initials}</AvatarFallback></Avatar>
+                      <StatusIndicator status={memberOnline ? "online" : "offline"} className="absolute -bottom-0.5 -right-0.5 border-card" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium text-foreground truncate">{member.name}</p>
+                      <p className="text-[10px] text-muted-foreground">{member.activity}</p>
+                    </div>
+                    <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                      {member.room ? (roomNames[member.room] || member.room) : (memberOnline ? "🟢 Online" : "⚫ Offline")}
+                    </span>
+                  </motion.div>
                 );
               })
             )}

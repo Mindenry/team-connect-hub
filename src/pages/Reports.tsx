@@ -30,6 +30,8 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { apiGet } from "@/lib/api";
 import { auth } from "@/lib/auth";
 
+const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
+
 export default function Reports() {
   const currentUser = auth.getUser();
   const [meetingData, setMeetingData] = useState<any[]>([]);
@@ -99,7 +101,7 @@ export default function Reports() {
         apiGet<any[]>("/meetings").catch(() => []),
         apiGet<any[]>("/tasks").catch(() => []),
       ]);
-      
+
       if (!Array.isArray(meetings) || !Array.isArray(tasks)) {
         throw new Error("Invalid response format");
       }
@@ -172,11 +174,6 @@ export default function Reports() {
       setLoading(false);
     }
   };
-
-  useEffect(() => {
-    loadData();
-    loadTeams();
-  }, []);
   return (
     <div className="flex flex-col h-screen">
       <div className="flex items-center justify-between px-6 h-14 border-b shrink-0">
@@ -186,7 +183,41 @@ export default function Reports() {
             <Calendar className="w-4 h-4 mr-2" />
             This Week
           </Button>
-          <Button variant="outline" size="sm">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={async () => {
+              try {
+                const [meetingReport, taskReport] = await Promise.all([
+                  fetch(`${API_BASE}/reports/meetings`).then((r) => r.json()),
+                  fetch(`${API_BASE}/reports/tasks`).then((r) => r.json()),
+                ]);
+
+                // Convert to CSV
+                const meetingCSV = [
+                  ["Meeting Title", "Start Time", "End Time", "Duration (min)", "Host", "Participants"],
+                  ...(meetingReport.meetings || []).map((m: any) => [
+                    m.title,
+                    m.startTime,
+                    m.endTime,
+                    m.duration,
+                    m.host,
+                    m.participants,
+                  ]),
+                ].map(row => row.join(",")).join("\n");
+
+                const blob = new Blob([meetingCSV], { type: "text/csv" });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `meeting-report-${new Date().toISOString().split("T")[0]}.csv`;
+                a.click();
+                URL.revokeObjectURL(url);
+              } catch (err) {
+                console.error("Export failed:", err);
+              }
+            }}
+          >
             <Download className="w-4 h-4 mr-2" />
             Export CSV
           </Button>
@@ -237,10 +268,10 @@ export default function Reports() {
                   ) : (
                     <ResponsiveContainer width="100%" height={240}>
                       <BarChart data={meetingData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                      <XAxis dataKey="day" tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }} />
-                      <YAxis tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }} />
-                      <Tooltip />
+                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                        <XAxis dataKey="day" tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }} />
+                        <YAxis tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }} />
+                        <Tooltip />
                         <Bar dataKey="meetings" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
                       </BarChart>
                     </ResponsiveContainer>
@@ -257,10 +288,10 @@ export default function Reports() {
                   ) : (
                     <ResponsiveContainer width="100%" height={240}>
                       <LineChart data={meetingData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                      <XAxis dataKey="day" tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }} />
-                      <YAxis tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }} />
-                      <Tooltip />
+                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                        <XAxis dataKey="day" tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }} />
+                        <YAxis tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }} />
+                        <Tooltip />
                         <Line type="monotone" dataKey="duration" stroke="hsl(var(--primary))" strokeWidth={2} />
                       </LineChart>
                     </ResponsiveContainer>
@@ -304,14 +335,14 @@ export default function Reports() {
                     <div className="text-muted-foreground">No team data</div>
                   ) : (
                     teamWorkload.map((team) => (
-                    <div key={team.team} className="flex items-center gap-3">
-                      <span className="text-sm text-foreground w-28">{team.team}</span>
-                      <div className="flex-1 bg-muted rounded-full h-2">
-                        <div className="bg-primary h-2 rounded-full" style={{ width: `${(team.tasks / 25) * 100}%` }} />
-                      </div>
-                      <span className="text-sm text-foreground w-8 text-right">{team.tasks}</span>
-                      {team.overdue > 0 && (
-                        <Badge variant="destructive" className="text-xs">{team.overdue} overdue</Badge>
+                      <div key={team.team} className="flex items-center gap-3">
+                        <span className="text-sm text-foreground w-28">{team.team}</span>
+                        <div className="flex-1 bg-muted rounded-full h-2">
+                          <div className="bg-primary h-2 rounded-full" style={{ width: `${(team.tasks / 25) * 100}%` }} />
+                        </div>
+                        <span className="text-sm text-foreground w-8 text-right">{team.tasks}</span>
+                        {team.overdue > 0 && (
+                          <Badge variant="destructive" className="text-xs">{team.overdue} overdue</Badge>
                         )}
                       </div>
                     ))

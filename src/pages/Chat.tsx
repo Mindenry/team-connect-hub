@@ -15,11 +15,29 @@ import { Separator } from "@/components/ui/separator";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import StatusIndicator from "@/components/shared/StatusIndicator";
 import CreateChannelDialog from "@/components/dialogs/CreateChannelDialog";
+import DeleteChannelDialog from "@/components/dialogs/DeleteChannelDialog";
+import EditChannelDialog from "@/components/dialogs/EditChannelDialog";
+import InviteUserDialog from "@/components/dialogs/InviteUserDialog";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Mic, Headphones, Settings, Trash2, LogOut, ChevronDown } from "lucide-react";
 import { slidePanel } from "@/components/shared/PageTransition";
 import { auth } from "@/lib/auth";
 import { getSocket } from "@/lib/websocket";
 import { usePresence } from "@/hooks/usePresence";
-import { apiGet, apiPost, apiFetch } from "@/lib/api";
+import { apiGet, apiPost, apiFetch, apiDelete, apiPatch } from "@/lib/api";
 
 interface Channel {
   id: string;
@@ -56,15 +74,65 @@ const COMMON_EMOJIS = [
   "😢", "😡", "🤯", "🥳", "🤝", "💪", "👀", "🎯", "🚀", "⭐"
 ];
 
+const getInitials = (name: string) => name.split(" ").map((n) => n[0]).join("").substring(0, 2).toUpperCase();
+const formatTime = (date: string) => new Date(date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+const formatDateHeader = (date: string) => new Date(date).toLocaleDateString([], { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+
+const apiLoadDmHistory = (userId: string): Message[] => {
+  try {
+    const history = localStorage.getItem(`dm_history_${userId}`);
+    return history ? JSON.parse(history) : [];
+  } catch (e) {
+    return [];
+  }
+};
+
+const apiSaveDmHistory = (userId: string, messages: Message[]) => {
+  try {
+    localStorage.setItem(`dm_history_${userId}`, JSON.stringify(messages));
+  } catch (e) {
+    console.error("Failed to save DM history", e);
+  }
+};
+
+const parseMentionsText = (text: string): string[] => {
+  const mentionRegex = /@(\w+)/g;
+  const matches = text.match(mentionRegex);
+  if (!matches) return [];
+  return matches.map(m => m.substring(1));
+};
+
+const isSameDay = (a: string, b: string) => {
+  const da = new Date(a);
+  const db = new Date(b);
+  return (
+    da.getFullYear() === db.getFullYear() &&
+    da.getMonth() === db.getMonth() &&
+    da.getDate() === db.getDate()
+  );
+};
+
 export default function Chat() {
   const isMobile = useIsMobile();
   const [searchParams, setSearchParams] = useSearchParams();
   const currentUser = auth.getUser();
   const { isUserOnline } = usePresence();
+
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
   const [activeChannel, setActiveChannel] = useState<string | null>(null);
   const [messageInput, setMessageInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<Message[]>([]);
+  const [showSearchResults, setShowSearchResults] = useState(false);
   const [showCreateChannel, setShowCreateChannel] = useState(false);
+  const [showDeleteChannel, setShowDeleteChannel] = useState(false);
+  const [showEditChannel, setShowEditChannel] = useState(false);
+  const [showInviteUser, setShowInviteUser] = useState(false);
+  const [channelToDelete, setChannelToDelete] = useState<Channel | null>(null);
+  const [channelToEdit, setChannelToEdit] = useState<Channel | null>(null);
   const [showPinned, setShowPinned] = useState(false);
   const [showMembers, setShowMembers] = useState(false);
   const [showChannelList, setShowChannelList] = useState(!isMobile);
@@ -74,9 +142,6 @@ export default function Chat() {
   const [allUsers, setAllUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
 
   // DM state
   const [activeDm, setActiveDm] = useState<string | null>(null);
@@ -88,16 +153,30 @@ export default function Chat() {
   const [mentionQuery, setMentionQuery] = useState("");
   const [mentionStartPos, setMentionStartPos] = useState<number | null>(null);
   const [attachments, setAttachments] = useState<Array<{ url: string; name: string; type: string }>>([]);
-  
   // Reactions and Threads state
   const [messageReactions, setMessageReactions] = useState<Record<string, Array<{ emoji: string; count: number; users: Array<{ id: string; name: string }> }>>>({});
   const [showReactionPicker, setShowReactionPicker] = useState<{ messageId: string; x: number; y: number } | null>(null);
   const [activeThread, setActiveThread] = useState<string | null>(null);
   const [threadReplies, setThreadReplies] = useState<Record<string, Message[]>>({});
-  
+
   // Typing indicators
   const [typingUsers, setTypingUsers] = useState<Record<string, Set<string>>>({});
   const typingTimeoutRef = useRef<Record<string, NodeJS.Timeout>>({});
+
+  const [replyingTo, setReplyingTo] = useState<Message | null>(null);
+  const [showSearchBar, setShowSearchBar] = useState(false);
+  const [channelSearchQuery, setChannelSearchQuery] = useState("");
+
+  const handleSearch = async (query: string) => {
+    if (query.length < 3) return;
+    try {
+      const results = await apiGet<Message[]>(`/messages/search?query=${encodeURIComponent(query)}&limit=20`);
+      setSearchResults(results);
+      setShowSearchResults(true);
+    } catch (err) {
+      console.error("Search failed:", err);
+    }
+  };
 
   // Load channels from API
   useEffect(() => {
@@ -311,6 +390,26 @@ export default function Chat() {
     socket.on("thread:created", handleThreadCreated);
     socket.on("thread:reply:added", handleThreadReplyAdded);
 
+    // Channel events
+    const handleChannelCreated = (channel: any) => {
+      setChannels((prev) => [...prev, channel as Channel]);
+    };
+
+    const handleChannelUpdated = (updatedChannel: any) => {
+      setChannels((prev) => prev.map((c) => c.id === updatedChannel.id ? (updatedChannel as Channel) : c));
+    };
+
+    const handleChannelDeleted = (channelId: string) => {
+      setChannels((prev) => prev.filter((c) => c.id !== channelId));
+      if (activeChannel === channelId) {
+        setActiveChannel(null);
+      }
+    };
+
+    socket.on("channel:created", handleChannelCreated);
+    socket.on("channel:updated", handleChannelUpdated);
+    socket.on("channel:deleted", handleChannelDeleted);
+
     return () => {
       socket.off("message:created", handleNewMessage);
       socket.off("message:updated", handleMessageUpdated);
@@ -319,8 +418,12 @@ export default function Chat() {
       socket.off("reaction:removed", handleReactionRemoved);
       socket.off("thread:created", handleThreadCreated);
       socket.off("thread:reply:added", handleThreadReplyAdded);
+      socket.off("channel:created", handleChannelCreated);
+      socket.off("channel:updated", handleChannelUpdated);
+      socket.off("channel:deleted", handleChannelDeleted);
     };
   }, [activeChannel, activeDm, currentUser]);
+
 
   // Load reactions for messages
   const loadReactionsForMessage = async (messageId: string) => {
@@ -333,6 +436,7 @@ export default function Chat() {
   };
 
   // Always work with an array for rendering messages to avoid runtime errors
+  const currentDmContact = dmContacts.find(c => c.id === activeDm);
   const rawMessages = activeDm ? dmMessages : messages;
   const displayMessages = Array.isArray(rawMessages) ? rawMessages : [];
 
@@ -458,22 +562,22 @@ export default function Chat() {
   // Typing indicator handler
   const handleTyping = useCallback(() => {
     if (!currentUser || (!activeChannel && !activeDm)) return;
-    
+
     const channelId = activeChannel || activeDm || '';
     const socket = getSocket();
-    
+
     // Clear existing timeout
     if (typingTimeoutRef.current[channelId]) {
       clearTimeout(typingTimeoutRef.current[channelId]);
     }
-    
+
     // Emit typing started
     socket.emit('typing:start', {
       channelId,
       userId: currentUser.id,
       userName: currentUser.name,
     });
-    
+
     // Stop typing after 3 seconds
     typingTimeoutRef.current[channelId] = setTimeout(() => {
       socket.emit('typing:stop', { channelId, userId: currentUser.id });
@@ -490,7 +594,7 @@ export default function Chat() {
     const cursorPos = e.target.selectionStart || 0;
     const textBeforeCursor = value.slice(0, cursorPos);
     const lastAtIndex = textBeforeCursor.lastIndexOf('@');
-    
+
     if (lastAtIndex !== -1) {
       const textAfterAt = textBeforeCursor.slice(lastAtIndex + 1);
       if (!textAfterAt.includes(' ') && !textAfterAt.includes('\n')) {
@@ -518,8 +622,8 @@ export default function Chat() {
   };
 
   // Filter users for mention picker
-  const mentionableUsers = (Array.isArray(allUsers) ? allUsers : []).filter(u => 
-    u.id !== currentUser?.id && 
+  const mentionableUsers = (Array.isArray(allUsers) ? allUsers : []).filter(u =>
+    u.id !== currentUser?.id &&
     u.name.toLowerCase().includes(mentionQuery.toLowerCase())
   ).slice(0, 5);
 
@@ -583,11 +687,13 @@ export default function Chat() {
       await apiPost(`/channels/${activeChannel}/messages`, {
         text: messageText,
         senderId: currentUser.id,
+        replyToId: replyingTo?.id || undefined,
         attachments: attachments.length > 0 ? attachments : undefined,
         mentions: mentions.length > 0 ? mentions : undefined,
       });
       setMessageInput("");
       setAttachments([]);
+      setReplyingTo(null);
     } catch (err) {
       console.error("Failed to send message:", err);
     } finally {
@@ -657,33 +763,10 @@ export default function Chat() {
     }
   };
 
-  const formatTime = (dateStr: string) => {
-    return new Date(dateStr).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
-  };
 
-  const formatDateHeader = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-      weekday: "short",
-    });
-  };
-
-  const isSameDay = (a: string, b: string) => {
-    const da = new Date(a);
-    const db = new Date(b);
-    return (
-      da.getFullYear() === db.getFullYear() &&
-      da.getMonth() === db.getMonth() &&
-      da.getDate() === db.getDate()
-    );
-  };
-
-  const getInitials = (name: string) => name.split(" ").map((n) => n[0]).join("");
 
   const currentChannel = channels.find((c) => c.id === activeChannel);
-  const activeDmContact = dmContacts.find((d: any) => d.id === activeDm);
+
   const groupedChannels = channels.reduce<Record<string, Channel[]>>((acc, ch) => {
     const teamName = ch.team?.name || "General";
     if (!acc[teamName]) acc[teamName] = [];
@@ -702,93 +785,135 @@ export default function Chat() {
   const membersOnline = safeAllUsers.filter((u) => isUserOnline(u.id));
   const membersOffline = safeAllUsers.filter((u) => !isUserOnline(u.id));
 
+  // Delete channel handler
+  const handleDeleteChannel = async () => {
+    if (!channelToDelete) return;
+
+    try {
+      await apiDelete(`/channels/${channelToDelete.id}`);
+      setChannels(prev => prev.filter(c => c.id !== channelToDelete.id));
+      if (activeChannel === channelToDelete.id) {
+        setActiveChannel(null);
+      }
+      setShowDeleteChannel(false);
+      setChannelToDelete(null);
+    } catch (err) {
+      console.error("Failed to delete channel:", err);
+    }
+  };
+
+  const getConnectionStatusText = (isOnline: boolean) => {
+    return isOnline ? "Online" : "Offline";
+  };
+
+  // Message action handlers
+  const handlePinMessage = async (msg: Message) => {
+    try {
+      await apiPatch(`/messages/${msg.id}`, { isPinned: !msg.isPinned });
+      setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, isPinned: !m.isPinned } : m));
+    } catch (err) {
+      console.error("Failed to pin message:", err);
+    }
+  };
+
+  const handleDeleteMessage = async (msg: Message) => {
+    try {
+      await apiDelete(`/messages/${msg.id}`);
+      setMessages(prev => prev.filter(m => m.id !== msg.id));
+    } catch (err) {
+      console.error("Failed to delete message:", err);
+    }
+  };
+
+  const handleReplyMessage = (msg: Message) => {
+    setReplyingTo(msg);
+    inputRef.current?.focus();
+  };
+
+  const handleChannelSearch = async (query: string) => {
+    setChannelSearchQuery(query);
+    if (query.length < 2) return;
+    try {
+      const params = new URLSearchParams({ query, limit: "30" });
+      if (activeChannel) params.append("channelId", activeChannel);
+      const data = await apiGet<any[]>(`/messages/search?${params}`);
+      setSearchResults(data);
+      setShowSearchResults(true);
+    } catch (err) {
+      console.error("Search failed:", err);
+    }
+  };
+
   return (
     <div className="flex h-screen bg-background">
       <CreateChannelDialog open={showCreateChannel} onOpenChange={setShowCreateChannel} />
+      <DeleteChannelDialog
+        open={showDeleteChannel}
+        onOpenChange={setShowDeleteChannel}
+        onConfirm={handleDeleteChannel}
+        channelName={channelToDelete?.name || ""}
+      />
+      <EditChannelDialog
+        open={showEditChannel}
+        onOpenChange={setShowEditChannel}
+        channel={channelToEdit}
+        onChannelUpdated={(updated) => {
+          setChannels(prev => prev.map(c => c.id === updated.id ? (updated as unknown as Channel) : c));
+        }}
+      />
+      <InviteUserDialog
+        open={showInviteUser}
+        onOpenChange={setShowInviteUser}
+      />
 
-      {/* Channel List */}
-      <div className={cn("bg-card border-r flex flex-col shrink-0 transition-all", isMobile ? (showChannelList ? "w-full absolute inset-0 z-20" : "hidden") : "w-60")}>
-        {isMobile && (
-          <div className="flex items-center justify-between px-3 py-2 border-b">
-            <span className="text-sm font-medium text-foreground">Channels</span>
-            <Button variant="ghost" size="sm" onClick={() => setShowChannelList(false)} className="text-xs">Close</Button>
-          </div>
-        )}
-        <div className="px-3 py-2 border-b flex flex-col gap-2">
-          <div className="flex items-center justify-between">
-            <div className="flex flex-col">
-              <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Team Chat
-              </span>
-              <span className="text-sm font-medium text-foreground">
-                {currentChannel?.team?.name || "All channels"}
-              </span>
-            </div>
-            <Button
-              variant="outline"
-              size="icon"
-              className="h-7 w-7"
-              onClick={() => setShowCreateChannel(true)}
-            >
+      <div className={cn("bg-card border-r flex flex-col shrink-0 transition-all z-20", isMobile ? (showChannelList ? "w-full absolute inset-0" : "hidden") : "w-60")}>
+        <div className="mt-4">
+          <div className="flex items-center justify-between px-1 mb-0.5 group">
+            <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground pl-4">Direct Messages</span>
+            <button className="text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity">
               <Plus className="w-3.5 h-3.5" />
-            </Button>
+            </button>
           </div>
-          <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              placeholder="Search messages..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9 h-8 text-xs"
-            />
-          </div>
-        </div>
-        <div className="flex-1 overflow-y-auto scrollbar-thin p-2 space-y-3">
-          {Object.entries(groupedChannels).map(([team, chs]) => (
-            <div key={team}>
-              <div className="flex items-center justify-between px-2 py-1">
-                <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{team}</span>
-                <button onClick={() => setShowCreateChannel(true)} className="text-muted-foreground hover:text-foreground"><Plus className="w-3.5 h-3.5" /></button>
-              </div>
-              {chs.map((ch) => {
-                const Icon = channelIcons[ch.type] || Hash;
-                return (
-                  <button key={ch.id} onClick={() => selectChannel(ch.id)}
-                    className={cn("w-full flex items-center gap-2 px-3 py-1.5 rounded-md text-sm transition-colors",
-                      activeChannel === ch.id ? "bg-chat-active text-primary font-medium" : "text-muted-foreground hover:bg-chat-hover hover:text-foreground"
-                    )}>
-                    <Icon className="w-4 h-4 shrink-0" />
-                    <span className="flex-1 text-left truncate">{ch.name}</span>
-                  </button>
-                );
-              })}
-            </div>
-          ))}
-          <div>
-            <div className="flex items-center justify-between px-2 py-1">
-              <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Direct Messages</span>
-              <button className="text-muted-foreground hover:text-foreground"><Plus className="w-3.5 h-3.5" /></button>
-            </div>
+          <div className="space-y-[1px]">
             {dmContactsWithStatus.map((dm) => (
               <button
                 key={dm.id}
                 onClick={() => selectDm(dm.id)}
                 className={cn(
-                  "w-full flex items-center gap-2 px-3 py-1.5 rounded-md text-sm transition-colors",
+                  "w-full flex items-center gap-2 px-2 py-[5px] rounded-md text-sm transition-colors",
                   activeDm === dm.id
-                    ? "bg-chat-active text-primary font-medium"
-                    : "text-muted-foreground hover:bg-chat-hover hover:text-foreground"
+                    ? "bg-accent text-accent-foreground font-medium"
+                    : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
                 )}
               >
                 <div className="relative">
                   <Avatar className="h-6 w-6"><AvatarFallback className="bg-primary/10 text-primary text-[10px]">{dm.initials}</AvatarFallback></Avatar>
-                  <StatusIndicator status={dm.status as "online" | "offline" | "busy" | "away"} className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 border-card" />
+                  <StatusIndicator status={dm.status as "online" | "offline" | "busy" | "away"} className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 border-card ring-2 ring-card" />
                 </div>
-                <div className="flex-1 text-left min-w-0">
-                  <span className="block truncate">{dm.name}</span>
-                </div>
+                <span className="flex-1 text-left truncate opacity-90">{dm.name}</span>
               </button>
             ))}
+          </div>
+        </div>
+
+        {/* User Bar */}
+        <div className="p-2 bg-muted/40 border-t flex items-center gap-2 shrink-0">
+          <div className="relative group cursor-pointer hover:opacity-80 transition-opacity">
+            <Avatar className="h-8 w-8">
+              <AvatarFallback className="bg-primary text-primary-foreground text-xs">
+                {currentUser?.name ? getInitials(currentUser.name) : "ME"}
+              </AvatarFallback>
+            </Avatar>
+            <StatusIndicator status="online" className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 border-card ring-2 ring-card" />
+          </div>
+          <div className="flex-1 min-w-0 flex flex-col -space-y-0.5">
+            <span className="text-sm font-semibold truncate">{currentUser?.name || "Guest"}</span>
+            <span className="text-xs text-muted-foreground truncate">{getConnectionStatusText(!!currentUser)}</span>
+          </div>
+          <div className="flex items-center">
+            <Button variant="ghost" size="icon" className="h-7 w-7 rounded-sm"><Mic className="w-4 h-4" /></Button>
+            <Button variant="ghost" size="icon" className="h-7 w-7 rounded-sm"><Headphones className="w-4 h-4" /></Button>
+            <Button variant="ghost" size="icon" className="h-7 w-7 rounded-sm"><Settings className="w-4 h-4" /></Button>
           </div>
         </div>
       </div>
@@ -797,16 +922,16 @@ export default function Chat() {
       <div className="flex-1 flex flex-col">
         <div className="flex items-center justify-between px-4 h-12 border-b shrink-0">
           <div className="flex items-center gap-2">
-            {isMobile && (
+            {isMobile &&
               <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setShowChannelList(true)}><Hash className="w-4 h-4" /></Button>
-            )}
+            }
             {activeDm ? (
               <>
                 <div className="relative">
-                  <Avatar className="h-6 w-6"><AvatarFallback className="bg-primary/10 text-primary text-[10px]">{activeDmContact?.initials}</AvatarFallback></Avatar>
-                  <StatusIndicator status={activeDmContact?.status || "offline"} className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 border-card" />
+                  <Avatar className="h-6 w-6"><AvatarFallback className="bg-primary/10 text-primary text-[10px]">{currentDmContact?.initials}</AvatarFallback></Avatar>
+                  <StatusIndicator status={currentDmContact?.status || "offline"} className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 border-card" />
                 </div>
-                <h2 className="font-medium text-foreground">{activeDmContact?.name || "Direct Message"}</h2>
+                <h2 className="font-medium text-foreground">{currentDmContact?.name || "Direct Message"}</h2>
                 <Badge variant="secondary" className="text-xs">DM</Badge>
               </>
             ) : (
@@ -821,8 +946,47 @@ export default function Chat() {
           <div className="flex items-center gap-1">
             <Button variant={showPinned ? "default" : "ghost"} size="icon" className="h-8 w-8 hidden md:flex" onClick={() => { setShowPinned(!showPinned); setShowMembers(false); }}><Pin className="w-4 h-4" /></Button>
             <Button variant={showMembers ? "default" : "ghost"} size="icon" className="h-8 w-8 hidden md:flex" onClick={() => { setShowMembers(!showMembers); setShowPinned(false); }}><Users className="w-4 h-4" /></Button>
-            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground"><Search className="w-4 h-4" /></Button>
+            <Button variant={showSearchBar ? "default" : "ghost"} size="icon" className="h-8 w-8 text-muted-foreground" onClick={() => { setShowSearchBar(!showSearchBar); if (showSearchBar) { setChannelSearchQuery(""); setShowSearchResults(false); } }}><Search className="w-4 h-4" /></Button>
           </div>
+          {/* Inline Search Bar */}
+          <AnimatePresence>
+            {showSearchBar && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: "auto", opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                className="border-b overflow-hidden"
+              >
+                <div className="px-4 py-2 flex items-center gap-2">
+                  <Search className="w-4 h-4 text-muted-foreground shrink-0" />
+                  <Input
+                    value={channelSearchQuery}
+                    onChange={(e) => handleChannelSearch(e.target.value)}
+                    placeholder="Search messages in this channel..."
+                    className="border-0 bg-transparent shadow-none focus-visible:ring-0 h-8"
+                    autoFocus
+                  />
+                  <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={() => { setShowSearchBar(false); setChannelSearchQuery(""); setShowSearchResults(false); }}>
+                    <X className="w-4 h-4" />
+                  </Button>
+                </div>
+                {showSearchResults && searchResults.length > 0 && (
+                  <div className="max-h-48 overflow-y-auto px-4 pb-2 space-y-1">
+                    {searchResults.map((r) => (
+                      <div key={r.id} className="p-2 rounded hover:bg-muted/50 cursor-pointer text-sm" onClick={() => { setShowSearchBar(false); setShowSearchResults(false); setChannelSearchQuery(""); }}>
+                        <span className="font-medium text-xs text-primary">{r.sender.name}</span>
+                        <span className="text-xs text-muted-foreground ml-2">{formatTime(r.createdAt)}</span>
+                        <p className="text-xs text-foreground truncate">{r.text}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {showSearchResults && searchResults.length === 0 && channelSearchQuery.length >= 2 && (
+                  <div className="px-4 pb-2 text-xs text-muted-foreground">No results found</div>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
 
         <div className="flex-1 flex overflow-hidden">
@@ -834,7 +998,7 @@ export default function Chat() {
               ) : !currentChannel && !activeDm ? (
                 <div className="text-sm text-muted-foreground p-4">Select a channel or contact to start chatting</div>
               ) : displayMessages.length === 0 ? (
-                <div className="text-sm text-muted-foreground p-4">{activeDm ? `Start a conversation with ${activeDmContact?.name || "this user"}` : "No messages yet. Start the conversation!"}</div>
+                <div className="text-sm text-muted-foreground p-4">{activeDm ? `Start a conversation with ${currentDmContact?.name || "this user"}` : "No messages yet. Start the conversation!"}</div>
               ) : (
                 displayMessages.map((msg, i) => {
                   const prev = i > 0 ? displayMessages[i - 1] : null;
@@ -887,10 +1051,8 @@ export default function Chat() {
                           {msg.replyTo && (
                             <div className="flex items-center gap-1 text-xs text-primary mb-0.5 bg-primary/5 px-2 py-0.5 rounded w-fit">
                               <Reply className="w-3 h-3" />
-                              <span>
-                                {msg.replyTo.sender.name}:{" "}
-                                {msg.replyTo.text.slice(0, 50)}
-                              </span>
+                              <span className="font-medium">{msg.replyTo.sender.name}:</span>
+                              <span className="truncate max-w-[200px]">{msg.replyTo.text}</span>
                             </div>
                           )}
                           {msg.text && (
@@ -931,7 +1093,7 @@ export default function Chat() {
                               ))}
                             </div>
                           )}
-                          
+
                           {/* Reactions */}
                           {messageReactions[msg.id] && messageReactions[msg.id].length > 0 && (
                             <div className="flex flex-wrap gap-1 mt-1.5">
@@ -978,7 +1140,7 @@ export default function Chat() {
                               </Popover>
                             </div>
                           )}
-                          
+
                           {/* Thread indicator */}
                           {(msg as any)._count?.replies > 0 && (
                             <button
@@ -990,14 +1152,13 @@ export default function Chat() {
                             </button>
                           )}
                         </div>
-                        <div className="opacity-0 group-hover:opacity-100 flex items-start gap-0.5 transition-opacity">
+
+                        {/* Merged Message Actions */}
+                        <div className="opacity-0 group-hover:opacity-100 flex items-center gap-0.5 transition-opacity bg-card border rounded-md shadow-sm -mt-3 mr-2 p-0.5 h-fit">
+                          {/* Emoji Popover */}
                           <Popover>
                             <PopoverTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-7 w-7 text-muted-foreground"
-                              >
+                              <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-foreground" title="Add Reaction">
                                 <Smile className="w-3.5 h-3.5" />
                               </Button>
                             </PopoverTrigger>
@@ -1006,9 +1167,7 @@ export default function Chat() {
                                 {COMMON_EMOJIS.map((emoji) => (
                                   <button
                                     key={emoji}
-                                    onClick={() => {
-                                      handleAddReaction(msg.id, emoji);
-                                    }}
+                                    onClick={() => handleAddReaction(msg.id, emoji)}
                                     className="p-1.5 hover:bg-muted rounded text-lg transition-colors"
                                   >
                                     {emoji}
@@ -1017,28 +1176,24 @@ export default function Chat() {
                               </div>
                             </PopoverContent>
                           </Popover>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7 text-muted-foreground"
-                            onClick={() => handleCreateThread(msg.id)}
-                          >
-                            <MessageSquare className="w-3.5 h-3.5" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7 text-muted-foreground"
-                          >
+
+                          <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-primary" title="Reply" onClick={() => handleReplyMessage(msg)}>
                             <Reply className="w-3.5 h-3.5" />
                           </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7 text-muted-foreground"
-                          >
-                            <MoreHorizontal className="w-3.5 h-3.5" />
+
+                          <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-primary" title="Thread" onClick={() => handleCreateThread(msg.id)}>
+                            <MessageSquare className="w-3.5 h-3.5" />
                           </Button>
+
+                          <Button variant="ghost" size="icon" className={cn("h-6 w-6", msg.isPinned ? "text-warning" : "text-muted-foreground hover:text-warning")} title={msg.isPinned ? "Unpin" : "Pin"} onClick={() => handlePinMessage(msg)}>
+                            <Pin className="w-3.5 h-3.5" />
+                          </Button>
+
+                          {msg.senderId === currentUser?.id && (
+                            <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive" title="Delete" onClick={() => handleDeleteMessage(msg)}>
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </Button>
+                          )}
                         </div>
                       </motion.div>
                     </div>
@@ -1046,22 +1201,37 @@ export default function Chat() {
                 })
               )}
               {/* Typing indicator */}
-              {(() => {
-                const channelId = activeChannel || activeDm || '';
-                const typing = typingUsers[channelId];
-                if (typing && typing.size > 0) {
-                  const names = Array.from(typing);
-                  return (
-                    <div className="px-4 py-1 text-xs text-muted-foreground italic animate-pulse">
-                      {names.length === 1 ? `${names[0]} is typing...` : `${names.length} people are typing...`}
-                    </div>
-                  );
-                }
-                return null;
-              })()}
+              {
+                (() => {
+                  const channelId = activeChannel || activeDm || '';
+                  const typing = typingUsers[channelId];
+                  if (typing && typing.size > 0) {
+                    const names = Array.from(typing);
+                    return (
+                      <div className="px-4 py-1 text-xs text-muted-foreground italic animate-pulse">
+                        {names.length === 1 ? `${names[0]} is typing...` : `${names.length} people are typing...`}
+                      </div>
+                    );
+                  }
+                  return null;
+                })()
+              }
               <div ref={messagesEndRef} />
-            </div>
+            </div >
             <div className="p-4 border-t">
+              {/* Reply Banner */}
+              {replyingTo && (
+                <div className="mb-2 flex items-center gap-2 bg-primary/5 border-l-2 border-primary px-3 py-2 rounded-r-lg">
+                  <Reply className="w-4 h-4 text-primary shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <span className="text-xs font-medium text-primary">{replyingTo.sender.name}</span>
+                    <p className="text-xs text-muted-foreground truncate">{replyingTo.text}</p>
+                  </div>
+                  <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={() => setReplyingTo(null)}>
+                    <X className="w-3 h-3" />
+                  </Button>
+                </div>
+              )}
               {/* Attachments preview */}
               {attachments.length > 0 && (
                 <div className="mb-2 flex flex-wrap gap-2">
@@ -1081,7 +1251,7 @@ export default function Chat() {
                   ))}
                 </div>
               )}
-              
+
               <div className="relative flex items-center gap-2 bg-muted rounded-lg px-3 py-2">
                 <Button
                   variant="ghost"
@@ -1097,7 +1267,7 @@ export default function Chat() {
                     value={messageInput}
                     onChange={handleInputChange}
                     onKeyDown={handleKeyDown}
-                    placeholder={activeDm ? `Message ${activeDmContact?.name || "user"}...` : `Message #${currentChannel?.name || "channel"}...`}
+                    placeholder={activeDm ? `Message ${currentDmContact?.name || "user"}...` : `Message #${currentChannel?.name || "channel"}...`}
                     className="border-0 bg-transparent shadow-none focus-visible:ring-0 px-0 h-8"
                     disabled={!currentUser || (!activeChannel && !activeDm)}
                   />
@@ -1166,28 +1336,30 @@ export default function Chat() {
                 {!currentUser && <span className="text-xs text-destructive ml-auto">Login required to send messages</span>}
               </div>
             </div>
-          </div>
+          </div >
 
           {/* Panels with AnimatePresence */}
           <AnimatePresence>
-            {showPinned && (
-              <motion.div key="pinned" variants={slidePanel} initial="initial" animate="animate" exit="exit" className="w-64 border-l flex flex-col shrink-0">
-                <div className="px-4 py-3 border-b"><h3 className="text-sm font-medium text-foreground">Pinned Messages</h3></div>
-                <div className="flex-1 overflow-y-auto p-3 space-y-2">
-                  {messages.filter((m) => m.isPinned).length === 0 ? (
-                    <div className="text-xs text-muted-foreground">No pinned messages</div>
-                  ) : (
-                    messages.filter((m) => m.isPinned).map((pm, i) => (
-                      <motion.div key={pm.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }} className="p-2.5 rounded-lg border bg-muted/30">
-                        <div className="flex items-center gap-1 mb-1"><Pin className="w-3 h-3 text-warning" /><span className="text-xs font-medium text-foreground">{pm.sender.name}</span><span className="text-xs text-muted-foreground">{formatTime(pm.createdAt)}</span></div>
-                        <p className="text-xs text-foreground">{pm.text}</p>
-                      </motion.div>
-                    ))
-                  )}
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+            {
+              showPinned && (
+                <motion.div key="pinned" variants={slidePanel} initial="initial" animate="animate" exit="exit" className="w-64 border-l flex flex-col shrink-0">
+                  <div className="px-4 py-3 border-b"><h3 className="text-sm font-medium text-foreground">Pinned Messages</h3></div>
+                  <div className="flex-1 overflow-y-auto p-3 space-y-2">
+                    {messages.filter((m) => m.isPinned).length === 0 ? (
+                      <div className="text-xs text-muted-foreground">No pinned messages</div>
+                    ) : (
+                      messages.filter((m) => m.isPinned).map((pm, i) => (
+                        <motion.div key={pm.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }} className="p-2.5 rounded-lg border bg-muted/30">
+                          <div className="flex items-center gap-1 mb-1"><Pin className="w-3 h-3 text-warning" /><span className="text-xs font-medium text-foreground">{pm.sender.name}</span><span className="text-xs text-muted-foreground">{formatTime(pm.createdAt)}</span></div>
+                          <p className="text-xs text-foreground">{pm.text}</p>
+                        </motion.div>
+                      ))
+                    )}
+                  </div>
+                </motion.div>
+              )
+            }
+          </AnimatePresence >
           <AnimatePresence>
             {showMembers && (
               <motion.div key="members" variants={slidePanel} initial="initial" animate="animate" exit="exit" className="w-64 border-l flex flex-col shrink-0">
