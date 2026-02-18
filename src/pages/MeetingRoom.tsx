@@ -119,12 +119,14 @@ export default function MeetingRoom() {
   const [copied, setCopied] = useState(false);
   const [spotlightPeerId, setSpotlightPeerId] = useState<string | null>(null);
   const [isRecording, setIsRecording] = useState(false);
+  const [endingMeeting, setEndingMeeting] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
   const recordCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const recordRafRef = useRef<number>(0);
   const recordAudioContextRef = useRef<AudioContext | null>(null);
   const recordAudioDestRef = useRef<MediaStreamAudioDestinationNode | null>(null);
+  const waitingRoomIntervalRef = useRef<number | null>(null);
 
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [waitingRoomParticipants, setWaitingRoomParticipants] = useState<any[]>([]);
@@ -325,9 +327,32 @@ export default function MeetingRoom() {
         
         // Also update waiting room participants specifically
         setWaitingRoomParticipants(data.filter((p: any) => p.waitingRoom));
+      } else if (res.status === 404) {
+        console.warn("Meeting not found, skipping participant load");
+      } else {
+        console.error("Failed to load DB participants:", res.status, res.statusText);
+        // Don't throw error, just log it - meeting can still work without DB participants
       }
     } catch (err) {
       console.error("Failed to load DB participants:", err);
+      // Don't throw error, just log it - meeting can still work without DB participants
+    }
+  }, [meetingId]);
+
+  const loadWaitingRoom = useCallback(async () => {
+    if (!meetingId || meetingId === "quick-huddle") return;
+    try {
+      const res = await fetch(`${API_BASE}/meetings/${meetingId}/participants/waiting-room`);
+      if (res.ok) {
+        const data = await res.json();
+        setWaitingRoomParticipants(data);
+      } else if (res.status === 404) {
+        console.warn("Meeting not found, skipping waiting room load");
+      } else {
+        console.error("Failed to load waiting room:", res.status, res.statusText);
+      }
+    } catch (err) {
+      console.error("Failed to load waiting room:", err);
     }
   }, [meetingId]);
 
@@ -413,21 +438,23 @@ export default function MeetingRoom() {
       if (meetingId && meetingId !== "quick-huddle") {
         try {
           const res = await fetch(`${API_BASE}/meetings/${meetingId}`);
-          if (res.ok) {
-            const meeting = await res.json();
-            setMeetingTitle(meeting.title || "Zoom Meeting");
-            setIsHost(meeting.hostId === currentUser?.id);
-            
-            // Load waiting room participants if host
-            if (meeting.hostId === currentUser?.id && meeting.waitingRoom) {
-              loadWaitingRoom();
-              // Poll waiting room every 5 seconds
-              const waitingRoomInterval = setInterval(loadWaitingRoom, 5000);
-              return () => clearInterval(waitingRoomInterval);
-            }
+      if (res.ok) {
+        const meeting = await res.json();
+        setMeetingTitle(meeting.title || "Zoom Meeting");
+        setIsHost(meeting.hostId === currentUser?.id);
+
+        // Load waiting room participants + start polling if host
+        if (meeting.hostId === currentUser?.id && meeting.waitingRoom) {
+          loadWaitingRoom();
+          // Poll waiting room every 5 seconds
+          if (waitingRoomIntervalRef.current) {
+            clearInterval(waitingRoomIntervalRef.current);
           }
-        } catch { }
+          waitingRoomIntervalRef.current = window.setInterval(loadWaitingRoom, 5000);
+        }
       }
+    } catch { }
+  }
 
       await enumerateDevices();
 
@@ -520,6 +547,10 @@ export default function MeetingRoom() {
     init();
 
     return () => {
+      if (waitingRoomIntervalRef.current) {
+        clearInterval(waitingRoomIntervalRef.current);
+        waitingRoomIntervalRef.current = null;
+      }
       localStreamRef.current?.getTracks().forEach(t => t.stop());
       screenStreamRef.current?.getTracks().forEach(t => t.stop());
       if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
@@ -585,6 +616,7 @@ export default function MeetingRoom() {
       meetingId: meetingCode,
       peerId: peerId.current,
       peerName: userName,
+      userId: currentUser?.id,
       state: { isMuted, isCameraOn, isScreenSharing, isHandRaised },
     });
 
@@ -777,6 +809,15 @@ export default function MeetingRoom() {
     socket.on("webrtc:ice-candidate", handleIceCandidate);
 
     return () => {
+      // Record leave time in database if it's a real meeting (not quick-huddle)
+      if (meetingId && meetingId !== "quick-huddle" && currentUser?.id) {
+        fetch(`${API_BASE}/meetings/${meetingId}/participants/${currentUser.id}`, {
+          method: "DELETE",
+        }).catch(() => {
+          // Silently fail if API call fails
+        });
+      }
+      
       socket.emit("meeting:leave", { meetingId: meetingCode, peerId: peerId.current });
       socket.off("meeting:participants", handleParticipants);
       socket.off("meeting:participant:joined", handleJoined);
@@ -1067,15 +1108,7 @@ export default function MeetingRoom() {
     const msgId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const msgText = chatInput.trim();
 
-    // Optimistic UI
-    const optimistic: ChatMessage = {
-      id: msgId,
-      sender: currentUser.name,
-      time: new Date().toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" }),
-      text: msgText,
-    };
-    setChatMessages((prev) => (prev.some((m) => m.id === optimistic.id) ? prev : [...prev, optimistic]));
-
+    // ส่งให้ server แล้วรอ message กลับผ่าน socket เพื่อลดปัญหาข้อความซ้ำ
     socketRef.current.emit("meeting:chat:send", {
       meetingId: meetingCode,
       message: {
@@ -1086,6 +1119,7 @@ export default function MeetingRoom() {
       },
     });
 
+    // ล้างช่อง input ทันที เพื่อให้ UX รู้สึกว่าข้อความถูกส่งแล้ว
     setChatInput("");
   }, [chatInput, currentUser, meetingCode]);
 
@@ -1187,12 +1221,73 @@ export default function MeetingRoom() {
     else startRecording();
   };
 
-  const leaveMeeting = useCallback(() => {
+  const leaveMeeting = useCallback(async () => {
+    // Record leave time in database if it's a real meeting (not quick-huddle)
+    if (meetingId && meetingId !== "quick-huddle" && currentUser?.id) {
+      try {
+        await fetch(`${API_BASE}/meetings/${meetingId}/participants/${currentUser.id}`, {
+          method: "DELETE",
+        }).catch(() => {
+          // Silently fail if API call fails
+        });
+      } catch (e) {
+        // Ignore errors
+      }
+    }
+    
     socketRef.current.emit("meeting:leave", { meetingId: meetingCode, peerId: peerId.current });
     peersRef.current.forEach(p => p.connection.close());
     localStreamRef.current?.getTracks().forEach(t => t.stop());
     navigate("/");
-  }, [navigate, meetingCode]);
+  }, [navigate, meetingCode, meetingId, currentUser]);
+
+  const endAndSummarizeMeeting = useCallback(async () => {
+    // สำหรับ host เท่านั้น และเฉพาะ meeting ปกติ (ไม่ใช่ quick-huddle)
+    if (!isHost || !meetingId || meetingId === "quick-huddle") {
+      leaveMeeting();
+      return;
+    }
+
+    setEndingMeeting(true);
+
+    try {
+      // จบประชุม (อัปเดตสถานะเป็น ended / actualEndTime)
+      try {
+        await fetch(`${API_BASE}/meetings/${meetingId}/end`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({}),
+        });
+      } catch (e) {
+        console.error("End meeting error:", e);
+      }
+
+      // เรียก AI ให้สรุปประชุม + สร้าง action items / tasks อัตโนมัติ
+      try {
+        await fetch(`${API_BASE}/meetings/${meetingId}/ai-summary`, {
+          method: "POST",
+        });
+      } catch (e) {
+        console.error("AI summary error on leave:", e);
+      }
+
+      // ทำความสะอาด state webrtc แล้วพา host ไปหน้า Meeting Summary
+      socketRef.current.emit("meeting:leave", { meetingId: meetingCode, peerId: peerId.current });
+      peersRef.current.forEach((p) => p.connection.close());
+      localStreamRef.current?.getTracks().forEach((t) => t.stop());
+      navigate(`/meeting-summary/${meetingId}`);
+    } finally {
+      setEndingMeeting(false);
+    }
+  }, [isHost, meetingId, meetingCode, navigate, leaveMeeting]);
+
+  const handleLeaveClick = useCallback(() => {
+    if (isHost && meetingId && meetingId !== "quick-huddle") {
+      void endAndSummarizeMeeting();
+    } else {
+      leaveMeeting();
+    }
+  }, [isHost, meetingId, endAndSummarizeMeeting, leaveMeeting]);
 
   const handleMuteAll = async () => {
     if (!isHost || !meetingId) return;
@@ -1359,8 +1454,9 @@ export default function MeetingRoom() {
     });
   }
   
-  // Add remote participants
-  participants.forEach(p => {
+  // Add remote participants (defensive filter in case server ever echoes self)
+  const remoteParticipants = participants.filter(p => p.peerId !== peerId.current);
+  remoteParticipants.forEach(p => {
     // Main tile (Camera/Avatar)
     allParticipants.push({
       ...p,
@@ -2110,10 +2206,11 @@ export default function MeetingRoom() {
         </div>
 
         <Button 
-          className="h-12 px-6 bg-red-500 hover:bg-red-600 text-sm font-semibold shadow-lg shadow-red-500/20 transition-all duration-200 hover:scale-105" 
-          onClick={leaveMeeting}
+          className="h-12 px-6 bg-red-500 hover:bg-red-600 text-sm font-semibold shadow-lg shadow-red-500/20 transition-all duration-200 hover:scale-105 disabled:opacity-70 disabled:cursor-not-allowed" 
+          onClick={handleLeaveClick}
+          disabled={endingMeeting}
         >
-          Leave
+          {endingMeeting ? "Ending..." : "Leave"}
         </Button>
       </div>
 

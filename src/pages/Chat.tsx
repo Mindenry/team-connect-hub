@@ -2,8 +2,8 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Hash, Send, Smile, Paperclip, Pin, Reply, Search, Plus, AtSign,
-  MoreHorizontal, Users, Volume2, Megaphone, Bookmark, X,
+  Hash, Send, Smile, Paperclip, Pin, Reply, Search, Plus,
+  MoreHorizontal, Users, Volume2, Megaphone, Bookmark, X, Folder as FolderIcon, ExternalLink,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -33,6 +33,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Mic, Headphones, Settings, Trash2, LogOut, ChevronDown } from "lucide-react";
 import { slidePanel } from "@/components/shared/PageTransition";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { auth } from "@/lib/auth";
 import { getSocket } from "@/lib/websocket";
 import { usePresence } from "@/hooks/usePresence";
@@ -61,6 +63,21 @@ interface Message {
   replyTo?: { id: string; text: string; sender: { name: string } };
   attachments?: Array<{ url: string; name: string; type: string }>;
   mentions?: string[];
+}
+
+interface DriveEntry {
+  id: string;
+  name: string;
+  path: string;
+  isFolder: boolean;
+  latestVersion: {
+    id: string;
+    version: number;
+    size: number;
+    mimeType: string;
+    url: string;
+  } | null;
+  updatedAt: string;
 }
 
 const channelIcons: Record<string, React.ElementType> = {
@@ -116,6 +133,13 @@ export default function Chat() {
   const [showSearchBar, setShowSearchBar] = useState(false);
   const [channelSearchQuery, setChannelSearchQuery] = useState("");
 
+  // Shared Drive picker state
+  const [showDrivePicker, setShowDrivePicker] = useState(false);
+  const [driveLoading, setDriveLoading] = useState(false);
+  const [driveEntries, setDriveEntries] = useState<DriveEntry[]>([]);
+  const [drivePath, setDrivePath] = useState<string>("/");
+  const [driveTeamId, setDriveTeamId] = useState<string | null>(null);
+
   const handleSearch = async (query: string) => {
     if (query.length < 3) return;
     try {
@@ -127,6 +151,34 @@ export default function Chat() {
       }
     } catch (err) {
       console.error("Search failed:", err);
+    }
+  };
+
+  // Infer teamId for active channel to scope drive
+  useEffect(() => {
+    const ch = channels.find((c) => c.id === activeChannel);
+    if (ch?.teamId) {
+      setDriveTeamId(ch.teamId);
+    } else {
+      setDriveTeamId(null);
+    }
+  }, [activeChannel, channels]);
+
+  const loadDriveEntries = async (path: string = "/") => {
+    if (!driveTeamId) return;
+    setDriveLoading(true);
+    try {
+      const params = new URLSearchParams();
+      params.set("path", path);
+      const res = await fetch(`${API_BASE}/drive/teams/${driveTeamId}?${params.toString()}`);
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+      setDriveEntries(data);
+      setDrivePath(path);
+    } catch (e) {
+      console.error("Failed to load drive entries for chat:", e);
+    } finally {
+      setDriveLoading(false);
     }
   };
 
@@ -285,6 +337,30 @@ export default function Chat() {
     } catch (err) {
       console.error("Failed to upload file:", err);
     }
+  };
+
+  const handleAttachFromDrive = () => {
+    if (!driveTeamId && activeChannel) {
+      const ch = channels.find((c) => c.id === activeChannel);
+      if (ch?.teamId) setDriveTeamId(ch.teamId);
+    }
+    setShowDrivePicker(true);
+    void loadDriveEntries(drivePath);
+  };
+
+  const handlePickDriveFile = (entry: DriveEntry) => {
+    if (entry.isFolder || !entry.latestVersion) return;
+    const v = entry.latestVersion;
+    const url = v.url.startsWith("http") ? v.url : `${API_BASE}${v.url}`;
+    setAttachments((prev) => [
+      ...prev,
+      {
+        url,
+        name: entry.name,
+        type: v.mimeType || "application/octet-stream",
+      },
+    ]);
+    setShowDrivePicker(false);
   };
 
   // Insert emoji
@@ -458,15 +534,35 @@ export default function Chat() {
   }, {});
   const displayMessages = activeDm ? dmMessages : messages;
 
-  // Update DM contacts with real online status
-  const dmContactsWithStatus = dmContacts.map(contact => ({
-    ...contact,
-    status: isUserOnline(contact.id) ? "online" : "offline",
-  }));
+  // Update DM contacts with real online / DND / busy status
+  const dmContactsWithStatus = dmContacts.map((contact) => {
+    const baseOnline = isUserOnline(contact.id);
+    const explicitStatus = (contact.status as string) || "";
+    const presenceStatus = (["online", "busy", "away", "offline", "dnd"] as const).includes(
+      explicitStatus as any,
+    )
+      ? (explicitStatus as any)
+      : baseOnline
+      ? "online"
+      : "offline";
+    return {
+      ...contact,
+      status: presenceStatus,
+    };
+  });
 
-  // 成员列表（使用实时在线状态）
-  const membersOnline = allUsers.filter((u) => isUserOnline(u.id));
-  const membersOffline = allUsers.filter((u) => !isUserOnline(u.id));
+  // Member list with richer status (online / dnd / etc.)
+  const membersOnline = allUsers.filter((u) => {
+    const status = (u.status as string) || "";
+    return (
+      status === "online" ||
+      status === "busy" ||
+      status === "away" ||
+      status === "dnd" ||
+      isUserOnline(u.id)
+    );
+  });
+  const membersOffline = allUsers.filter((u) => !membersOnline.some((m) => m.id === u.id));
   // Delete channel handler
   const handleDeleteChannel = async () => {
     if (!channelToDelete) return;
@@ -543,7 +639,8 @@ export default function Chat() {
   };
 
   return (
-    <div className="flex h-screen">
+    <div className="h-full w-full bg-background/95 flex flex-col overflow-hidden">
+      {/* -------------------- Dialogs & Modals -------------------- */}
       <CreateChannelDialog open={showCreateChannel} onOpenChange={setShowCreateChannel} />
       <DeleteChannelDialog 
         open={showDeleteChannel} 
@@ -564,147 +661,164 @@ export default function Chat() {
         onOpenChange={setShowInviteUser} 
       />
 
-      <div className={cn("bg-card border-r flex flex-col shrink-0 transition-all z-20", isMobile ? (showChannelList ? "w-full absolute inset-0" : "hidden") : "w-60")}>
-        {/* Server Header */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <div className="h-12 border-b flex items-center px-4 font-semibold shadow-sm hover:bg-accent/50 cursor-pointer transition-colors shrink-0">
-              <span className="truncate flex-1">Team Connect Server</span>
-              {isMobile ? (
-                 <Button variant="ghost" size="icon" className="h-8 w-8 -mr-2" onClick={(e) => { e.stopPropagation(); setShowChannelList(false); }}>
-                   <X className="w-4 h-4" />
-                 </Button>
-              ) : (
-                 <ChevronDown className="w-4 h-4 ml-2 opacity-50" />
-              )}
-            </div>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent className="w-56" align="start">
-            <DropdownMenuLabel>Server Options</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => setShowCreateChannel(true)}>
-              <Plus className="w-4 h-4 mr-2" /> Create Channel
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setShowInviteUser(true)}>
-              <Users className="w-4 h-4 mr-2" /> Invite People
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem>
-              <Settings className="w-4 h-4 mr-2" /> Server Settings
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-
-        <div className="flex-1 overflow-y-auto scrollbar-thin p-2 space-y-4">
-           {/* Channels Categories */}
-           {Object.entries(groupedChannels).map(([team, chs]) => (
-            <div key={team} className="mb-2">
-              <div className="flex items-center justify-between px-1 mb-0.5 group">
-                <button className="flex items-center text-xs font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors">
-                  <ChevronDown className="w-3 h-3 mr-0.5" />
-                  {team}
-                </button>
-                <button onClick={() => setShowCreateChannel(true)} className="text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity">
-                  <Plus className="w-3.5 h-3.5" />
-                </button>
+      <div className="flex-1 flex overflow-hidden p-3 md:p-4 gap-4">
+        {/* -------------------- Unified Sidebar (Nav + Channels) -------------------- */}
+        <aside className={cn(
+          "bg-card/40 backdrop-blur-xl border rounded-2xl flex flex-col shrink-0 transition-all duration-300 shadow-sm",
+          isMobile ? (showChannelList ? "w-full fixed inset-3 z-50" : "hidden") : "w-72"
+        )}>
+          {/* Workspace Header */}
+          <div className="p-4 border-b">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center border border-primary/20">
+                  <Hash className="w-4 h-4 text-primary" />
+                </div>
+                <h1 className="font-bold text-sm tracking-tight">Workspace</h1>
               </div>
-              <div className="space-y-[1px]">
-                {chs.map((ch) => {
+              <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full" onClick={() => setShowCreateChannel(true)}>
+                <Plus className="w-4 h-4" />
+              </Button>
+            </div>
+            
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+              <Input 
+                placeholder="Search..." 
+                className="pl-8 h-8 text-xs bg-muted/40 border-none focus-visible:ring-1 focus-visible:ring-primary/20"
+                value={channelSearchQuery}
+                onChange={(e) => setChannelSearchQuery(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <ScrollArea className="flex-1 px-3 py-2">
+            <div className="space-y-6">
+              {/* Channels Section */}
+              <div className="space-y-1">
+                <div className="px-2 mb-2 flex items-center justify-between group">
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70">Channels</span>
+                </div>
+                {channels.filter(c => c.name.toLowerCase().includes(channelSearchQuery.toLowerCase())).map((ch) => {
                   const Icon = channelIcons[ch.type] || Hash;
+                  const isActive = activeChannel === ch.id;
                   return (
-                    <ContextMenu key={ch.id}>
-                      <ContextMenuTrigger>
-                        <button 
-                          onClick={() => selectChannel(ch.id)}
-                          className={cn("w-full flex items-center gap-1.5 px-2 py-[5px] rounded-md text-sm transition-colors group relative",
-                            activeChannel === ch.id 
-                              ? "bg-accent text-accent-foreground font-medium" 
-                              : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
-                          )}>
-                          <Icon className="w-4 h-4 shrink-0 opacity-70" />
-                          <span className="flex-1 text-left truncate">{ch.name}</span>
-                          {/* Unread indicator placeholder - if we had read tracking */}
-                          {/* <div className="w-1.5 h-1.5 rounded-full bg-foreground absolute left-0 -ml-1" /> */}
-                        </button>
-                      </ContextMenuTrigger>
-                      <ContextMenuContent>
-                        <ContextMenuItem onClick={() => {
-                          setChannelToDelete(ch);
-                          setShowDeleteChannel(true);
-                        }} className="text-destructive focus:text-destructive">
-                          <Trash2 className="w-4 h-4 mr-2" />
-                          Delete Channel
-                        </ContextMenuItem>
-                        <ContextMenuItem onClick={() => {
-                          setChannelToEdit(ch);
-                          setShowEditChannel(true);
-                        }}>
-                          <Settings className="w-4 h-4 mr-2" />
-                          Edit Channel
-                        </ContextMenuItem>
-                      </ContextMenuContent>
-                    </ContextMenu>
+                    <button
+                      key={ch.id}
+                      onClick={() => selectChannel(ch.id)}
+                      className={cn(
+                        "w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition-all group",
+                        isActive 
+                          ? "bg-primary text-primary-foreground shadow-md shadow-primary/20" 
+                          : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                      )}
+                    >
+                      <Icon className={cn("w-4 h-4 shrink-0", isActive ? "opacity-100" : "opacity-50")} />
+                      <span className="flex-1 text-left truncate font-medium">{ch.name}</span>
+                      {ch._count && ch._count.messages > 0 && !isActive && (
+                        <div className="w-1.5 h-1.5 rounded-full bg-primary" />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Direct Messages Section */}
+              <div className="space-y-1">
+                <div className="px-2 mb-2 flex items-center justify-between group">
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70">Messages</span>
+                </div>
+                {dmContactsWithStatus.map((dm) => {
+                  const isActive = activeDm === dm.id;
+                  return (
+                    <button
+                      key={dm.id}
+                      onClick={() => selectDm(dm.id)}
+                      className={cn(
+                        "w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition-all group",
+                        isActive 
+                          ? "bg-primary text-primary-foreground shadow-md shadow-primary/20" 
+                          : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                      )}
+                    >
+                      <div className="relative shrink-0">
+                        <Avatar className="h-6 w-6 border-2 border-background">
+                          <AvatarFallback className="text-[10px] font-bold">{dm.initials}</AvatarFallback>
+                        </Avatar>
+                        <StatusIndicator 
+                          status={dm.status as any} 
+                          className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 border-2 border-background" 
+                        />
+                      </div>
+                      <span className="flex-1 text-left truncate font-medium">{dm.name}</span>
+                    </button>
                   );
                 })}
               </div>
             </div>
-          ))}
+          </ScrollArea>
 
-          {/* Direct Messages */}
-          <div className="mt-4">
-             <div className="flex items-center justify-between px-1 mb-0.5 group">
-                <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground pl-4">Direct Messages</span>
-                <button className="text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity">
-                  <Plus className="w-3.5 h-3.5" />
-                </button>
+          {/* User Profile Footer */}
+          <div className="p-3 mt-auto border-t bg-muted/20 rounded-b-2xl">
+            <div className="flex items-center gap-3 p-2 rounded-xl hover:bg-muted/40 transition-colors cursor-pointer group">
+              <div className="relative">
+                <Avatar className="h-9 w-9 border-2 border-primary/10">
+                  <AvatarFallback className="bg-primary/5 text-primary text-xs font-bold">
+                    {currentUser?.name ? getInitials(currentUser.name) : "ME"}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 rounded-full border-2 border-background" />
               </div>
-            <div className="space-y-[1px]">
-              {dmContactsWithStatus.map((dm) => (
-                <button
-                  key={dm.id}
-                  onClick={() => selectDm(dm.id)}
-                  className={cn(
-                    "w-full flex items-center gap-2 px-2 py-[5px] rounded-md text-sm transition-colors",
-                    activeDm === dm.id
-                      ? "bg-accent text-accent-foreground font-medium"
-                      : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
-                  )}
-                >
-                  <div className="relative">
-                    <Avatar className="h-6 w-6"><AvatarFallback className="bg-primary/10 text-primary text-[10px]">{dm.initials}</AvatarFallback></Avatar>
-                    <StatusIndicator status={dm.status as "online" | "offline" | "busy" | "away"} className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 border-card ring-2 ring-card" />
-                  </div>
-                  <span className="flex-1 text-left truncate opacity-90">{dm.name}</span>
-                </button>
-              ))}
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-bold truncate leading-none mb-1">{currentUser?.name || "Guest"}</p>
+                <p className="text-[10px] text-muted-foreground truncate uppercase tracking-tighter">Connected</p>
+              </div>
+              <Settings className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
             </div>
           </div>
-        </div>
+        </aside>
 
-        {/* User Bar */}
-        <div className="p-2 bg-muted/40 border-t flex items-center gap-2 shrink-0">
-          <div className="relative group cursor-pointer hover:opacity-80 transition-opacity">
-            <Avatar className="h-8 w-8">
-              <AvatarFallback className="bg-primary text-primary-foreground text-xs">
-                 {currentUser?.name ? getInitials(currentUser.name) : "ME"}
-              </AvatarFallback>
-            </Avatar>
-            <StatusIndicator status="online" className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 border-card ring-2 ring-card" />
-          </div>
-          <div className="flex-1 min-w-0 flex flex-col -space-y-0.5">
-             <span className="text-sm font-semibold truncate">{currentUser?.name || "Guest"}</span>
-             <span className="text-xs text-muted-foreground truncate">{getConnectionStatusText(!!currentUser)}</span>
-          </div>
-          <div className="flex items-center">
-             <Button variant="ghost" size="icon" className="h-7 w-7 rounded-sm"><Mic className="w-4 h-4" /></Button>
-             <Button variant="ghost" size="icon" className="h-7 w-7 rounded-sm"><Headphones className="w-4 h-4" /></Button>
-             <Button variant="ghost" size="icon" className="h-7 w-7 rounded-sm"><Settings className="w-4 h-4" /></Button>
-          </div>
-        </div>
-      </div>
+        {/* -------------------- Main Chat Area -------------------- */}
+        <main className="flex-1 flex flex-col bg-card/60 backdrop-blur-xl border rounded-2xl overflow-hidden shadow-sm relative">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <div className="h-12 border-b flex items-center px-4 font-semibold shadow-sm hover:bg-accent/50 cursor-pointer transition-colors shrink-0">
+                <span className="truncate flex-1">Team Connect Server</span>
+                {isMobile ? (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 -mr-2"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowChannelList(false);
+                    }}
+                  >
+                    <X className="w-4 h-4" />
+                  </Button>
+                ) : (
+                  <ChevronDown className="w-4 h-4 ml-2 opacity-50" />
+                )}
+              </div>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent className="w-56" align="start">
+              <DropdownMenuLabel>Server Options</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => setShowCreateChannel(true)}>
+                <Plus className="w-4 h-4 mr-2" /> Create Channel
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setShowInviteUser(true)}>
+                <Users className="w-4 h-4 mr-2" /> Invite People
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem>
+                <Settings className="w-4 h-4 mr-2" /> Server Settings
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
 
       {/* Chat Area */}
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col overflow-hidden">
         <div className="flex items-center justify-between px-4 h-12 border-b shrink-0">
           <div className="flex items-center gap-2">
             {isMobile && (
@@ -948,10 +1062,27 @@ export default function Chat() {
                   size="icon"
                   className="h-8 w-8 text-muted-foreground shrink-0"
                   onClick={() => fileInputRef.current?.click()}
+                  title="Upload from computer"
                 >
                   <Paperclip className="w-4 h-4" />
                 </Button>
-                <Button size="icon" className="h-8 w-8 shrink-0" onClick={sendMessage} disabled={(!messageInput.trim() && attachments.length === 0) || sending}>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-muted-foreground shrink-0"
+                  onClick={handleAttachFromDrive}
+                  disabled={!driveTeamId}
+                  title={driveTeamId ? "Attach from Shared Drive" : "Select a team channel to use Shared Drive"}
+                >
+                  <FolderIcon className="w-4 h-4" />
+                </Button>
+                <Button
+                  size="icon"
+                  className="h-8 w-8 shrink-0"
+                  onClick={sendMessage}
+                  disabled={(!messageInput.trim() && attachments.length === 0) || sending}
+                  title="ส่งข้อความไปยังช่องแชท"
+                >
                   <Send className="w-4 h-4" />
                 </Button>
               </div>
@@ -995,25 +1126,36 @@ export default function Chat() {
                 </div>
                 <div className="flex-1 overflow-y-auto p-3 space-y-1">
                   <p className="text-xs font-semibold uppercase text-muted-foreground mb-2">Online</p>
-                  {membersOnline.map((m, i) => (
-                    <motion.div
-                      key={m.id}
-                      initial={{ opacity: 0, x: 10 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: i * 0.04 }}
-                      className="flex items-center gap-2 p-2 rounded-lg hover:bg-muted/50"
-                    >
-                      <div className="relative">
-                        <Avatar className="h-7 w-7">
-                          <AvatarFallback className="bg-primary/10 text-primary text-[10px]">
-                            {m.name.split(" ").map((n: string) => n[0]).join("")}
-                          </AvatarFallback>
-                        </Avatar>
-                        <StatusIndicator status="online" className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 border-card" />
-                      </div>
-                      <span className="text-sm text-foreground">{m.name}</span>
-                    </motion.div>
-                  ))}
+                  {membersOnline.map((m, i) => {
+                    const status =
+                      (["online", "busy", "away", "offline", "dnd"] as const).includes(
+                        (m.status as string) as any,
+                      ) && m.status
+                        ? (m.status as any)
+                        : "online";
+                    return (
+                      <motion.div
+                        key={m.id}
+                        initial={{ opacity: 0, x: 10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: i * 0.04 }}
+                        className="flex items-center gap-2 p-2 rounded-lg hover:bg-muted/50"
+                      >
+                        <div className="relative">
+                          <Avatar className="h-7 w-7">
+                            <AvatarFallback className="bg-primary/10 text-primary text-[10px]">
+                              {m.name.split(" ").map((n: string) => n[0]).join("")}
+                            </AvatarFallback>
+                          </Avatar>
+                          <StatusIndicator
+                            status={status}
+                            className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 border-card"
+                          />
+                        </div>
+                        <span className="text-sm text-foreground">{m.name}</span>
+                      </motion.div>
+                    );
+                  })}
                   <p className="text-xs font-semibold uppercase text-muted-foreground mb-2 mt-3">Offline</p>
                   {membersOffline.map((m, i) => (
                     <motion.div
@@ -1040,6 +1182,119 @@ export default function Chat() {
           </AnimatePresence>
         </div>
       </div>
+      </main>
+      </div>
+      {/* Shared Drive picker for quick attach */}
+      <Dialog open={showDrivePicker} onOpenChange={setShowDrivePicker}>
+        <DialogContent className="max-w-3xl h-[70vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-sm">
+              <FolderIcon className="w-4 h-4" />
+              Attach from Shared Drive
+            </DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 flex flex-col gap-3 pt-1">
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <div className="flex items-center gap-1">
+                <button
+                  className={cn(
+                    "px-1.5 py-0.5 rounded hover:bg-muted",
+                    drivePath === "/" && "font-semibold text-foreground"
+                  )}
+                  onClick={() => loadDriveEntries("/")}
+                >
+                  Root
+                </button>
+                {drivePath !== "/" &&
+                  drivePath
+                    .split("/")
+                    .filter(Boolean)
+                    .map((seg, idx, arr) => {
+                      const partial = "/" + arr.slice(0, idx + 1).join("/");
+                      return (
+                        <span key={partial} className="flex items-center gap-1">
+                          <span>/</span>
+                          <button
+                            className={cn(
+                              "px-1.5 py-0.5 rounded hover:bg-muted",
+                              idx === arr.length - 1 && "font-semibold text-foreground"
+                            )}
+                            onClick={() => loadDriveEntries(partial)}
+                          >
+                            {seg}
+                          </button>
+                        </span>
+                      );
+                    })}
+              </div>
+              <button
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded border text-[11px] hover:bg-muted"
+                onClick={() => loadDriveEntries(drivePath)}
+              >
+                <Search className="w-3 h-3" />
+                Refresh
+              </button>
+            </div>
+            <ScrollArea className="flex-1 border rounded-md">
+              <div className="divide-y">
+                {driveLoading && (
+                  <div className="px-4 py-4 text-xs text-muted-foreground">
+                    Loading from Shared Drive...
+                  </div>
+                )}
+                {!driveLoading && driveEntries.length === 0 && (
+                  <div className="px-4 py-4 text-xs text-muted-foreground">
+                    No files in this folder yet.
+                  </div>
+                )}
+                {!driveLoading &&
+                  driveEntries.map((entry) => (
+                    <button
+                      key={entry.id}
+                      className="w-full flex items-center justify-between px-3 py-2 text-xs hover:bg-muted/60 text-left"
+                      onClick={() =>
+                        entry.isFolder
+                          ? loadDriveEntries(entry.path === "/" ? `/${entry.name}` : `${entry.path}/${entry.name}`)
+                          : handlePickDriveFile(entry)
+                      }
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <FolderIcon
+                          className={cn(
+                            "w-3.5 h-3.5",
+                            entry.isFolder ? "text-primary" : "text-muted-foreground"
+                          )}
+                        />
+                        <span className="truncate">{entry.name}</span>
+                        {!entry.isFolder && entry.latestVersion && (
+                          <span className="text-[10px] text-muted-foreground">
+                            v{entry.latestVersion.version}
+                          </span>
+                        )}
+                      </div>
+                      {!entry.isFolder && entry.latestVersion && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const url = entry.latestVersion!.url.startsWith("http")
+                              ? entry.latestVersion!.url
+                              : `${API_BASE}${entry.latestVersion!.url}`;
+                            window.open(url, "_blank");
+                          }}
+                          className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-primary"
+                        >
+                          <ExternalLink className="w-3 h-3" />
+                          Open
+                        </button>
+                      )}
+                    </button>
+                  ))}
+              </div>
+            </ScrollArea>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

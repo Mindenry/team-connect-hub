@@ -12,6 +12,7 @@ import {
   Megaphone,
   Settings,
   Trash2,
+  BellOff,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -162,6 +163,16 @@ export default function Notifications() {
           </Button>
         </div>
       </div>
+
+      {currentUser?.status === "dnd" && (
+        <div className="px-6 py-2 border-b bg-amber-50 text-amber-800 text-xs flex items-center gap-2">
+          <BellOff className="w-4 h-4" />
+          <span>
+            คุณกำลังอยู่ในโหมด <span className="font-semibold">Focus Mode / Do Not Disturb</span>{" "}
+            การแจ้งเตือนจะไม่เด้งรบกวนระหว่างที่โหมดนี้เปิดอยู่
+          </span>
+        </div>
+      )}
 
       <div className="flex-1 overflow-y-auto">
         <Tabs defaultValue="all" className="p-4">

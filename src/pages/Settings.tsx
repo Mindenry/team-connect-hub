@@ -25,7 +25,7 @@ export default function SettingsPage() {
   const { user } = useAuth();
   const isMobile = useIsMobile();
   const [activeSection, setActiveSection] = useState("profile");
-  const [status, setStatus] = useState("online");
+  const [status, setStatus] = useState(user?.status || "online");
   const [name, setName] = useState(user?.name || "");
   const [email, setEmail] = useState(user?.email || "");
   const [saving, setSaving] = useState(false);
@@ -53,6 +53,7 @@ export default function SettingsPage() {
     if (user) {
       setName(user.name);
       setEmail(user.email);
+      setStatus(user.status || "online");
     }
   }, [user]);
 
@@ -83,6 +84,7 @@ export default function SettingsPage() {
                         <SelectItem value="online">🟢 Available</SelectItem>
                         <SelectItem value="busy">🔴 Busy</SelectItem>
                         <SelectItem value="away">🟡 Away</SelectItem>
+                        <SelectItem value="dnd">🔕 Focus mode (Do Not Disturb)</SelectItem>
                         <SelectItem value="offline">⚪ Appear Offline</SelectItem>
                       </SelectContent>
                     </Select>
@@ -100,7 +102,10 @@ export default function SettingsPage() {
                         fetch(`${API_BASE}/users/${user.id}/status`, {
                           method: "PATCH",
                           headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ status }),
+                          body: JSON.stringify({
+                            status,
+                            activity: status === "dnd" ? "Focusing · Do Not Disturb" : "Available",
+                          }),
                         }),
                       ]);
                       // Update local auth

@@ -1,31 +1,66 @@
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
-  Video, Calendar, MessageSquare, CheckSquare, Users, Clock,
-  ArrowRight, Activity, Hash, Zap, MapPin, Globe, Target, Sparkles,
-  TrendingUp, Eye,
+  Video,
+  Calendar,
+  MessageSquare,
+  CheckSquare,
+  Users,
+  ArrowRight,
+  MapPin,
+  Target,
+  Eye,
+  Timer,
+  Hash,
+  BarChart3,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import StatusIndicator from "@/components/shared/StatusIndicator";
 import CreateMeetingDialog from "@/components/dialogs/CreateMeetingDialog";
 import CreateTaskDialog from "@/components/dialogs/CreateTaskDialog";
+import JoinMeetingByCodeDialog from "@/components/dialogs/JoinMeetingByCodeDialog";
 import FocusTimer from "@/components/widgets/FocusTimer";
-import MoodCheckin from "@/components/widgets/MoodCheckin";
-import TimeZoneWidget from "@/components/widgets/TimeZoneWidget";
 import WorkHoursTracker from "@/components/widgets/WorkHoursTracker";
 import { auth } from "@/lib/auth";
 import { usePresence } from "@/hooks/usePresence";
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
 
-const priorityColors: Record<string, string> = {
-  high: "bg-destructive/10 text-destructive border-destructive/20",
-  medium: "bg-warning/10 text-warning border-warning/20",
-  low: "bg-muted text-muted-foreground border-border",
+type MeetingItem = {
+  id: string;
+  title: string;
+  startTime: string;
+  team: string;
+  participants: number;
+  isLive: boolean;
+};
+
+type TaskItem = {
+  id: string;
+  title: string;
+  priority: string;
+  status: string;
+};
+
+type MemberItem = {
+  id: string;
+  name: string;
+  initials: string;
+  status: string;
+  activity: string;
+  room: string | null;
+};
+
+const priorityPills: Record<string, string> = {
+  high: "bg-destructive/5 text-destructive border-destructive/20",
+  medium: "bg-warning/5 text-warning border-warning/20",
+  low: "bg-muted/40 text-muted-foreground border-border/60",
 };
 
 const container = { animate: { transition: { staggerChildren: 0.04 } } };
@@ -34,88 +69,99 @@ const item = { initial: { opacity: 0, y: 10 }, animate: { opacity: 1, y: 0, tran
 export default function Dashboard() {
   const [showCreateMeeting, setShowCreateMeeting] = useState(false);
   const [showCreateTask, setShowCreateTask] = useState(false);
-  const [upcomingMeetings, setUpcomingMeetings] = useState<any[]>([]);
-  const [recentTasks, setRecentTasks] = useState<any[]>([]);
-  const [onlineMembers, setOnlineMembers] = useState<any[]>([]);
+  const [showJoinByCode, setShowJoinByCode] = useState(false);
+
+  const [todayMeetings, setTodayMeetings] = useState<MeetingItem[]>([]);
+  const [recentTasks, setRecentTasks] = useState<TaskItem[]>([]);
+  const [members, setMembers] = useState<MemberItem[]>([]);
   const [stats, setStats] = useState({
     meetingsToday: 0,
     openTasks: 0,
     unreadMessages: 0,
-    teamOnline: "0/0",
+    teamTotal: 0,
   });
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const currentUser = auth.getUser();
   const { onlineCount, isUserOnline, activeRooms } = usePresence();
 
   useEffect(() => {
     const loadData = async () => {
       try {
+        setLoadError(null);
         const today = new Date();
         today.setHours(0, 0, 0, 0);
         const tomorrow = new Date(today);
         tomorrow.setDate(tomorrow.getDate() + 1);
+        const now = new Date();
 
-        const currentUser = auth.getUser();
-        const [meetingsRes, tasksRes, usersRes, teamsRes, channelsRes, unreadCountRes] = await Promise.all([
+        const user = auth.getUser();
+        const [meetingsRes, tasksRes, usersRes, channelsRes] = await Promise.all([
           fetch(`${API_BASE}/meetings?status=scheduled`).then((r) => r.json()),
-          fetch(`${API_BASE}/tasks?assigneeId=${currentUser?.id || ""}`).then((r) => r.json()),
+          fetch(`${API_BASE}/tasks?assigneeId=${user?.id || ""}`).then((r) => r.json()),
           fetch(`${API_BASE}/users`).then((r) => r.json()),
-          fetch(`${API_BASE}/teams`).then((r) => r.json()),
           fetch(`${API_BASE}/channels`).then((r) => r.json()),
-          currentUser?.id ? Promise.all(
-            (await fetch(`${API_BASE}/channels`).then((r) => r.json())).map((ch: any) =>
-              fetch(`${API_BASE}/channels/${ch.id}/unread-count?userId=${currentUser.id}`)
-                .then((r) => r.json())
-                .catch(() => ({ count: 0 }))
-            )
-          ).then(counts => counts.reduce((sum, c) => sum + (c.count || 0), 0)) : Promise.resolve(0),
         ]);
 
-        const upcoming = meetingsRes
+        const meetingsTodayAll: any[] = (meetingsRes || [])
           .filter((m: any) => {
             const start = new Date(m.startTime);
             return start >= today && start < tomorrow;
           })
-          .sort((a: any, b: any) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime())
-          .slice(0, 3)
+          .sort((a: any, b: any) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
+
+        const meetingsForList: MeetingItem[] = meetingsTodayAll
+          .filter((m: any) => new Date(m.startTime) >= now)
+          .slice(0, 4)
           .map((m: any) => ({
             id: m.id,
-            title: m.title,
-            time: new Date(m.startTime).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
-            team: m.team?.name || "",
+            title: m.title || "Untitled meeting",
+            startTime: m.startTime,
+            team: m.team?.name || "Personal",
             participants: m.participants?.length || 0,
-            isNow: m.status === "live",
-            meetingCode: m.meetingCode,
+            isLive: m.status === "live",
           }));
 
-        const tasks = tasksRes.slice(0, 4).map((t: any) => ({
+        const tasks: TaskItem[] = (tasksRes || []).slice(0, 6).map((t: any) => ({
           id: t.id,
-          title: t.title,
-          priority: t.priority,
-          status: t.status,
-          assignee: t.assignee?.name?.split(" ").map((n: string) => n[0]).join("") || "",
+          title: t.title || "Untitled task",
+          priority: t.priority || "low",
+          status: t.status || "todo",
         }));
 
-        const members = usersRes.slice(0, 8).map((u: any) => ({
+        const memberList: MemberItem[] = (usersRes || []).slice(0, 8).map((u: any) => ({
           id: u.id,
-          name: u.name,
-          initials: u.name.split(" ").map((n: string) => n[0]).join(""),
+          name: u.name || "Unknown",
+          initials: (u.name || "?").split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase(),
           status: u.status || "offline",
           activity: u.activity || "Available",
           room: u.currentRoom || null,
         }));
 
-        setUpcomingMeetings(upcoming);
+        let unreadTotal = 0;
+        if (user?.id && Array.isArray(channelsRes)) {
+          const counts = await Promise.all(
+            channelsRes.map((ch: any) =>
+              fetch(`${API_BASE}/channels/${ch.id}/unread-count?userId=${user.id}`)
+                .then((r) => r.json())
+                .catch(() => ({ count: 0 })),
+            ),
+          );
+          unreadTotal = counts.reduce((sum, c) => sum + (c?.count || 0), 0);
+        }
+
+        setTodayMeetings(meetingsForList);
         setRecentTasks(tasks);
-        setOnlineMembers(members);
+        setMembers(memberList);
         setStats({
-          meetingsToday: upcoming.length,
-          openTasks: tasksRes.filter((t: any) => t.status !== "done").length,
-          unreadMessages: unreadCountRes || 0,
-          teamOnline: `${usersRes.length}`,
+          meetingsToday: meetingsTodayAll.length,
+          openTasks: (tasksRes || []).filter((t: any) => t.status !== "done").length,
+          unreadMessages: unreadTotal,
+          teamTotal: (usersRes || []).length,
         });
       } catch (err) {
         console.error("Failed to load dashboard data:", err);
+        setLoadError("We couldn’t load your dashboard. Please try again.");
       } finally {
         setLoading(false);
       }
@@ -124,252 +170,417 @@ export default function Dashboard() {
     loadData();
   }, []);
 
+  const greeting = useMemo(() => {
+    const h = new Date().getHours();
+    if (h < 12) return "Good morning";
+    if (h < 18) return "Good afternoon";
+    return "Good evening";
+  }, []);
+
+  const nextMeeting = todayMeetings[0];
+  const onlineSummary = `${onlineCount}/${stats.teamTotal || 0}`;
+
   return (
-    <motion.div className="p-4 md:p-6 space-y-4 md:space-y-5 max-w-[1400px]" variants={container} initial="initial" animate="animate">
+    <motion.div
+      className="relative mx-auto w-full max-w-[1400px] p-4 md:p-8 space-y-5 md:space-y-7"
+      variants={container}
+      initial="initial"
+      animate="animate"
+    >
       <CreateMeetingDialog open={showCreateMeeting} onOpenChange={setShowCreateMeeting} />
       <CreateTaskDialog open={showCreateTask} onOpenChange={setShowCreateTask} />
+      <JoinMeetingByCodeDialog open={showJoinByCode} onOpenChange={setShowJoinByCode} />
 
-      {/* Header */}
-      <motion.div variants={item} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl md:text-2xl font-bold text-foreground">
-            Good {new Date().getHours() < 12 ? "morning" : new Date().getHours() < 18 ? "afternoon" : "evening"}, {currentUser?.name || "User"} 👋
-          </h1>
-          <p className="text-xs md:text-sm text-muted-foreground">
-            {new Date().toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" })} · {stats.meetingsToday} meetings · {stats.openTasks} tasks
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={() => setShowCreateMeeting(true)} className="gap-2">
-            <Calendar className="w-4 h-4" /><span className="hidden sm:inline">Schedule</span>
-          </Button>
-          <Button size="sm" className="gradient-primary gap-2 shadow-md" asChild>
-            <Link to="/meeting-room"><Video className="w-4 h-4" /><span className="hidden sm:inline">Start Meeting</span></Link>
-          </Button>
+      {/* Hero */}
+      <motion.div variants={item} className="relative overflow-hidden rounded-2xl border bg-card/70 p-5 md:p-6 shadow-sm">
+        <div aria-hidden className="pointer-events-none absolute inset-x-0 -top-20 h-48 bg-gradient-to-b from-primary/10 via-primary/0 to-transparent blur-2xl" />
+
+        <div className="relative flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div className="space-y-1">
+            <p className="text-xs font-medium text-muted-foreground">
+              {new Date().toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" })}
+            </p>
+            <h1 className="text-xl md:text-2xl font-semibold tracking-tight text-foreground">
+              {greeting}, {currentUser?.name || "User"}
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              {nextMeeting ? (
+                <>
+                  Next: <span className="text-foreground/90">{nextMeeting.title}</span> ·{" "}
+                  {new Date(nextMeeting.startTime).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
+                </>
+              ) : (
+                <>No meetings scheduled for the rest of today</>
+              )}{" "}
+              · <span className="text-foreground/90">{onlineCount}</span> online
+            </p>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" size="sm" onClick={() => setShowJoinByCode(true)} className="gap-2">
+              <Hash className="h-4 w-4" />
+              Join by code
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setShowCreateTask(true)} className="gap-2">
+              <CheckSquare className="h-4 w-4" />
+              New task
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setShowCreateMeeting(true)} className="gap-2">
+              <Calendar className="h-4 w-4" />
+              Schedule
+            </Button>
+            <Button size="sm" className="gradient-primary shadow-sm gap-2" asChild>
+              <Link to="/meeting-room">
+                <Video className="h-4 w-4" />
+                Start meeting
+              </Link>
+            </Button>
+          </div>
         </div>
       </motion.div>
 
-      {/* Quick Actions */}
-      <motion.div variants={item} className="flex gap-2 flex-wrap overflow-x-auto pb-1">
-        {[
-          { label: "New Meeting", icon: Video, action: () => setShowCreateMeeting(true) },
-          { label: "New Task", icon: CheckSquare, action: () => setShowCreateTask(true) },
-          { label: "Join by Code", icon: Zap, action: () => {} },
-          { label: "Virtual Office", icon: MapPin, href: "/virtual-office" },
-        ].map((qa) => (
-          qa.href ? (
-            <Button key={qa.label} variant="outline" size="sm" className="gap-2 card-hover" asChild>
-              <Link to={qa.href}><qa.icon className="w-3.5 h-3.5" />{qa.label}</Link>
+      {loadError && (
+        <motion.div variants={item} className="rounded-xl border bg-card px-4 py-3 text-sm">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-foreground">{loadError}</p>
+            <Button variant="outline" size="sm" onClick={() => window.location.reload()}>
+              Reload
             </Button>
-          ) : (
-            <Button key={qa.label} variant="outline" size="sm" onClick={qa.action} className="gap-2 card-hover">
-              <qa.icon className="w-3.5 h-3.5" />{qa.label}
-            </Button>
-          )
-        ))}
-      </motion.div>
+          </div>
+        </motion.div>
+      )}
 
-      {/* Stats Cards */}
-      <motion.div variants={item} className="grid grid-cols-2 gap-3">
+      {/* KPI */}
+      <motion.div variants={item} className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {[
-          { label: "Meetings Today", value: stats.meetingsToday.toString(), icon: Video, trend: "", trendColor: "text-success", gradient: "from-primary/10 to-info/10" },
-          { label: "Open Tasks", value: stats.openTasks.toString(), icon: CheckSquare, trend: "", trendColor: "text-warning", gradient: "from-warning/10 to-warning/5" },
-          { label: "Unread Messages", value: stats.unreadMessages.toString(), icon: MessageSquare, trend: "", trendColor: "text-primary", gradient: "from-primary/5 to-info/5" },
-          { label: "Team Online", value: `${onlineCount}/${stats.teamOnline}`, icon: Users, trend: "", trendColor: "text-success", gradient: "from-success/10 to-success/5" },
-        ].map((stat, i) => (
-          <motion.div key={stat.label} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.08 + i * 0.04 }}>
-            <Card className={`card-hover bg-gradient-to-br ${stat.gradient} border-0 shadow-sm`}>
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs text-muted-foreground font-medium">{stat.label}</p>
-                    <p className="text-2xl font-bold text-foreground mt-0.5">{stat.value}</p>
-                    {stat.trend && <p className={`text-[10px] mt-0.5 font-medium ${stat.trendColor}`}>{stat.trend}</p>}
-                  </div>
-                  <div className="w-9 h-9 rounded-xl bg-card/80 flex items-center justify-center shadow-sm">
-                    <stat.icon className="w-4 h-4 text-primary" />
-                  </div>
+          { label: "Meetings today", value: stats.meetingsToday, icon: Video },
+          { label: "Open tasks", value: stats.openTasks, icon: CheckSquare },
+          { label: "Unread messages", value: stats.unreadMessages, icon: MessageSquare },
+          { label: "Online now", value: onlineSummary, icon: Users },
+        ].map((kpi) => (
+          <Card key={kpi.label} className="border bg-card/70 shadow-sm">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-xs font-medium text-muted-foreground">{kpi.label}</p>
+                  {loading ? (
+                    <Skeleton className="mt-2 h-7 w-24" />
+                  ) : (
+                    <p className="mt-1 text-2xl font-semibold tracking-tight text-foreground">{kpi.value}</p>
+                  )}
                 </div>
-              </CardContent>
-            </Card>
-          </motion.div>
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-muted/50">
+                  <kpi.icon className="h-4 w-4 text-foreground/80" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         ))}
       </motion.div>
 
-      {/* Row 1: Focus Timer + Mood + Meetings */}
-      <motion.div variants={item} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-4">
-        {/* Focus Timer */}
-        <Card className="md:col-span-1 lg:col-span-3 card-hover">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm flex items-center gap-2"><Target className="w-4 h-4 text-primary" /> Focus Timer</CardTitle>
-          </CardHeader>
-          <CardContent><FocusTimer /></CardContent>
-        </Card>
-
-        {/* Upcoming Meetings */}
-        <Card className="md:col-span-2 lg:col-span-5">
-          <CardHeader className="pb-2">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-sm">Upcoming Meetings</CardTitle>
-              <Link to="/meetings" className="text-xs text-primary hover:underline flex items-center gap-0.5">View all <ArrowRight className="w-3 h-3" /></Link>
+      {/* Row 1 */}
+      <motion.div variants={item} className="grid gap-4 lg:grid-cols-12">
+        {/* Meetings */}
+        <Card className="lg:col-span-7 border bg-card/70 shadow-sm">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between gap-3">
+              <CardTitle className="text-sm font-semibold">Today</CardTitle>
+              <Link to="/meetings" className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1">
+                View schedule <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
             </div>
           </CardHeader>
           <CardContent className="space-y-2">
             {loading ? (
-              <div className="text-sm text-muted-foreground">Loading...</div>
-            ) : upcomingMeetings.length === 0 ? (
-              <div className="text-sm text-muted-foreground">No upcoming meetings</div>
-            ) : (
-              upcomingMeetings.map((meeting, i) => (
-              <motion.div key={meeting.id} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.15 + i * 0.05 }}
-                className="flex items-center gap-3 p-2.5 rounded-lg border bg-card hover:bg-muted/30 transition-all">
-                <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                  <Video className="w-4 h-4 text-primary" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <p className="text-sm font-medium text-foreground truncate">{meeting.title}</p>
-                    {meeting.isNow && <Badge className="bg-success text-success-foreground text-[10px] h-4 animate-pulse">LIVE</Badge>}
+              <>
+                {[0, 1, 2].map((k) => (
+                  <div key={k} className="flex items-center gap-3 rounded-xl border bg-background/40 p-3">
+                    <Skeleton className="h-10 w-10 rounded-xl" />
+                    <div className="flex-1 space-y-2">
+                      <Skeleton className="h-4 w-48" />
+                      <Skeleton className="h-3 w-64" />
+                    </div>
+                    <Skeleton className="h-8 w-16 rounded-md" />
                   </div>
-                  <p className="text-xs text-muted-foreground">{meeting.time} · {meeting.team || "Personal"} · {meeting.participants}p</p>
+                ))}
+              </>
+            ) : todayMeetings.length === 0 ? (
+              <div className="rounded-xl border bg-background/40 p-4">
+                <p className="text-sm text-foreground">No upcoming meetings today.</p>
+                <p className="mt-1 text-xs text-muted-foreground">Schedule one, or start a quick meeting.</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button size="sm" variant="outline" onClick={() => setShowCreateMeeting(true)} className="gap-2">
+                    <Calendar className="h-4 w-4" />
+                    Schedule
+                  </Button>
+                  <Button size="sm" className="gradient-primary gap-2" asChild>
+                    <Link to="/meeting-room">
+                      <Video className="h-4 w-4" />
+                      Start meeting
+                    </Link>
+                  </Button>
                 </div>
-                <Button size="sm" variant={meeting.isNow ? "default" : "outline"} className={meeting.isNow ? "gradient-primary text-xs h-7" : "text-xs h-7"} asChild>
-                  <Link to="/meeting-room">{meeting.isNow ? "Join" : "View"}</Link>
-                </Button>
-              </motion.div>
+              </div>
+            ) : (
+              todayMeetings.map((m, i) => (
+                <motion.div
+                  key={m.id}
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.05 + i * 0.03 }}
+                  className="flex items-center gap-3 rounded-xl border bg-background/40 p-3 hover:bg-muted/30 transition-colors"
+                >
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-muted/60 shrink-0">
+                    <Video className="h-4 w-4 text-foreground/80" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium text-foreground truncate">{m.title}</p>
+                      {m.isLive && (
+                        <Badge className="h-4 bg-success/10 text-success border border-success/20 text-[10px]">
+                          LIVE
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {new Date(m.startTime).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })} · {m.team} ·{" "}
+                      {m.participants} participants
+                    </p>
+                  </div>
+                  <Button size="sm" variant={m.isLive ? "default" : "outline"} className={m.isLive ? "gradient-primary h-8" : "h-8"} asChild>
+                    <Link to={`/meeting-lobby/${m.id}`}>{m.isLive ? "Join" : "Lobby"}</Link>
+                  </Button>
+                </motion.div>
               ))
             )}
           </CardContent>
         </Card>
 
-        {/* Mood Check-in */}
-        <Card className="md:col-span-1 lg:col-span-4 card-hover">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm flex items-center gap-2"><Sparkles className="w-4 h-4 text-warning" /> Daily Check-in</CardTitle>
+        {/* Tasks */}
+        <Card className="lg:col-span-5 border bg-card/70 shadow-sm">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between gap-3">
+              <CardTitle className="text-sm font-semibold">My tasks</CardTitle>
+              <Link to="/tasks" className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1">
+                View all <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
+            </div>
           </CardHeader>
-          <CardContent><MoodCheckin /></CardContent>
+          <CardContent className="space-y-1">
+            {loading ? (
+              <div className="space-y-2">
+                {[0, 1, 2, 3].map((k) => (
+                  <div key={k} className="flex items-center gap-3 rounded-xl border bg-background/40 p-3">
+                    <Skeleton className="h-4 w-4 rounded" />
+                    <div className="flex-1 space-y-2">
+                      <Skeleton className="h-4 w-56" />
+                      <Skeleton className="h-3 w-32" />
+                    </div>
+                    <Skeleton className="h-5 w-14 rounded-full" />
+                  </div>
+                ))}
+              </div>
+            ) : recentTasks.length === 0 ? (
+              <div className="rounded-xl border bg-background/40 p-4">
+                <p className="text-sm text-foreground">No tasks assigned.</p>
+                <p className="mt-1 text-xs text-muted-foreground">Create one to track your next actions.</p>
+                <div className="mt-3">
+                  <Button size="sm" variant="outline" onClick={() => setShowCreateTask(true)} className="gap-2">
+                    <CheckSquare className="h-4 w-4" />
+                    New task
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              recentTasks.map((t) => (
+                <div key={t.id} className="flex items-center gap-3 rounded-xl border bg-background/40 p-3 hover:bg-muted/30 transition-colors">
+                  <CheckSquare className={`h-4 w-4 shrink-0 ${t.status === "done" ? "text-success" : "text-muted-foreground"}`} />
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-sm truncate ${t.status === "done" ? "line-through text-muted-foreground" : "text-foreground"}`}>
+                      {t.title}
+                    </p>
+                    <p className="text-[11px] text-muted-foreground">Priority · {t.priority}</p>
+                  </div>
+                  <Badge variant="outline" className={`text-[10px] ${priorityPills[t.priority] || priorityPills.low}`}>
+                    {t.priority}
+                  </Badge>
+                </div>
+              ))
+            )}
+          </CardContent>
         </Card>
       </motion.div>
 
-      {/* Row 2: Work Hours + Team Status + Time Zones */}
-      <motion.div variants={item} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-4">
-        {/* Work Hours Tracker */}
-        <Card className="lg:col-span-4 card-hover">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm flex items-center gap-2"><TrendingUp className="w-4 h-4 text-primary" /> Work Hours</CardTitle>
-          </CardHeader>
-          <CardContent><WorkHoursTracker /></CardContent>
-        </Card>
-
-        {/* Team Status with Virtual Office link */}
-        <Card className="lg:col-span-4">
-          <CardHeader className="pb-2">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-sm flex items-center gap-2"><Eye className="w-4 h-4 text-success" /> Team Status</CardTitle>
-              <Link to="/virtual-office" className="text-xs text-primary hover:underline flex items-center gap-0.5"><MapPin className="w-3 h-3" />Office</Link>
+      {/* Row 2 */}
+      <motion.div variants={item} className="grid gap-4 lg:grid-cols-12">
+        {/* Team pulse */}
+        <Card className="lg:col-span-4 border bg-card/70 shadow-sm">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between gap-3">
+              <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                <Eye className="h-4 w-4 text-foreground/70" />
+                Team pulse
+              </CardTitle>
+              <Link to="/virtual-office" className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1">
+                <MapPin className="h-3.5 w-3.5" />
+                Office
+              </Link>
             </div>
           </CardHeader>
           <CardContent className="space-y-2.5">
             {loading ? (
-              <div className="text-sm text-muted-foreground">Loading...</div>
-            ) : onlineMembers.length === 0 ? (
-              <div className="text-sm text-muted-foreground">No team members</div>
+              <div className="space-y-2">
+                {[0, 1, 2, 3].map((k) => (
+                  <div key={k} className="flex items-center gap-3">
+                    <Skeleton className="h-8 w-8 rounded-full" />
+                    <div className="flex-1 space-y-1.5">
+                      <Skeleton className="h-3.5 w-28" />
+                      <Skeleton className="h-3 w-40" />
+                    </div>
+                    <Skeleton className="h-5 w-16 rounded-md" />
+                  </div>
+                ))}
+              </div>
+            ) : members.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No team members.</p>
             ) : (
-              onlineMembers.map((member, i) => {
-                // Combine WebSocket presence with user status from database
-                const memberOnlineViaPresence = isUserOnline(member.id);
-                const memberOnlineViaStatus = member.status === "online";
-                const memberOnline = memberOnlineViaPresence || memberOnlineViaStatus;
-                
+              members.map((m, i) => {
+                const presenceStatus: "online" | "busy" | "away" | "offline" | "dnd" =
+                  (["online", "busy", "away", "offline", "dnd"] as const).includes(
+                    m.status as any,
+                  )
+                    ? (m.status as any)
+                    : isUserOnline(m.id)
+                    ? "online"
+                    : "offline";
                 const roomNames: Record<string, string> = {
-                  workspace: "💻 Workspace",
-                  "meeting-1": "🎥 Meeting A",
-                  "meeting-2": "🎥 Meeting B",
-                  huddle: "🎧 Huddle",
-                  lounge: "☕ Lounge",
-                  phone: "📞 Phone",
+                  workspace: "Workspace",
+                  "meeting-1": "Meeting A",
+                  "meeting-2": "Meeting B",
+                  huddle: "Huddle",
+                  lounge: "Lounge",
+                  phone: "Phone",
+                  "quick-huddle": "Quick huddle",
                 };
+
                 return (
-              <motion.div key={member.name} initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.2 + i * 0.04 }}
-                className="flex items-center gap-2.5">
-                <div className="relative">
-                  <Avatar className="h-7 w-7"><AvatarFallback className="bg-primary/10 text-primary text-[10px]">{member.initials}</AvatarFallback></Avatar>
-                  <StatusIndicator status={memberOnline ? "online" : "offline"} className="absolute -bottom-0.5 -right-0.5 border-card" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-medium text-foreground truncate">{member.name}</p>
-                  <p className="text-[10px] text-muted-foreground">{member.activity}</p>
-                </div>
-                <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
-                  {member.room ? (roomNames[member.room] || member.room) : (memberOnline ? "🟢 Online" : "⚫ Offline")}
-                </span>
-              </motion.div>
+                  <motion.div
+                    key={m.id}
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.04 + i * 0.02 }}
+                    className="flex items-center gap-2.5"
+                  >
+                    <div className="relative">
+                      <Avatar className="h-8 w-8">
+                        <AvatarFallback className="bg-muted/60 text-foreground text-[11px] font-medium">
+                          {m.initials}
+                        </AvatarFallback>
+                      </Avatar>
+                      <StatusIndicator
+                        status={presenceStatus}
+                        className="absolute -bottom-0.5 -right-0.5 border-card"
+                      />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium text-foreground truncate">{m.name}</p>
+                      <p className="text-[10px] text-muted-foreground truncate">{m.activity}</p>
+                    </div>
+                    <span className="text-[10px] text-muted-foreground bg-muted/60 px-2 py-0.5 rounded-md border border-border/60">
+                      {m.room
+                        ? roomNames[m.room] || m.room
+                        : presenceStatus === "dnd"
+                        ? "Do Not Disturb"
+                        : presenceStatus === "busy"
+                        ? "Busy"
+                        : presenceStatus === "away"
+                        ? "Away"
+                        : presenceStatus === "online"
+                        ? "Online"
+                        : "Offline"}
+                    </span>
+                  </motion.div>
                 );
               })
             )}
           </CardContent>
         </Card>
 
-        {/* Time Zones */}
-        <Card className="lg:col-span-4 card-hover">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm flex items-center gap-2"><Globe className="w-4 h-4 text-info" /> Time Zones</CardTitle>
+        {/* Active rooms */}
+        <Card className="lg:col-span-4 border bg-card/70 shadow-sm">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-semibold">Active rooms</CardTitle>
           </CardHeader>
-          <CardContent><TimeZoneWidget /></CardContent>
-        </Card>
-      </motion.div>
-
-      {/* Row 3: Tasks + Activity */}
-      <motion.div variants={item} className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* My Tasks */}
-        <Card>
-          <CardHeader className="pb-2">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-sm">My Tasks</CardTitle>
-              <Link to="/tasks" className="text-xs text-primary hover:underline flex items-center gap-0.5">View all <ArrowRight className="w-3 h-3" /></Link>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-1.5">
-            {loading ? (
-              <div className="text-sm text-muted-foreground">Loading...</div>
-            ) : recentTasks.length === 0 ? (
-              <div className="text-sm text-muted-foreground">No tasks</div>
-            ) : (
-              recentTasks.map((task) => (
-                <div key={task.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors">
-                  <CheckSquare className={`w-4 h-4 shrink-0 ${task.status === "done" ? "text-success" : "text-muted-foreground"}`} />
-                  <span className={`flex-1 text-sm text-foreground truncate ${task.status === "done" ? "line-through text-muted-foreground" : ""}`}>{task.title}</span>
-                  <Badge variant="outline" className={`text-[10px] ${priorityColors[task.priority]}`}>{task.priority}</Badge>
+          <CardContent className="space-y-2">
+            {activeRooms.length === 0 ? (
+              <div className="rounded-xl border bg-background/40 p-4">
+                <p className="text-sm text-foreground">No live rooms right now.</p>
+                <p className="mt-1 text-xs text-muted-foreground">Start a quick meeting to get moving.</p>
+                <div className="mt-3">
+                  <Button size="sm" className="gradient-primary gap-2" asChild>
+                    <Link to="/meeting-room">
+                      <Video className="h-4 w-4" />
+                      Start meeting
+                    </Link>
+                  </Button>
                 </div>
-              ))
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Activity Feed */}
-        <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm">Active Rooms</CardTitle></CardHeader>
-          <CardContent className="space-y-2.5">
-            {activeRooms.length > 0 ? (
-              activeRooms.slice(0, 3).map((room, i) => (
-                <motion.div key={room.roomId} initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.2 + i * 0.04 }}
-                  className="flex items-center gap-2.5 p-2 rounded-lg hover:bg-muted/50">
-                  <div className="w-8 h-8 rounded-lg bg-green-500/10 flex items-center justify-center">
-                    <Video className="w-3.5 h-3.5 text-green-500" />
+              </div>
+            ) : (
+              activeRooms.slice(0, 4).map((room: any, i: number) => (
+                <motion.div
+                  key={room.roomId}
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.04 + i * 0.02 }}
+                  className="flex items-center gap-3 rounded-xl border bg-background/40 p-3 hover:bg-muted/30 transition-colors"
+                >
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-muted/60 shrink-0">
+                    <Video className="h-4 w-4 text-foreground/80" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs font-medium text-foreground truncate">{room.name}</p>
-                    <p className="text-[10px] text-muted-foreground">{room.participants.length} participants</p>
+                    <p className="text-sm font-medium text-foreground truncate">{room.name}</p>
+                    <p className="text-xs text-muted-foreground">{room.participants?.length || 0} participants</p>
                   </div>
-                  <Badge className="bg-green-500/20 text-green-600 text-[9px]">LIVE</Badge>
+                  <Button size="sm" variant="outline" className="h-8" asChild>
+                    <Link to={`/meeting-lobby/${room.roomId}`}>Join</Link>
+                  </Button>
                 </motion.div>
               ))
-            ) : (
-              <div className="text-sm text-muted-foreground">No active rooms</div>
             )}
           </CardContent>
         </Card>
+
+        {/* Productivity */}
+        <Card className="lg:col-span-4 border bg-card/70 shadow-sm">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <Target className="h-4 w-4 text-foreground/70" />
+              Productivity
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Tabs defaultValue="focus" className="w-full">
+              <TabsList className="grid w-full grid-cols-2 bg-muted/40">
+                <TabsTrigger value="focus" className="gap-2">
+                  <Timer className="h-4 w-4" />
+                  Focus
+                </TabsTrigger>
+                <TabsTrigger value="hours" className="gap-2">
+                  <BarChart3 className="h-4 w-4" />
+                  Hours
+                </TabsTrigger>
+              </TabsList>
+              <TabsContent value="focus" className="mt-4">
+                <FocusTimer />
+              </TabsContent>
+              <TabsContent value="hours" className="mt-4">
+                <WorkHoursTracker />
+              </TabsContent>
+            </Tabs>
+          </CardContent>
+        </Card>
       </motion.div>
+
     </motion.div>
   );
 }

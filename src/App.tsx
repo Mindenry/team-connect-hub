@@ -10,16 +10,19 @@ import MeetingRoom from "./pages/MeetingRoom";
 import MeetingLobby from "./pages/MeetingLobby";
 import MeetingSummary from "./pages/MeetingSummary";
 import Meetings from "./pages/Meetings";
+import CalendarPage from "./pages/Calendar";
 import Chat from "./pages/Chat";
 import Tasks from "./pages/Tasks";
 import Teams from "./pages/Teams";
 import Reports from "./pages/Reports";
+import PerformanceDashboard from "./pages/PerformanceDashboard";
 import Notifications from "./pages/Notifications";
 import SettingsPage from "./pages/Settings";
 import Admin from "./pages/Admin";
 import Login from "./pages/Login";
 import InviteSetup from "./pages/InviteSetup";
-import VirtualOffice from "./pages/VirtualOffice";
+import SharedDrive from "./pages/SharedDrive";
+import AICopilotPage from "./pages/AICopilot";
 import NotFound from "./pages/NotFound";
 import { auth } from "@/lib/auth";
 
@@ -47,13 +50,16 @@ const App = () => (
           <Route path="/meeting-room/:id" element={<ProtectedRoute><MeetingRoom /></ProtectedRoute>} />
           <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
             <Route path="/" element={<Dashboard />} />
-            <Route path="/virtual-office" element={<VirtualOffice />} />
             <Route path="/meetings" element={<Meetings />} />
-            <Route path="/meeting-summary" element={<MeetingSummary />} />
+            <Route path="/calendar" element={<CalendarPage />} />
+            <Route path="/meeting-summary/:id" element={<MeetingSummary />} />
+            <Route path="/drive" element={<SharedDrive />} />
             <Route path="/chat" element={<Chat />} />
+            <Route path="/copilot" element={<AICopilotPage />} />
             <Route path="/tasks" element={<Tasks />} />
             <Route path="/teams" element={<Teams />} />
             <Route path="/reports" element={<Reports />} />
+            <Route path="/performance" element={<PerformanceDashboard />} />
             <Route path="/notifications" element={<Notifications />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/admin" element={<Admin />} />

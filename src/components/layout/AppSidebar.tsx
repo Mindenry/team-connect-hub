@@ -1,18 +1,39 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useLocation, Link, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  LayoutDashboard, Video, MessageSquare, CheckSquare, Users,
-  BarChart3, Settings, Bell, Shield, ChevronRight,
-  Hash, Volume2, Megaphone, Plus, Search, LogOut, MapPin, Headphones,
-  Phone, Zap,
+  LayoutDashboard,
+  Video,
+  MessageSquare,
+  CheckSquare,
+  Users,
+  BarChart3,
+  Settings,
+  Bell,
+  Shield,
+  ChevronRight,
+  Folder,
+  Hash,
+  Volume2,
+  Megaphone,
+  Plus,
+  Search,
+  LogOut,
+  MapPin,
+  Headphones,
+  Phone ,
+  Zap,
+  CalendarDays,
+  TrendingUp,
+  BellOff,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import StatusIndicator from "@/components/shared/StatusIndicator";
-import { auth } from "@/lib/auth";
+import { auth, useAuth } from "@/lib/auth";
 import { usePresence } from "@/hooks/usePresence";
+import { getSocket } from "@/lib/websocket";
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
 
@@ -40,6 +61,7 @@ interface UserInfo {
   name: string;
   email: string;
   status: string;
+  activity?: string;
 }
 
 interface AppSidebarProps {
@@ -48,12 +70,15 @@ interface AppSidebarProps {
 
 const mainNav: NavItem[] = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
-  { title: "Virtual Office", url: "/virtual-office", icon: MapPin },
   { title: "Meetings", url: "/meetings", icon: Video },
+  { title: "Calendar", url: "/calendar", icon: CalendarDays },
+  { title: "Shared Drive", url: "/drive", icon: Folder },
   { title: "Chat", url: "/chat", icon: MessageSquare },
+   { title: "AI Copilot", url: "/copilot", icon: Zap },
   { title: "Tasks", url: "/tasks", icon: CheckSquare },
   { title: "Teams", url: "/teams", icon: Users },
   { title: "Reports", url: "/reports", icon: BarChart3 },
+  { title: "Performance", url: "/performance", icon: TrendingUp },
 ];
 
 const bottomNav: NavItem[] = [
@@ -71,13 +96,15 @@ const channelIcons: Record<string, React.ElementType> = {
 export default function AppSidebar({ onNavigate }: AppSidebarProps) {
   const location = useLocation();
   const navigate = useNavigate();
-  const currentUser = auth.getUser();
+  const { user: currentUser } = useAuth();
   const [expandedTeams, setExpandedTeams] = useState<string[]>([]);
   const [collapsed, setCollapsed] = useState(false);
   const [teams, setTeams] = useState<Team[]>([]);
   const [channels, setChannels] = useState<Channel[]>([]);
   const [allUsers, setAllUsers] = useState<UserInfo[]>([]);
   const { onlineUserIds, activeRooms, isUserOnline } = usePresence();
+
+  const currentUserId = currentUser?.id;
 
   useEffect(() => {
     const loadData = async () => {
@@ -98,6 +125,20 @@ export default function AppSidebar({ onNavigate }: AppSidebarProps) {
       }
     };
     loadData();
+  }, []);
+
+  // Listen for realtime status changes from backend
+  useEffect(() => {
+    const socket = getSocket();
+    const handleStatusChanged = (payload: { userId: string; status: string }) => {
+      setAllUsers((prev) =>
+        prev.map((u) => (u.id === payload.userId ? { ...u, status: payload.status } : u)),
+      );
+    };
+    socket.on("user:status:changed", handleStatusChanged);
+    return () => {
+      socket.off("user:status:changed", handleStatusChanged);
+    };
   }, []);
 
   const toggleTeam = (id: string) => {
@@ -126,6 +167,47 @@ export default function AppSidebar({ onNavigate }: AppSidebarProps) {
 
   // Other users for DM section (exclude current user)
   const dmUsers = allUsers.filter((u) => u.id !== currentUser?.id);
+
+  // Derived current status (includes DND / focus)
+  const derivedCurrentStatus = useMemo(() => {
+    const storedStatus = (currentUser as any)?.status as string | undefined;
+    if (storedStatus) return storedStatus as "online" | "busy" | "away" | "offline" | "dnd";
+    if (!currentUserId) return "offline";
+    return isUserOnline(currentUserId) ? "online" : "offline";
+  }, [currentUser, currentUserId, isUserOnline]);
+
+  const statusLabel =
+    derivedCurrentStatus === "online"
+      ? "🟢 Online"
+      : derivedCurrentStatus === "busy"
+      ? "🔴 Busy"
+      : derivedCurrentStatus === "away"
+      ? "🟡 Away"
+      : derivedCurrentStatus === "dnd"
+      ? "🔕 Focus mode"
+      : "⚪ Offline";
+
+  const toggleFocusMode = async () => {
+    if (!currentUser || !currentUser.id) return;
+    const nextStatus = derivedCurrentStatus === "dnd" ? "online" : "dnd";
+    try {
+      await fetch(`${API_BASE}/users/${currentUser.id}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          status: nextStatus,
+          activity: nextStatus === "dnd" ? "Focusing · Do Not Disturb" : "Available",
+        }),
+      });
+      const updatedUser = { ...(currentUser as any), status: nextStatus };
+      auth.setUser(updatedUser);
+      setAllUsers((prev) =>
+        prev.map((u) => (u.id === currentUser.id ? { ...u, status: nextStatus } : u)),
+      );
+    } catch (err) {
+      console.error("Failed to toggle focus mode:", err);
+    }
+  };
 
   return (
     <aside
@@ -331,6 +413,9 @@ export default function AppSidebar({ onNavigate }: AppSidebarProps) {
             {dmUsers.map((user) => {
               const online = isUserOnline(user.id);
               const initials = user.name.split(" ").map(n => n[0]).join("").toUpperCase();
+              const presenceStatus =
+                (user.status as "online" | "busy" | "away" | "offline" | "dnd" | undefined) ||
+                (online ? "online" : "offline");
               return (
                 <Link
                   key={user.id}
@@ -345,12 +430,15 @@ export default function AppSidebar({ onNavigate }: AppSidebarProps) {
                       </AvatarFallback>
                     </Avatar>
                     <StatusIndicator
-                      status={online ? "online" : "offline"}
+                      status={presenceStatus}
                       className="absolute -bottom-0.5 -right-0.5 w-2 h-2 border-sidebar"
                     />
                   </div>
                   <span className="flex-1 truncate">{user.name}</span>
-                  {online && (
+                  {presenceStatus === "dnd" && (
+                    <span className="text-[9px] text-sidebar-muted shrink-0">Focus</span>
+                  )}
+                  {presenceStatus !== "dnd" && online && (
                     <span className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" />
                   )}
                 </Link>
@@ -398,24 +486,36 @@ export default function AppSidebar({ onNavigate }: AppSidebarProps) {
                 {currentUser?.name ? currentUser.name.split(" ").map(n => n[0]).join("") : "?"}
               </AvatarFallback>
             </Avatar>
-            <StatusIndicator status="online" className="absolute -bottom-0.5 -right-0.5 glow-success" />
+            <StatusIndicator
+              status={derivedCurrentStatus}
+              className="absolute -bottom-0.5 -right-0.5 glow-success"
+            />
           </div>
           {(!collapsed || onNavigate) && (
             <div className="flex-1 min-w-0">
               <p className="text-xs font-semibold text-sidebar-accent-foreground truncate">
                 {currentUser?.name || "Guest User"}
               </p>
-              <p className="text-[10px] text-sidebar-muted truncate">🟢 Online</p>
+              <p className="text-[10px] text-sidebar-muted truncate">{statusLabel}</p>
             </div>
           )}
           {(!collapsed || onNavigate) && (
-            <button
-              onClick={handleLogout}
-              className="p-1 rounded hover:bg-sidebar-accent text-sidebar-muted hover:text-sidebar-accent-foreground transition-colors"
-              title="Log out"
-            >
-              <LogOut className="w-3.5 h-3.5" />
-            </button>
+            <>
+              <button
+                onClick={toggleFocusMode}
+                className="p-1 rounded hover:bg-sidebar-accent text-sidebar-muted hover:text-sidebar-accent-foreground transition-colors"
+                title={derivedCurrentStatus === "dnd" ? "Exit Focus mode" : "Enable Focus mode / Do Not Disturb"}
+              >
+                <BellOff className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={handleLogout}
+                className="p-1 rounded hover:bg-sidebar-accent text-sidebar-muted hover:text-sidebar-accent-foreground transition-colors"
+                title="Log out"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+              </button>
+            </>
           )}
         </div>
       </div>

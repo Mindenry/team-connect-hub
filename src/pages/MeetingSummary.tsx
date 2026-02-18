@@ -19,6 +19,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
+import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
 
@@ -76,6 +78,20 @@ export default function MeetingSummary() {
   const navigate = useNavigate();
   const [meetingData, setMeetingData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [aiSummary, setAiSummary] = useState<string | null>(null);
+  const [aiStructured, setAiStructured] = useState<{
+    summary: string;
+    decisions: string[];
+    actionItems: {
+      title: string;
+      ownerName?: string;
+      ownerEmail?: string;
+      priority?: string;
+      dueDateNote?: string;
+    }[];
+  } | null>(null);
 
   useEffect(() => {
     if (!id) {
@@ -89,6 +105,39 @@ export default function MeetingSummary() {
         if (res.ok) {
           const data = await res.json();
           setMeetingData(data);
+
+          // If AI summary was already generated earlier, hydrate local state
+          if (data.aiSummary) {
+            try {
+              const parsed = JSON.parse(data.aiSummary);
+              setAiStructured(parsed);
+              // Build a readable block for textarea-like preview
+              const readable =
+                parsed.summary +
+                (parsed.decisions?.length
+                  ? "\n\n📌 ข้อสรุปสำคัญ\n" +
+                    parsed.decisions.map((d: string, i: number) => `${i + 1}. ${d}`).join("\n")
+                  : "") +
+                (parsed.actionItems?.length
+                  ? "\n\n✅ งานที่ต้องทำ (Action Items)\n" +
+                    parsed.actionItems
+                      .map((a, i) => {
+                        const who =
+                          a.ownerName || a.ownerEmail
+                            ? `${a.ownerName || ""}${a.ownerEmail ? ` (${a.ownerEmail})` : ""}`
+                            : "ไม่ระบุผู้รับผิดชอบ";
+                        const prio = (a.priority || "medium").toUpperCase();
+                        const due = a.dueDateNote || "ยังไม่กำหนดกำหนดส่ง";
+                        return `${i + 1}. [${prio}] ${a.title}\n   ผู้รับผิดชอบ: ${who}\n   หมายเหตุเวลา: ${due}`;
+                      })
+                      .join("\n")
+                  : "");
+              setAiSummary(readable);
+            } catch {
+              // if parse fails, just show raw text
+              setAiSummary(typeof data.aiSummary === "string" ? data.aiSummary : String(data.aiSummary));
+            }
+          }
         }
       } catch (err) {
         console.error("Failed to load meeting:", err);
@@ -99,6 +148,54 @@ export default function MeetingSummary() {
 
     loadMeeting();
   }, [id, navigate]);
+
+  const handleGenerateAiSummary = async () => {
+    if (!id) return;
+    setAiLoading(true);
+    setAiError(null);
+    try {
+      const res = await fetch(`${API_BASE}/meetings/${id}/ai-summary`, {
+        method: "POST",
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        let message = "ไม่สามารถสร้างสรุปอัตโนมัติได้";
+
+        try {
+          const parsed = JSON.parse(text);
+          const rawMessage: string | undefined =
+            typeof parsed?.message === "string" ? parsed.message : undefined;
+
+          if (rawMessage?.includes("Meeting chat channel not found")) {
+            message =
+              "ห้องนี้ยังไม่มีช่องแชทสำหรับประชุมหรือยังไม่มีข้อความในแชท จึงไม่สามารถสรุปด้วย AI ได้ กรุณาพิมพ์ในห้องแชทสักเล็กน้อยก่อน แล้วลองใหม่อีกครั้งค่ะ";
+          } else if (rawMessage?.includes("No chat messages found")) {
+            message =
+              "ยังไม่พบข้อความแชทในห้องประชุมนี้ จึงไม่สามารถสรุปด้วย AI ได้ กรุณาพิมพ์ข้อความในแชทก่อนนะคะ";
+          } else if (rawMessage) {
+            message = rawMessage;
+          }
+        } catch {
+          if (text) {
+            message = text;
+          }
+        }
+
+        setAiError(message);
+        return;
+      }
+      const data = await res.json();
+      // Backend returns { meeting, aiSummary, raw, createdTasksCount }
+      setMeetingData(data.meeting);
+      setAiStructured(data.raw);
+      setAiSummary(data.aiSummary);
+    } catch (err: any) {
+      console.error("AI summary error:", err);
+      setAiError(err?.message || "ไม่สามารถสร้างสรุปอัตโนมัติได้");
+    } finally {
+      setAiLoading(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -114,6 +211,7 @@ export default function MeetingSummary() {
   const meeting = meetingData || defaultMeetingSummary;
   const participants = meetingData?.participants || defaultMeetingSummary.participants;
   const tasks = meetingData?.tasks || defaultMeetingSummary.tasksCreated;
+  const notes: string[] = meetingData?.notes || defaultMeetingSummary.notes;
 
   return (
     <div className="p-6 max-w-4xl mx-auto space-y-6">
@@ -143,6 +241,24 @@ export default function MeetingSummary() {
           </div>
         </div>
         <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className={cn(aiLoading && "pointer-events-none opacity-70")}
+            onClick={handleGenerateAiSummary}
+          >
+            {aiLoading ? (
+              <>
+                <span className="mr-2 inline-block h-3 w-3 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                กำลังสร้างสรุปด้วย AI...
+              </>
+            ) : (
+              <>
+                <FileText className="w-4 h-4 mr-2" />
+                สรุปด้วย AI
+              </>
+            )}
+          </Button>
           <Button variant="outline" size="sm">
             <Download className="w-4 h-4 mr-2" />
             Export PDF
@@ -220,21 +336,68 @@ export default function MeetingSummary() {
           </CardContent>
         </Card>
 
-        {/* Agenda */}
+        {/* AI Summary & Agenda */}
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">Agenda</CardTitle>
+            <CardTitle className="text-base">AI Meeting Summary & Agenda</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-2">
-            {meetingSummary.agenda.map((item, i) => (
-              <div key={i} className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50">
-                <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 ${item.completed ? "bg-success" : "bg-muted"}`}>
-                  {item.completed && <CheckSquare className="w-3 h-3 text-success-foreground" />}
-                </div>
-                <span className="flex-1 text-sm text-foreground">{item.topic}</span>
-                <span className="text-xs text-muted-foreground">{item.duration}</span>
+          <CardContent className="space-y-4">
+            {/* AI Summary block */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-medium text-foreground flex items-center gap-2">
+                  <FileText className="w-4 h-4" />
+                  สรุปการประชุมอัตโนมัติ (AI)
+                </p>
+                {aiStructured && (
+                  <Badge variant="outline" className="text-[10px]">
+                    AI Generated
+                  </Badge>
+                )}
               </div>
-            ))}
+              {aiError && (
+                <p className="text-xs text-destructive">
+                  {aiError}
+                </p>
+              )}
+              {aiSummary ? (
+                <Textarea
+                  value={aiSummary}
+                  readOnly
+                  className="min-h-[180px] resize-none text-sm bg-muted/60"
+                />
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  ยังไม่มีสรุปจาก AI คุณสามารถกดปุ่ม <span className="font-semibold">“สรุปด้วย AI”</span> ด้านบนเพื่อสร้างสรุปการประชุมและ
+                  action items อัตโนมัติจากข้อความแชทในห้องประชุม
+                </p>
+              )}
+            </div>
+
+            <Separator />
+
+            {/* Static / Planned agenda demo */}
+            <div className="space-y-2">
+              <p className="text-sm font-medium text-foreground flex items-center gap-2">
+                <Calendar className="w-4 h-4" />
+                Agenda (planned topics)
+              </p>
+              {defaultMeetingSummary.agenda.map((item, i) => (
+                <div key={i} className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50">
+                  <div
+                    className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 ${
+                      item.completed ? "bg-success" : "bg-muted"
+                    }`}
+                  >
+                    {item.completed && (
+                      <CheckSquare className="w-3 h-3 text-success-foreground" />
+                    )}
+                  </div>
+                  <span className="flex-1 text-sm text-foreground">{item.topic}</span>
+                  <span className="text-xs text-muted-foreground">{item.duration}</span>
+                </div>
+              ))}
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -268,26 +431,31 @@ export default function MeetingSummary() {
         </CardContent>
       </Card>
 
-      {/* Meeting Notes */}
+      {/* Meeting Notes (manual) */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
             <FileText className="w-4 h-4" />
-            Meeting Notes
+            Meeting Notes (Manual)
           </CardTitle>
         </CardHeader>
         <CardContent>
           {meetingData?.summary ? (
-            <div className="text-sm text-foreground whitespace-pre-wrap">{meetingData.summary}</div>
+            <div className="text-sm text-foreground whitespace-pre-wrap">
+              {meetingData.summary}
+            </div>
           ) : (
-          <ul className="space-y-2">
-              {meeting.notes.map((note: string, i: number) => (
-              <li key={i} className="flex items-start gap-2 text-sm text-foreground">
-                <span className="w-1.5 h-1.5 rounded-full bg-primary mt-1.5 shrink-0" />
-                {note}
-              </li>
-            ))}
-          </ul>
+            <ul className="space-y-2">
+              {notes.map((note: string, i: number) => (
+                <li
+                  key={i}
+                  className="flex items-start gap-2 text-sm text-foreground"
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-primary mt-1.5 shrink-0" />
+                  {note}
+                </li>
+              ))}
+            </ul>
           )}
         </CardContent>
       </Card>

@@ -427,7 +427,7 @@ export default function MeetingLobby() {
     // Stop preview stream
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
-    
+
     // Pass states to meeting room via navigate state
     if (!currentUser) return;
 
@@ -446,13 +446,28 @@ export default function MeetingLobby() {
 
         if (!res.ok) {
           const data = await res.json().catch(() => ({}));
-          throw new Error(data?.message || `Failed to join (${res.status})`);
+          const message = data?.message || `Failed to join (${res.status})`;
+
+          // For clear validation errors (locked / invalid password), stay in lobby
+          if (res.status === 400 || res.status === 403) {
+            setError(message);
+            setJoining(false);
+            // Re-create local preview stream so user can adjust settings / password
+            try {
+              await ensureLocalStream();
+            } catch {
+              // ignore
+            }
+            return;
+          }
+
+          // For other errors (e.g. tracking DB issue), log but still let user enter room
+          console.error("Non-blocking join error:", message);
         }
       } catch (err: any) {
-        console.error("Failed to join meeting:", err);
-        setError(err?.message || "Failed to join meeting");
-        setJoining(false);
-        return;
+        console.error("Failed to join meeting (non-blocking):", err);
+        // Show message but still allow navigation to proceed
+        setError(err?.message || "Failed to register this meeting in database, but you can still join.");
       }
     }
 
@@ -461,8 +476,8 @@ export default function MeetingLobby() {
         initialMuted: isMuted,
         initialCameraOn: isCameraOn,
         selectedMicId: selectedMic,
-        selectedCameraId: selectedCamera
-      }
+        selectedCameraId: selectedCamera,
+      },
     });
   };
 

@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { AnimatePresence } from "framer-motion";
 import {
-  CheckSquare, Calendar, User, Tag, Flag, Link as LinkIcon, FileText,
+  CheckSquare, Calendar, User, Tag, Flag, Link as LinkIcon, FileText, Target, Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,9 +33,14 @@ export default function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialo
   const [dueDate, setDueDate] = useState("");
   const [teamId, setTeamId] = useState("");
   const [meetingId, setMeetingId] = useState("");
+  const [sprintId, setSprintId] = useState("");
+  const [epicId, setEpicId] = useState("");
+  const [storyPoints, setStoryPoints] = useState("");
   const [users, setUsers] = useState<any[]>([]);
   const [teams, setTeams] = useState<any[]>([]);
   const [meetings, setMeetings] = useState<any[]>([]);
+  const [sprints, setSprints] = useState<any[]>([]);
+  const [epics, setEpics] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -47,10 +52,14 @@ export default function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialo
         fetch(`${API_BASE}/users`).then((r) => r.json()),
         fetch(`${API_BASE}/teams`).then((r) => r.json()),
         fetch(`${API_BASE}/meetings`).then((r) => r.json()),
-      ]).then(([usersData, teamsData, meetingsData]) => {
+        fetch(`${API_BASE}/sprints`).then((r) => r.json()),
+        fetch(`${API_BASE}/epics`).then((r) => r.json()),
+      ]).then(([usersData, teamsData, meetingsData, sprintsData, epicsData]) => {
         setUsers(usersData);
         setTeams(teamsData);
         setMeetings(meetingsData);
+        setSprints(sprintsData);
+        setEpics(epicsData);
       }).catch(() => {});
     }
   }, [open]);
@@ -106,18 +115,63 @@ export default function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialo
                 </Select>
               </div>
             </div>
-            <div><Label className="flex items-center gap-1"><LinkIcon className="w-3 h-3" /> Link to Meeting (optional)</Label>
-              <Select value={meetingId || "none"} onValueChange={(v) => setMeetingId(v === "none" ? "" : v)}>
-                <SelectTrigger className="mt-1">
-                  <SelectValue placeholder="None" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">None</SelectItem>
-                  {meetings.map((meeting) => (
-                    <SelectItem key={meeting.id} value={meeting.id}>{meeting.title}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="grid grid-cols-2 gap-3">
+              <div><Label className="flex items-center gap-1"><LinkIcon className="w-3 h-3" /> Sprint</Label>
+                <Select value={sprintId || "none"} onValueChange={(v) => setSprintId(v === "none" ? "" : v)}>
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder="None" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No Sprint</SelectItem>
+                    {sprints.map((sprint) => (
+                      <SelectItem key={sprint.id} value={sprint.id}>{sprint.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div><Label className="flex items-center gap-1"><Target className="w-3 h-3" /> Epic</Label>
+                <Select value={epicId || "none"} onValueChange={(v) => setEpicId(v === "none" ? "" : v)}>
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder="None" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No Epic</SelectItem>
+                    {epics.map((epic) => (
+                      <SelectItem key={epic.id} value={epic.id}>
+                        <div className="flex items-center gap-2">
+                          {epic.color && <div className="w-3 h-3 rounded-full" style={{ backgroundColor: epic.color }} />}
+                          {epic.name}
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div><Label className="flex items-center gap-1"><LinkIcon className="w-3 h-3" /> Link to Meeting</Label>
+                <Select value={meetingId || "none"} onValueChange={(v) => setMeetingId(v === "none" ? "" : v)}>
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder="None" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">None</SelectItem>
+                    {meetings.map((meeting) => (
+                      <SelectItem key={meeting.id} value={meeting.id}>{meeting.title}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div><Label className="flex items-center gap-1"><Zap className="w-3 h-3" /> Story Points</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  placeholder="e.g., 5"
+                  className="mt-1"
+                  value={storyPoints}
+                  onChange={(e) => setStoryPoints(e.target.value)}
+                />
+              </div>
             </div>
             <div><Label className="flex items-center gap-1"><Tag className="w-3 h-3" /> Tags</Label>
               <div className="flex flex-wrap gap-1.5 mt-2">
@@ -132,7 +186,7 @@ export default function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialo
           </div>
           {error && <div className="text-sm text-destructive bg-destructive/10 p-2 rounded">{error}</div>}
           <DialogFooter>
-            <Button variant="outline" onClick={() => { onOpenChange(false); setError(null); setTitle(""); setTaskDescription(""); setAssigneeId(""); setDueDate(""); setTeamId(""); setMeetingId(""); setSelectedTags([]); }}>Cancel</Button>
+            <Button variant="outline" onClick={() => { onOpenChange(false); setError(null); setTitle(""); setTaskDescription(""); setAssigneeId(""); setDueDate(""); setTeamId(""); setMeetingId(""); setSprintId(""); setEpicId(""); setStoryPoints(""); setSelectedTags([]); }}>Cancel</Button>
             <Button onClick={async () => {
               if (!title.trim()) {
                 setError("Please enter a task title");
@@ -157,6 +211,9 @@ export default function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialo
                     assigneeId: assigneeId || null,
                     teamId: teamId || null,
                     meetingId: meetingId || null,
+                    sprintId: sprintId || null,
+                    epicId: epicId || null,
+                    storyPoints: storyPoints ? parseInt(storyPoints) : null,
                     createdBy: currentUser.id,
                   }),
                 });
@@ -169,6 +226,9 @@ export default function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialo
                 setDueDate("");
                 setTeamId("");
                 setMeetingId("");
+                setSprintId("");
+                setEpicId("");
+                setStoryPoints("");
                 setSelectedTags([]);
                 window.location.reload();
               } catch (err: any) {

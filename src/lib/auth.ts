@@ -6,6 +6,9 @@ export interface AuthUser {
   id: string;
   email: string;
   name: string;
+  // Optional rich presence fields (synced from backend `User`)
+  status?: string;   // online, busy, away, offline, dnd, etc.
+  activity?: string; // e.g. "Available", "In a meeting", "Focusing"
 }
 
 export const auth = {

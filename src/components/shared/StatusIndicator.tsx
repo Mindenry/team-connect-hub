@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 
-type Status = "online" | "busy" | "away" | "offline";
+type Status = "online" | "busy" | "away" | "offline" | "dnd";
 
 interface StatusIndicatorProps {
   status: Status;
@@ -13,6 +13,7 @@ const statusColors: Record<Status, string> = {
   busy: "bg-status-busy",
   away: "bg-status-away",
   offline: "bg-status-offline",
+  dnd: "bg-status-busy", // Reuse busy color for Do Not Disturb / Focus mode
 };
 
 export default function StatusIndicator({ status, className, size = "sm" }: StatusIndicatorProps) {

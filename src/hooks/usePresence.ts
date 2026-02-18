@@ -5,7 +5,7 @@ import { auth } from "@/lib/auth";
 interface ActiveRoom {
   roomId: string;
   name: string;
-  participants: Array<{ peerId: string; name: string }>;
+  participants: Array<{ peerId: string; name: string; userId?: string }>;
   createdAt: Date;
 }
 
