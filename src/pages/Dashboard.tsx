@@ -29,8 +29,7 @@ import FocusTimer from "@/components/widgets/FocusTimer";
 import WorkHoursTracker from "@/components/widgets/WorkHoursTracker";
 import { auth } from "@/lib/auth";
 import { usePresence } from "@/hooks/usePresence";
-
-const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
+import { apiGet } from "@/lib/api";
 
 type MeetingItem = {
   id: string;
@@ -95,41 +94,51 @@ export default function Dashboard() {
         tomorrow.setDate(tomorrow.getDate() + 1);
         const now = new Date();
 
-        const user = auth.getUser();
-        const [meetingsRes, tasksRes, usersRes, channelsRes] = await Promise.all([
-          fetch(`${API_BASE}/meetings?status=scheduled`).then((r) => r.json()),
-          fetch(`${API_BASE}/tasks?assigneeId=${user?.id || ""}`).then((r) => r.json()),
-          fetch(`${API_BASE}/users`).then((r) => r.json()),
-          fetch(`${API_BASE}/channels`).then((r) => r.json()),
+        const [meetingsRes, tasksRes, usersRes, teamsRes, notificationsRes, channelsRes] = await Promise.all([
+          apiGet<any[]>("/meetings?status=upcoming").catch(() => []),
+          apiGet<any[]>("/tasks").catch(() => []).then((tasks: any[]) =>
+            Array.isArray(tasks) ? tasks.filter((t: any) => t.status === "todo" || t.status === "in_progress") : []
+          ),
+          apiGet<any[]>("/users").catch(() => []),
+          apiGet<any[]>("/teams").catch(() => []),
+          currentUser?.id
+            ? apiGet<any>(`/notifications?userId=${currentUser.id}&read=false`).catch(() => []).then((res: any) =>
+              Array.isArray(res) ? res.length : 0
+            ) 
+            : Promise.resolve(0),
+          apiGet<any[]>("/channels").catch(() => []),
         ]);
 
-        const meetingsTodayAll: any[] = (meetingsRes || [])
-          .filter((m: any) => {
-            const start = new Date(m.startTime);
-            return start >= today && start < tomorrow;
-          })
-          .sort((a: any, b: any) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
+        const safeMeetings = Array.isArray(meetingsRes) ? meetingsRes : [];
+        const safeTasks = Array.isArray(tasksRes) ? tasksRes : [];
+        const safeUsers = Array.isArray(usersRes) ? usersRes : [];
 
-        const meetingsForList: MeetingItem[] = meetingsTodayAll
-          .filter((m: any) => new Date(m.startTime) >= now)
-          .slice(0, 4)
+        const meetingsTodayAll: MeetingItem[] = safeMeetings
+          .filter((m: any) => {
+             const start = new Date(m.startTime);
+             return start >= today && start < tomorrow;
+          })
           .map((m: any) => ({
-            id: m.id,
-            title: m.title || "Untitled meeting",
-            startTime: m.startTime,
-            team: m.team?.name || "Personal",
-            participants: m.participants?.length || 0,
-            isLive: m.status === "live",
+             id: m.id,
+             title: m.title || "Untitled meeting",
+             startTime: m.startTime,
+             team: m.team?.name || "Personal",
+             participants: m.participants?.length || 0,
+             isLive: m.status === "live"
           }));
 
-        const tasks: TaskItem[] = (tasksRes || []).slice(0, 6).map((t: any) => ({
+        const meetingsForList = meetingsTodayAll
+          .filter((m: any) => new Date(m.startTime) >= now)
+          .slice(0, 4);
+
+        const tasks: TaskItem[] = safeTasks.slice(0, 6).map((t: any) => ({
           id: t.id,
           title: t.title || "Untitled task",
           priority: t.priority || "low",
           status: t.status || "todo",
         }));
 
-        const memberList: MemberItem[] = (usersRes || []).slice(0, 8).map((u: any) => ({
+        const memberList: MemberItem[] = safeUsers.slice(0, 8).map((u: any) => ({
           id: u.id,
           name: u.name || "Unknown",
           initials: (u.name || "?").split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase(),
@@ -138,26 +147,17 @@ export default function Dashboard() {
           room: u.currentRoom || null,
         }));
 
-        let unreadTotal = 0;
-        if (user?.id && Array.isArray(channelsRes)) {
-          const counts = await Promise.all(
-            channelsRes.map((ch: any) =>
-              fetch(`${API_BASE}/channels/${ch.id}/unread-count?userId=${user.id}`)
-                .then((r) => r.json())
-                .catch(() => ({ count: 0 })),
-            ),
-          );
-          unreadTotal = counts.reduce((sum, c) => sum + (c?.count || 0), 0);
-        }
-
-        setTodayMeetings(meetingsForList);
-        setRecentTasks(tasks);
-        setMembers(memberList);
-        setStats({
+        // Calculate unread count if we have channels
+        let unreadTotal = notificationsRes || 0;
+        
+         setTodayMeetings(meetingsForList);
+         setRecentTasks(tasks);
+         setMembers(memberList);
+         setStats({
           meetingsToday: meetingsTodayAll.length,
-          openTasks: (tasksRes || []).filter((t: any) => t.status !== "done").length,
+          openTasks: safeTasks.length,
           unreadMessages: unreadTotal,
-          teamTotal: (usersRes || []).length,
+          teamTotal: safeUsers.length,
         });
       } catch (err) {
         console.error("Failed to load dashboard data:", err);
@@ -182,7 +182,7 @@ export default function Dashboard() {
 
   return (
     <motion.div
-      className="relative mx-auto w-full max-w-[1400px] p-4 md:p-8 space-y-5 md:space-y-7"
+       className="relative mx-auto w-full max-w-[1400px] p-4 md:p-8 space-y-5 md:space-y-7"
       variants={container}
       initial="initial"
       animate="animate"
@@ -251,7 +251,10 @@ export default function Dashboard() {
       )}
 
       {/* KPI */}
-      <motion.div variants={item} className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <motion.div
+        variants={item}
+        className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4"
+      >
         {[
           { label: "Meetings today", value: stats.meetingsToday, icon: Video },
           { label: "Open tasks", value: stats.openTasks, icon: CheckSquare },

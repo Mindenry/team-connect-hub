@@ -1,5 +1,5 @@
-import { Link, useParams, useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import {
   Video,
   Clock,
@@ -10,9 +10,6 @@ import {
   ArrowLeft,
   Calendar,
   User,
-  MessageSquare,
-  Hand,
-  Monitor,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -21,51 +18,11 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { auth } from "@/lib/auth";
+import { toast } from "sonner";
+import { apiGet } from "@/lib/api";
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
-
-const defaultMeetingSummary = {
-  title: "Sprint Planning",
-  date: "February 9, 2026",
-  startTime: "10:00 AM",
-  endTime: "10:42 AM",
-  duration: "42 minutes",
-  host: { name: "สมชาย K.", initials: "SK" },
-  team: "Engineering",
-  totalParticipants: 6,
-  participants: [
-    { name: "สมชาย K.", initials: "SK", role: "Host", joinedAt: "10:00", leftAt: "10:42", duration: "42m" },
-    { name: "อริสา P.", initials: "AP", role: "Participant", joinedAt: "10:00", leftAt: "10:42", duration: "42m" },
-    { name: "จิรวัฒน์ W.", initials: "JW", role: "Participant", joinedAt: "10:01", leftAt: "10:42", duration: "41m" },
-    { name: "พิมพ์ L.", initials: "PL", role: "Participant", joinedAt: "10:00", leftAt: "10:40", duration: "40m" },
-    { name: "ธนา S.", initials: "TS", role: "Participant", joinedAt: "10:03", leftAt: "10:42", duration: "39m" },
-    { name: "นภา M.", initials: "NM", role: "Participant", joinedAt: "10:05", leftAt: "10:42", duration: "37m" },
-  ],
-  stats: {
-    screenShares: 3,
-    handRaises: 5,
-    chatMessages: 12,
-    waitingRoomAdmits: 1,
-  },
-  agenda: [
-    { topic: "Review previous sprint outcomes", duration: "8m", completed: true },
-    { topic: "Discuss API v2 migration plan", duration: "15m", completed: true },
-    { topic: "Mobile responsive fixes review", duration: "10m", completed: true },
-    { topic: "Assign tasks for next sprint", duration: "9m", completed: true },
-  ],
-  tasksCreated: [
-    { title: "Fix Safari upload bug", assignee: "จิรวัฒน์ W.", priority: "high", dueDate: "Feb 10" },
-    { title: "Update API documentation", assignee: "อริสา P.", priority: "medium", dueDate: "Feb 12" },
-    { title: "Design new onboarding flow", assignee: "พิมพ์ L.", priority: "medium", dueDate: "Feb 15" },
-    { title: "Database migration v2.3", assignee: "ธนา S.", priority: "high", dueDate: "Feb 10" },
-  ],
-  notes: [
-    "API v2 migration needs to be backward-compatible",
-    "Safari upload bug is a CORS issue — จิรวัฒน์ will investigate",
-    "New onboarding flow should reduce signup time by 30%",
-    "Next standup moved to 10:30 AM starting tomorrow",
-  ],
-};
 
 const priorityColors: Record<string, string> = {
   high: "bg-destructive text-destructive-foreground",
@@ -73,11 +30,13 @@ const priorityColors: Record<string, string> = {
   low: "bg-secondary text-secondary-foreground",
 };
 
+const getInitials = (name: string) => name.split(" ").map((n) => n[0]).join("").toUpperCase();
+
 export default function MeetingSummary() {
-  const { id } = useParams();
-  const navigate = useNavigate();
-  const [meetingData, setMeetingData] = useState<any>(null);
+  const [searchParams] = useSearchParams();
+  const meetingId = searchParams.get("id");
   const [loading, setLoading] = useState(true);
+  // AI State
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
   const [aiSummary, setAiSummary] = useState<string | null>(null);
@@ -92,24 +51,25 @@ export default function MeetingSummary() {
       dueDateNote?: string;
     }[];
   } | null>(null);
+  
+  // Data State
+  const [meeting, setMeeting] = useState<any>(null);
+  const [tasks, setTasks] = useState<any[]>([]);
 
   useEffect(() => {
-    if (!id) {
-      navigate("/meetings");
-      return;
-    }
-
-    const loadMeeting = async () => {
+    const loadData = async () => {
       try {
-        const res = await fetch(`${API_BASE}/meetings/${id}`);
-        if (res.ok) {
-          const data = await res.json();
-          setMeetingData(data);
+        const [meetingRes, tasksRes] = await Promise.all([
+          apiGet<any>(`/meetings/${meetingId}`),
+          apiGet<any[]>(`/tasks?meetingId=${meetingId}`).catch(() => []),
+        ]);
 
+        if (meetingRes) {
+          setMeeting(meetingRes);
           // If AI summary was already generated earlier, hydrate local state
-          if (data.aiSummary) {
+          if (meetingRes.aiSummary) {
             try {
-              const parsed = JSON.parse(data.aiSummary);
+              const parsed = JSON.parse(meetingRes.aiSummary);
               setAiStructured(parsed);
               // Build a readable block for textarea-like preview
               const readable =
@@ -121,8 +81,8 @@ export default function MeetingSummary() {
                 (parsed.actionItems?.length
                   ? "\n\n✅ งานที่ต้องทำ (Action Items)\n" +
                     parsed.actionItems
-                      .map((a, i) => {
-                        const who =
+                      .map((a: any, i: number) => {
+                         const who =
                           a.ownerName || a.ownerEmail
                             ? `${a.ownerName || ""}${a.ownerEmail ? ` (${a.ownerEmail})` : ""}`
                             : "ไม่ระบุผู้รับผิดชอบ";
@@ -135,27 +95,30 @@ export default function MeetingSummary() {
               setAiSummary(readable);
             } catch {
               // if parse fails, just show raw text
-              setAiSummary(typeof data.aiSummary === "string" ? data.aiSummary : String(data.aiSummary));
+              setAiSummary(typeof meetingRes.aiSummary === "string" ? meetingRes.aiSummary : String(meetingRes.aiSummary));
             }
           }
         }
+        setTasks(tasksRes || []);
       } catch (err) {
         console.error("Failed to load meeting:", err);
+        toast.error("Failed to load meeting summary");
       } finally {
         setLoading(false);
       }
     };
 
-    loadMeeting();
-  }, [id, navigate]);
+    loadData();
+  }, [meetingId]);
 
   const handleGenerateAiSummary = async () => {
-    if (!id) return;
+    if (!meetingId) return;
     setAiLoading(true);
     setAiError(null);
     try {
-      const res = await fetch(`${API_BASE}/meetings/${id}/ai-summary`, {
+      const res = await fetch(`${API_BASE}/meetings/${meetingId}/ai-summary`, {
         method: "POST",
+        headers: await auth.getAuthHeaders(),
       });
       if (!res.ok) {
         const text = await res.text();
@@ -186,7 +149,7 @@ export default function MeetingSummary() {
       }
       const data = await res.json();
       // Backend returns { meeting, aiSummary, raw, createdTasksCount }
-      setMeetingData(data.meeting);
+      setMeeting(data.meeting);
       setAiStructured(data.raw);
       setAiSummary(data.aiSummary);
     } catch (err: any) {
@@ -200,18 +163,35 @@ export default function MeetingSummary() {
   if (loading) {
     return (
       <div className="p-6 max-w-4xl mx-auto">
-        <div className="text-center py-16">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Loading meeting summary...</p>
-        </div>
+        <div className="text-center text-muted-foreground">Loading meeting summary...</div>
       </div>
     );
   }
 
-  const meeting = meetingData || defaultMeetingSummary;
-  const participants = meetingData?.participants || defaultMeetingSummary.participants;
-  const tasks = meetingData?.tasks || defaultMeetingSummary.tasksCreated;
-  const notes: string[] = meetingData?.notes || defaultMeetingSummary.notes;
+  if (!meeting) {
+    return (
+      <div className="p-6 max-w-4xl mx-auto">
+        <div className="text-center text-muted-foreground">Meeting not found</div>
+        <Button asChild className="mt-4">
+          <Link to="/meetings">Back to Meetings</Link>
+        </Button>
+      </div>
+    );
+  }
+
+  const notes: string[] = meeting?.notes || [];
+  
+  const startTime = new Date(meeting.startTime);
+  const endTime = new Date(meeting.endTime);
+  const durationMs = endTime.getTime() - startTime.getTime();
+  const durationMins = Math.floor(durationMs / 60000);
+  const duration = `${Math.floor(durationMins / 60)}h ${durationMins % 60}m`;
+
+  const dateStr = startTime.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+  const startTimeStr = startTime.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  const endTimeStr = endTime.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+
+  const hostInitials = getInitials(meeting.host?.name || "Unknown");
 
   return (
     <div className="p-6 max-w-4xl mx-auto space-y-6">
@@ -224,19 +204,7 @@ export default function MeetingSummary() {
           <div>
             <h1 className="text-xl font-bold text-foreground">{meeting.title}</h1>
             <p className="text-sm text-muted-foreground">
-              {meetingData ? (
-                <>
-                  {new Date(meeting.actualStartTime || meeting.startTime).toLocaleDateString()} ·{" "}
-                  {new Date(meeting.actualStartTime || meeting.startTime).toLocaleTimeString()} —{" "}
-                  {meeting.actualEndTime 
-                    ? new Date(meeting.actualEndTime).toLocaleTimeString()
-                    : "Ongoing"}
-                </>
-              ) : (
-                <>
-                  {meeting.date} · {meeting.startTime} — {meeting.endTime}
-                </>
-              )}
+              {dateStr} · {startTimeStr} — {endTimeStr}
             </p>
           </div>
         </div>
@@ -273,17 +241,11 @@ export default function MeetingSummary() {
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         {[
-          { 
-            icon: Clock, 
-            label: "Duration", 
-            value: meetingData && meeting.actualStartTime && meeting.actualEndTime
-              ? `${Math.round((new Date(meeting.actualEndTime).getTime() - new Date(meeting.actualStartTime).getTime()) / 60000)}m`
-              : meeting.duration
-          },
-          { icon: Users, label: "Participants", value: String(participants.length || meeting.totalParticipants) },
-          { icon: Monitor, label: "Screen Shares", value: String(meeting.stats?.screenShares || 0) },
-          { icon: Hand, label: "Hand Raises", value: String(meeting.stats?.handRaises || 0) },
-          { icon: MessageSquare, label: "Chat Messages", value: String(meeting.stats?.chatMessages || 0) },
+          { icon: Clock, label: "Duration", value: duration },
+          { icon: Users, label: "Team", value: meeting.team?.name || "No team" },
+          { icon: Video, label: "Status", value: meeting.status },
+          { icon: User, label: "Host", value: meeting.host?.name || "Unknown" },
+          { icon: CheckSquare, label: "Tasks", value: String(tasks.length) },
         ].map((stat) => (
           <Card key={stat.label}>
             <CardContent className="p-3 text-center">
@@ -296,45 +258,29 @@ export default function MeetingSummary() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Participants */}
+        {/* Host Info */}
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">Participants</CardTitle>
+            <CardTitle className="text-base">Meeting Host</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-2">
-              <div className="grid grid-cols-5 text-xs font-medium text-muted-foreground px-2 pb-1">
-                <span className="col-span-2">Name</span>
-                <span>Joined</span>
-                <span>Left</span>
-                <span className="text-right">Duration</span>
+            <div className="flex items-center gap-3">
+              <Avatar className="h-10 w-10">
+                <AvatarFallback className="bg-primary/10 text-primary">{hostInitials}</AvatarFallback>
+              </Avatar>
+              <div>
+                <p className="text-sm font-medium text-foreground">{meeting.host?.name || "Unknown"}</p>
+                <p className="text-xs text-muted-foreground">{meeting.host?.email || ""}</p>
               </div>
-              {participants.map((p: any) => {
-                const participantName = p.user?.name || p.name || "Unknown";
-                const initials = participantName.split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase();
-                const joinedAt = p.joinedAt ? new Date(p.joinedAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "?";
-                const leftAt = p.leftAt ? new Date(p.leftAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "?";
-                const duration = p.joinedAt && p.leftAt 
-                  ? `${Math.round((new Date(p.leftAt).getTime() - new Date(p.joinedAt).getTime()) / 60000)}m`
-                  : p.duration || "?";
-                return (
-                <div key={p.userId || p.id} className="grid grid-cols-5 items-center text-sm p-2 rounded-lg hover:bg-muted/50">
-                  <div className="col-span-2 flex items-center gap-2">
-                    <Avatar className="h-6 w-6">
-                      <AvatarFallback className="bg-primary/10 text-primary text-[10px]">{initials}</AvatarFallback>
-                    </Avatar>
-                    <span className="text-foreground truncate">{participantName}</span>
-                    {meetingData?.hostId === p.userId && <Badge variant="secondary" className="text-[10px] px-1">Host</Badge>}
-                  </div>
-                  <span className="text-muted-foreground text-xs">{joinedAt}</span>
-                  <span className="text-muted-foreground text-xs">{leftAt}</span>
-                  <span className="text-right text-muted-foreground text-xs">{duration}</span>
-                </div>
-                );
-              })}
             </div>
+            {meeting.description && (
+              <div className="mt-4 pt-4 border-t">
+                <p className="text-sm text-muted-foreground">{meeting.description}</p>
+              </div>
+            )}
           </CardContent>
         </Card>
+
 
         {/* AI Summary & Agenda */}
         <Card>
@@ -382,7 +328,9 @@ export default function MeetingSummary() {
                 <Calendar className="w-4 h-4" />
                 Agenda (planned topics)
               </p>
-              {defaultMeetingSummary.agenda.map((item, i) => (
+              {/* Fallback if no agenda */}
+              {(meeting.agenda || []).length === 0 && <p className="text-sm text-muted-foreground">No agenda items.</p>}
+              {(meeting.agenda || []).map((item: any, i: number) => (
                 <div key={i} className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50">
                   <div
                     className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 ${
@@ -394,68 +342,86 @@ export default function MeetingSummary() {
                     )}
                   </div>
                   <span className="flex-1 text-sm text-foreground">{item.topic}</span>
-                  <span className="text-xs text-muted-foreground">{item.duration}</span>
+                  <span className="text-xs text-muted-foreground">{item.duration || "10m"}</span>
                 </div>
               ))}
+            </div>
+           </CardContent>
+        </Card>
+        {/* Meeting Settings */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Settings</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">Waiting Room</span>
+              <Badge variant={meeting.waitingRoom ? "default" : "secondary"}>
+                {meeting.waitingRoom ? "Enabled" : "Disabled"}
+              </Badge>
+            </div>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">Screen Share</span>
+              <Badge variant={meeting.allowScreenShare ? "default" : "secondary"}>
+                {meeting.allowScreenShare ? "Allowed" : "Not Allowed"}
+              </Badge>
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Tasks Created */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <CheckSquare className="w-4 h-4" />
-            Tasks Created from Meeting ({tasks.length})
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          {tasks.map((task: any, i: number) => {
-            const taskTitle = task.title || "Untitled Task";
-            const assigneeName = task.assignee?.name || "Unassigned";
-            const priority = task.priority || "medium";
-            const dueDate = task.dueDate ? new Date(task.dueDate).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "No due date";
-            return (
-            <div key={task.id || i} className="flex items-center gap-3 p-2.5 rounded-lg border hover:bg-muted/50 transition-colors">
-              <CheckSquare className="w-4 h-4 text-muted-foreground shrink-0" />
-              <span className="flex-1 text-sm font-medium text-foreground">{taskTitle}</span>
-              <span className="text-xs text-muted-foreground">{assigneeName}</span>
-              <Badge className={`text-xs ${priorityColors[priority]}`}>{priority}</Badge>
-              <span className="text-xs text-muted-foreground flex items-center gap-1">
-                <Calendar className="w-3 h-3" />{dueDate}
-              </span>
-            </div>
-            );
-          })}
-        </CardContent>
-      </Card>
+      {tasks.length > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <CheckSquare className="w-4 h-4" />
+              Tasks Created from Meeting ({tasks.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {tasks.map((task: any, i: number) => {
+              const taskTitle = task.title || "Untitled Task";
+              const assigneeName = task.assignee?.name || "Unassigned";
+              const priority = task.priority || "medium";
+              const dueDate = task.dueDate ? new Date(task.dueDate).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "No due date";
+              
+              const pColors: Record<string, string> = {
+                high: "bg-destructive/10 text-destructive border-destructive/20",
+                medium: "bg-warning/10 text-warning border-warning/20",
+                low: "bg-secondary text-secondary-foreground",
+              };
+
+              return (
+              <div key={task.id || i} className="flex items-center gap-3 p-2.5 rounded-lg border hover:bg-muted/50 transition-colors">
+                <CheckSquare className="w-4 h-4 text-muted-foreground shrink-0" />
+                <span className="flex-1 text-sm font-medium text-foreground">{taskTitle}</span>
+                <span className="text-xs text-muted-foreground">{assigneeName}</span>
+                <Badge variant="outline" className={`text-xs ${pColors[priority] || pColors.medium}`}>{priority}</Badge>
+                <span className="text-xs text-muted-foreground flex items-center gap-1">
+                  <Calendar className="w-3 h-3" />{dueDate}
+                </span>
+              </div>
+              );
+            })}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Meeting Notes (manual) */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
             <FileText className="w-4 h-4" />
-            Meeting Notes (Manual)
+            Meeting Notes
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {meetingData?.summary ? (
+          {meeting.description ? (
             <div className="text-sm text-foreground whitespace-pre-wrap">
-              {meetingData.summary}
+              {meeting.description}
             </div>
           ) : (
-            <ul className="space-y-2">
-              {notes.map((note: string, i: number) => (
-                <li
-                  key={i}
-                  className="flex items-start gap-2 text-sm text-foreground"
-                >
-                  <span className="w-1.5 h-1.5 rounded-full bg-primary mt-1.5 shrink-0" />
-                  {note}
-                </li>
-              ))}
-            </ul>
+             <p className="text-sm text-muted-foreground">No notes.</p>
           )}
         </CardContent>
       </Card>

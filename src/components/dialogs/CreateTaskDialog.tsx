@@ -16,9 +16,7 @@ import {
   AnimatedDialogHeader as DialogHeader,
   AnimatedDialogTitle as DialogTitle,
 } from "@/components/shared/AnimatedDialog";
-import { auth } from "@/lib/auth";
-
-const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
+import { apiGet, apiPost } from "@/lib/api";
 
 interface CreateTaskDialogProps { open: boolean; onOpenChange: (open: boolean) => void; }
 
@@ -49,18 +47,24 @@ export default function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialo
   useEffect(() => {
     if (open) {
       Promise.all([
-        fetch(`${API_BASE}/users`).then((r) => r.json()),
-        fetch(`${API_BASE}/teams`).then((r) => r.json()),
-        fetch(`${API_BASE}/meetings`).then((r) => r.json()),
-        fetch(`${API_BASE}/sprints`).then((r) => r.json()),
-        fetch(`${API_BASE}/epics`).then((r) => r.json()),
+        apiGet<any[]>("/users").catch(() => []),
+        apiGet<any[]>("/teams").catch(() => []),
+        apiGet<any[]>("/meetings").catch(() => []),
+        apiGet<any[]>("/sprints").catch(() => []),
+        apiGet<any[]>("/epics").catch(() => []),
       ]).then(([usersData, teamsData, meetingsData, sprintsData, epicsData]) => {
-        setUsers(usersData);
-        setTeams(teamsData);
-        setMeetings(meetingsData);
-        setSprints(sprintsData);
-        setEpics(epicsData);
-      }).catch(() => {});
+        setUsers(Array.isArray(usersData) ? usersData : []);
+        setTeams(Array.isArray(teamsData) ? teamsData : []);
+        setMeetings(Array.isArray(meetingsData) ? meetingsData : []);
+        setSprints(Array.isArray(sprintsData) ? sprintsData : []);
+        setEpics(Array.isArray(epicsData) ? epicsData : []);
+      }).catch(() => {
+        setUsers([]);
+        setTeams([]);
+        setMeetings([]);
+        setSprints([]);
+        setEpics([]);
+      });
     }
   }, [open]);
 
@@ -69,51 +73,66 @@ export default function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialo
       <AnimatePresence>
         {open && (
           <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2"><CheckSquare className="w-5 h-5 text-primary" />Create Task</DialogTitle>
-            <DialogDescription>Create a new task and assign it to a team member</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div><Label>Task Title</Label><Input placeholder="e.g., Fix login bug on mobile" className="mt-1" value={title} onChange={(e) => setTitle(e.target.value)} /></div>
-            <div><Label>Description</Label><Textarea placeholder="Add task details..." className="mt-1 min-h-[80px]" value={taskDescription} onChange={(e) => setTaskDescription(e.target.value)} /></div>
-            <div className="grid grid-cols-2 gap-3">
-              <div><Label className="flex items-center gap-1"><User className="w-3 h-3" /> Assignee</Label>
-                <Select value={assigneeId || "none"} onValueChange={(v) => setAssigneeId(v === "none" ? "" : v)}>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2"><CheckSquare className="w-5 h-5 text-primary" />Create Task</DialogTitle>
+              <DialogDescription>Create a new task and assign it to a team member</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div><Label>Task Title</Label><Input placeholder="e.g., Fix login bug on mobile" className="mt-1" value={title} onChange={(e) => setTitle(e.target.value)} /></div>
+              <div><Label>Description</Label><Textarea placeholder="Add task details..." className="mt-1 min-h-[80px]" value={taskDescription} onChange={(e) => setTaskDescription(e.target.value)} /></div>
+              <div className="grid grid-cols-2 gap-3">
+                <div><Label className="flex items-center gap-1"><User className="w-3 h-3" /> Assignee</Label>
+                  <Select value={assigneeId || "none"} onValueChange={(v) => setAssigneeId(v === "none" ? "" : v)}>
+                    <SelectTrigger className="mt-1">
+                      <SelectValue placeholder="Select" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Unassigned</SelectItem>
+                      {users.map((user) => (
+                        <SelectItem key={user.id} value={user.id}>{user.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div><Label className="flex items-center gap-1"><Flag className="w-3 h-3" /> Priority</Label>
+                  <Select value={priority} onValueChange={setPriority}><SelectTrigger className="mt-1"><SelectValue placeholder="Select" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="urgent">🔴 Urgent</SelectItem>
+                      <SelectItem value="high">🟠 High</SelectItem>
+                      <SelectItem value="medium">🟡 Medium</SelectItem>
+                      <SelectItem value="low">🟢 Low</SelectItem>
+                    </SelectContent></Select></div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div><Label className="flex items-center gap-1"><Calendar className="w-3 h-3" /> Due Date</Label><Input type="date" className="mt-1" value={dueDate} onChange={(e) => setDueDate(e.target.value)} /></div>
+                <div><Label className="flex items-center gap-1"><LinkIcon className="w-3 h-3" /> Team</Label>
+                  <Select value={teamId || "none"} onValueChange={(v) => setTeamId(v === "none" ? "" : v)}>
+                    <SelectTrigger className="mt-1">
+                      <SelectValue placeholder="Select" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">No team</SelectItem>
+                      {teams.map((team) => (
+                        <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div><Label className="flex items-center gap-1"><LinkIcon className="w-3 h-3" /> Link to Meeting (optional)</Label>
+                <Select value={meetingId || "none"} onValueChange={(v) => setMeetingId(v === "none" ? "" : v)}>
                   <SelectTrigger className="mt-1">
-                    <SelectValue placeholder="Select" />
+                    <SelectValue placeholder="None" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">Unassigned</SelectItem>
-                    {users.map((user) => (
-                      <SelectItem key={user.id} value={user.id}>{user.name}</SelectItem>
+                    <SelectItem value="none">None</SelectItem>
+                    {meetings.map((meeting) => (
+                      <SelectItem key={meeting.id} value={meeting.id}>{meeting.title}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
-              <div><Label className="flex items-center gap-1"><Flag className="w-3 h-3" /> Priority</Label>
-                <Select value={priority} onValueChange={setPriority}><SelectTrigger className="mt-1"><SelectValue placeholder="Select" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="urgent">🔴 Urgent</SelectItem>
-                    <SelectItem value="high">🟠 High</SelectItem>
-                    <SelectItem value="medium">🟡 Medium</SelectItem>
-                    <SelectItem value="low">🟢 Low</SelectItem>
-                  </SelectContent></Select></div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div><Label className="flex items-center gap-1"><Calendar className="w-3 h-3" /> Due Date</Label><Input type="date" className="mt-1" value={dueDate} onChange={(e) => setDueDate(e.target.value)} /></div>
-              <div><Label className="flex items-center gap-1"><LinkIcon className="w-3 h-3" /> Team</Label>
-                <Select value={teamId || "none"} onValueChange={(v) => setTeamId(v === "none" ? "" : v)}>
-                  <SelectTrigger className="mt-1">
-                    <SelectValue placeholder="Select" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">No team</SelectItem>
-                    {teams.map((team) => (
-                      <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div><Label className="flex items-center gap-1"><LinkIcon className="w-3 h-3" /> Sprint</Label>
@@ -173,73 +192,68 @@ export default function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialo
                 />
               </div>
             </div>
-            <div><Label className="flex items-center gap-1"><Tag className="w-3 h-3" /> Tags</Label>
-              <div className="flex flex-wrap gap-1.5 mt-2">
-                {tagOptions.map((tag) => (
-                  <button key={tag} onClick={() => toggleTag(tag)}
-                    className={`px-2 py-0.5 rounded-full text-xs transition-colors ${selectedTags.includes(tag) ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/80"}`}>
-                    {tag}
-                  </button>
-                ))}
+              <div><Label className="flex items-center gap-1"><Tag className="w-3 h-3" /> Tags</Label>
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {tagOptions.map((tag) => (
+                    <button key={tag} onClick={() => toggleTag(tag)}
+                      className={`px-2 py-0.5 rounded-full text-xs transition-colors ${selectedTags.includes(tag) ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/80"}`}>
+                      {tag}
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
-          </div>
-          {error && <div className="text-sm text-destructive bg-destructive/10 p-2 rounded">{error}</div>}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => { onOpenChange(false); setError(null); setTitle(""); setTaskDescription(""); setAssigneeId(""); setDueDate(""); setTeamId(""); setMeetingId(""); setSprintId(""); setEpicId(""); setStoryPoints(""); setSelectedTags([]); }}>Cancel</Button>
-            <Button onClick={async () => {
-              if (!title.trim()) {
-                setError("Please enter a task title");
-                return;
-              }
-              setLoading(true);
-              setError(null);
-              try {
-                const currentUser = auth.getUser();
-                if (!currentUser) throw new Error("Not authenticated");
-                
-                const res = await fetch(`${API_BASE}/tasks`, {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
+
+            {error && <div className="text-sm text-destructive bg-destructive/10 p-2 rounded">{error}</div>}
+            <DialogFooter>
+              <Button variant="outline" onClick={() => { onOpenChange(false); setError(null); setTitle(""); setTaskDescription(""); setAssigneeId(""); setDueDate(""); setTeamId(""); setMeetingId(""); setSprintId(""); setEpicId(""); setStoryPoints(""); setSelectedTags([]); }}>Cancel</Button>
+              <Button onClick={async () => {
+                if (!title.trim()) {
+                  setError("Please enter a task title");
+                  return;
+                }
+                setLoading(true);
+                setError(null);
+                try {
+                  const currentUser = auth.getUser();
+                  if (!currentUser) throw new Error("Not authenticated");
+                  
+                  await apiPost("/tasks", {
                     title,
                     description: taskDescription || null,
-                    priority: priority === "high" ? "high" : priority === "low" ? "low" : "medium",
+                    priority,
                     status: "todo",
                     dueDate: dueDate ? new Date(dueDate).toISOString() : null,
                     tags: selectedTags,
-                    assigneeId: assigneeId || null,
-                    teamId: teamId || null,
-                    meetingId: meetingId || null,
-                    sprintId: sprintId || null,
-                    epicId: epicId || null,
+                    assigneeId: assigneeId && assigneeId !== "none" ? assigneeId : null,
+                    teamId: teamId && teamId !== "none" ? teamId : null,
+                    meetingId: meetingId && meetingId !== "none" ? meetingId : null,
+                    sprintId: sprintId && sprintId !== "none" ? sprintId : null,
+                    epicId: epicId && epicId !== "none" ? epicId : null,
                     storyPoints: storyPoints ? parseInt(storyPoints) : null,
                     createdBy: currentUser.id,
-                  }),
-                });
+                  });
 
-                if (!res.ok) throw new Error("Failed to create task");
-                onOpenChange(false);
-                setTitle("");
-                setTaskDescription("");
-                setAssigneeId("");
-                setDueDate("");
-                setTeamId("");
-                setMeetingId("");
-                setSprintId("");
-                setEpicId("");
-                setStoryPoints("");
-                setSelectedTags([]);
-                window.location.reload();
-              } catch (err: any) {
-                setError(err.message ?? "Failed to create task");
-              } finally {
-                setLoading(false);
-              }
-            }} disabled={loading}>
-              {loading ? "Creating..." : "Create Task"}
-            </Button>
-          </DialogFooter>
+                  onOpenChange(false);
+                  setTitle("");
+                  setTaskDescription("");
+                  setAssigneeId("");
+                  setDueDate("");
+                  setTeamId("");
+                  setMeetingId("");
+                  setSprintId("");
+                  setEpicId("");
+                  setStoryPoints("");
+                  setSelectedTags([]);
+                  window.location.reload();
+                } catch (err: any) {
+                  setError(err.message ?? "Failed to create task");
+                } finally {
+                  setLoading(false);
+                }
+              }} disabled={loading}>
+                {loading ? "Creating..." : "Create Task"}
+              </Button>
+            </DialogFooter>
           </DialogContent>
         )}
       </AnimatePresence>

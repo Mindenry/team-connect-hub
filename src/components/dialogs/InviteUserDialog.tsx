@@ -13,12 +13,11 @@ import {
   AnimatedDialogHeader as DialogHeader,
   AnimatedDialogTitle as DialogTitle,
 } from "@/components/shared/AnimatedDialog";
+import { apiGet, apiPost } from "@/lib/api";
 
-const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
+interface InviteUserDialogProps { open: boolean; onOpenChange: (open: boolean) => void; teamId?: string; onInviteSuccess?: () => void; }
 
-interface InviteUserDialogProps { open: boolean; onOpenChange: (open: boolean) => void; teamId?: string; }
-
-export default function InviteUserDialog({ open, onOpenChange, teamId }: InviteUserDialogProps) {
+export default function InviteUserDialog({ open, onOpenChange, teamId, onInviteSuccess }: InviteUserDialogProps) {
   const [emails, setEmails] = useState<string[]>([]);
   const [emailInput, setEmailInput] = useState("");
   const [role, setRole] = useState("member");
@@ -29,13 +28,12 @@ export default function InviteUserDialog({ open, onOpenChange, teamId }: InviteU
 
   useEffect(() => {
     if (open) {
-      fetch(`${API_BASE}/teams`)
-        .then((r) => r.json())
+      apiGet<any[]>("/teams")
         .then((data) => {
-          setTeams(data);
+          setTeams(Array.isArray(data) ? data : []);
           if (teamId) setSelectedTeamId(teamId);
         })
-        .catch(() => {});
+        .catch(() => setTeams([]));
     }
   }, [open, teamId]);
 
@@ -99,44 +97,22 @@ export default function InviteUserDialog({ open, onOpenChange, teamId }: InviteU
               setLoading(true);
               setError(null);
               try {
-                // Get current user for organizationId and invitedBy
-                const currentUserStr = localStorage.getItem("collabhub_auth");
-                if (!currentUserStr) {
-                  throw new Error("Not authenticated");
-                }
-                const currentUser = JSON.parse(currentUserStr);
-                
-                // Get user's organization
-                const userRes = await fetch(`${API_BASE}/users/${currentUser.id}`);
-                if (!userRes.ok) throw new Error("Failed to get user info");
-                const userData = await userRes.json();
-                const organizationId = userData.organizationId || "default-org"; // TODO: Get from user data
-
-                // Create invites
+                const users = await apiGet<any[]>("/users").catch(() => []);
                 const results = await Promise.all(
                   emails.map(async (email) => {
-                    const inviteRes = await fetch(`${API_BASE}/invites`, {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({
-                        email,
-                        organizationId,
-                        invitedBy: currentUser.id,
-                        role: role === "admin" ? "admin" : "employee",
-                        teamId: selectedTeamId || undefined,
-                      }),
-                    });
-                    if (!inviteRes.ok) {
-                      const errorData = await inviteRes.json().catch(() => ({ message: "Failed to create invite" }));
-                      throw new Error(errorData.message || `Failed to invite ${email}`);
+                    let user = Array.isArray(users) ? users.find((u: any) => u.email === email) : null;
+                    if (!user) {
+                      const name = email.split("@")[0];
+                      user = await apiPost("/users", { email, name });
                     }
-                    return await inviteRes.json();
+                    await apiPost(`/teams/${selectedTeamId}/members`, { userId: user.id, role });
+                    return user;
                   })
                 );
                 onOpenChange(false);
                 setEmails([]);
                 setEmailInput("");
-                // TODO: Show success message with invite links
+                onInviteSuccess?.();
               } catch (err: any) {
                 setError(err.message ?? "Failed to invite users");
               } finally {

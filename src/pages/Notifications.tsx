@@ -19,19 +19,29 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { auth } from "@/lib/auth";
+import { toast } from "sonner";
 
 interface Notification {
   id: string;
-  type: "mention" | "meeting" | "task" | "announcement" | "team";
+  type: string;
   title: string;
-  description: string;
-  time: string;
-  isRead: boolean;
-  icon: React.ElementType;
-  link?: string;
+  message: string;
+  read: boolean;
+  createdAt: string;
+  relatedId?: string;
+  relatedType?: string;
 }
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
+
+const typeIcons: Record<string, React.ElementType> = {
+  mention: AtSign,
+  meeting: Video,
+  task: CheckSquare,
+  announcement: Megaphone,
+  team: Users,
+  default: Bell,
+};
 
 const typeColors: Record<string, string> = {
   mention: "bg-primary/10 text-primary",
@@ -39,109 +49,85 @@ const typeColors: Record<string, string> = {
   task: "bg-warning/10 text-warning",
   announcement: "bg-destructive/10 text-destructive",
   team: "bg-muted text-muted-foreground",
+  default: "bg-muted text-muted-foreground",
 };
 
 export default function Notifications() {
   const currentUser = auth.getUser();
   const [items, setItems] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  const loadNotifications = async () => {
+    if (!currentUser?.id) return;
+    try {
+      const [notificationsRes, countRes] = await Promise.all([
+        fetch(`${API_BASE}/notifications?userId=${currentUser.id}`).then((r) => r.json()),
+        fetch(`${API_BASE}/notifications/unread-count?userId=${currentUser.id}`).then((r) => r.json()),
+      ]);
+      setItems(notificationsRes || []);
+      setUnreadCount(countRes || 0);
+    } catch (err) {
+      console.error("Failed to load notifications:", err);
+      toast.error("Failed to load notifications");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const loadData = async () => {
-      if (!currentUser?.id) {
-        setLoading(false);
-        return;
-      }
-      
-      try {
-        const [notificationsRes, unreadCountRes] = await Promise.all([
-          fetch(`${API_BASE}/notifications/user/${currentUser.id}`).then((r) => r.json()),
-          fetch(`${API_BASE}/notifications/user/${currentUser.id}/unread-count`).then((r) => r.json()),
-        ]);
-
-        const notifications: Notification[] = notificationsRes.map((n: any) => {
-          const iconMap: Record<string, React.ElementType> = {
-            mention: AtSign,
-            task_assigned: CheckSquare,
-            meeting_starting: Video,
-            announcement: Megaphone,
-            team: Users,
-          };
-          
-          const typeMap: Record<string, string> = {
-            mention: "mention",
-            task_assigned: "task",
-            meeting_starting: "meeting",
-            announcement: "announcement",
-            team: "team",
-          };
-
-          const timeAgo = (date: string) => {
-        const now = new Date();
-            const then = new Date(date);
-            const diffMs = now.getTime() - then.getTime();
-            const diffMins = Math.floor(diffMs / 60000);
-            const diffHours = Math.floor(diffMs / 3600000);
-            const diffDays = Math.floor(diffMs / 86400000);
-            
-            if (diffMins < 1) return "Just now";
-            if (diffMins < 60) return `${diffMins}m ago`;
-            if (diffHours < 24) return `${diffHours}h ago`;
-            return `${diffDays}d ago`;
-          };
-
-          return {
-            id: n.id,
-            type: typeMap[n.type] || "team",
-            title: n.title,
-            description: n.message,
-            time: timeAgo(n.createdAt),
-            isRead: n.isRead,
-            icon: iconMap[n.type] || Bell,
-            link: n.link,
-          };
-        });
-
-        setItems(notifications);
-      } catch (err) {
-        console.error("Failed to load notifications:", err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    loadData();
-    
-    // Refresh every 30 seconds
-    const interval = setInterval(loadData, 30000);
+    loadNotifications();
+    const interval = setInterval(loadNotifications, 30000); // Refresh every 30s
     return () => clearInterval(interval);
   }, [currentUser?.id]);
-
-  const unreadCount = items.filter((n) => !n.isRead).length;
 
   const markAllRead = async () => {
     if (!currentUser?.id) return;
     try {
-      await fetch(`${API_BASE}/notifications/user/${currentUser.id}/read-all`, {
-        method: "PATCH",
-      });
-      setItems((prev) => prev.map((n) => ({ ...n, isRead: true })));
+      await fetch(`${API_BASE}/notifications/read-all?userId=${currentUser.id}`, { method: "PATCH" });
+      await loadNotifications();
+      toast.success("All notifications marked as read");
     } catch (err) {
       console.error("Failed to mark all as read:", err);
+      toast.error("Failed to mark all as read");
     }
   };
-  
+
   const markRead = async (id: string) => {
     if (!currentUser?.id) return;
     try {
-      await fetch(`${API_BASE}/notifications/${id}/read`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: currentUser.id }),
-      });
-      setItems((prev) => prev.map((n) => n.id === id ? { ...n, isRead: true } : n));
+      await fetch(`${API_BASE}/notifications/${id}/read?userId=${currentUser.id}`, { method: "PATCH" });
+      await loadNotifications();
     } catch (err) {
       console.error("Failed to mark as read:", err);
     }
+  };
+
+  const deleteNotification = async (id: string) => {
+    if (!currentUser?.id) return;
+    try {
+      await fetch(`${API_BASE}/notifications/${id}?userId=${currentUser.id}`, { method: "DELETE" });
+      await loadNotifications();
+      toast.success("Notification deleted");
+    } catch (err) {
+      console.error("Failed to delete notification:", err);
+      toast.error("Failed to delete notification");
+    }
+  };
+
+  const formatTime = (dateStr: string) => {
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 1) return "Just now";
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return date.toLocaleDateString();
   };
 
   return (
@@ -189,82 +175,100 @@ export default function Notifications() {
             ) : items.length === 0 ? (
               <div className="text-muted-foreground p-4">No notifications</div>
             ) : (
-              items.map((n, i) => (
-              <motion.button
-                key={n.id}
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: i * 0.03 }}
-                onClick={() => {
-                  markRead(n.id);
-                  if (n.link) window.location.href = n.link;
-                }}
-                className={cn(
-                  "w-full flex items-start gap-3 p-3 rounded-lg text-left transition-colors",
-                  n.isRead ? "hover:bg-muted/50" : "bg-primary/5 hover:bg-primary/10"
-                )}
-              >
-                <div className={cn("w-9 h-9 rounded-lg flex items-center justify-center shrink-0 mt-0.5", typeColors[n.type])}>
-                  <n.icon className="w-4 h-4" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className={cn("text-sm", !n.isRead && "font-semibold text-foreground")}>
-                    {n.title}
-                  </p>
-                  <p className="text-sm text-muted-foreground truncate">{n.description}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">{n.time}</p>
-                </div>
-                {!n.isRead && (
-                  <div className="w-2 h-2 rounded-full bg-primary mt-2 shrink-0" />
-                )}
-              </motion.button>
-              ))
+              items.map((n, i) => {
+                const Icon = typeIcons[n.type] || typeIcons.default;
+                return (
+                  <motion.div
+                    key={n.id}
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: i * 0.03 }}
+                    className={cn(
+                      "w-full flex items-start gap-3 p-3 rounded-lg transition-colors group",
+                      n.read ? "hover:bg-muted/50" : "bg-primary/5 hover:bg-primary/10"
+                    )}
+                  >
+                    <div className={cn("w-9 h-9 rounded-lg flex items-center justify-center shrink-0 mt-0.5", typeColors[n.type] || typeColors.default)}>
+                      <Icon className="w-4 h-4" />
+                    </div>
+                    <div className="flex-1 min-w-0" onClick={() => !n.read && markRead(n.id)}>
+                      <p className={cn("text-sm", !n.read && "font-semibold text-foreground")}>
+                        {n.title}
+                      </p>
+                      <p className="text-sm text-muted-foreground truncate">{n.message}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">{formatTime(n.createdAt)}</p>
+                    </div>
+                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      {!n.read && (
+                        <div className="w-2 h-2 rounded-full bg-primary mt-2 shrink-0" />
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6"
+                        onClick={() => deleteNotification(n.id)}
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </Button>
+                    </div>
+                  </motion.div>
+                );
+              })
             )}
           </TabsContent>
 
           <TabsContent value="mentions" className="space-y-1">
-            {items.filter(n => n.type === "mention").map((n) => (
-              <div key={n.id} className="p-3 rounded-lg hover:bg-muted/50 flex items-start gap-3">
-                <div className={cn("w-9 h-9 rounded-lg flex items-center justify-center shrink-0", typeColors[n.type])}>
-                  <n.icon className="w-4 h-4" />
+            {items.filter(n => n.type === "mention").map((n) => {
+              const Icon = typeIcons[n.type] || typeIcons.default;
+              return (
+                <div key={n.id} className="p-3 rounded-lg hover:bg-muted/50 flex items-start gap-3">
+                  <div className={cn("w-9 h-9 rounded-lg flex items-center justify-center shrink-0", typeColors[n.type] || typeColors.default)}>
+                    <Icon className="w-4 h-4" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-foreground">{n.title}</p>
+                    <p className="text-sm text-muted-foreground">{n.message}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{formatTime(n.createdAt)}</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-sm font-medium text-foreground">{n.title}</p>
-                  <p className="text-sm text-muted-foreground">{n.description}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">{n.time}</p>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </TabsContent>
 
           <TabsContent value="meetings" className="space-y-1">
-            {items.filter(n => n.type === "meeting").map((n) => (
-              <div key={n.id} className="p-3 rounded-lg hover:bg-muted/50 flex items-start gap-3">
-                <div className={cn("w-9 h-9 rounded-lg flex items-center justify-center shrink-0", typeColors[n.type])}>
-                  <n.icon className="w-4 h-4" />
+            {items.filter(n => n.type === "meeting").map((n) => {
+              const Icon = typeIcons[n.type] || typeIcons.default;
+              return (
+                <div key={n.id} className="p-3 rounded-lg hover:bg-muted/50 flex items-start gap-3">
+                  <div className={cn("w-9 h-9 rounded-lg flex items-center justify-center shrink-0", typeColors[n.type] || typeColors.default)}>
+                    <Icon className="w-4 h-4" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-foreground">{n.title}</p>
+                    <p className="text-sm text-muted-foreground">{n.message}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{formatTime(n.createdAt)}</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-sm font-medium text-foreground">{n.title}</p>
-                  <p className="text-sm text-muted-foreground">{n.description}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">{n.time}</p>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </TabsContent>
 
           <TabsContent value="tasks" className="space-y-1">
-            {items.filter(n => n.type === "task").map((n) => (
-              <div key={n.id} className="p-3 rounded-lg hover:bg-muted/50 flex items-start gap-3">
-                <div className={cn("w-9 h-9 rounded-lg flex items-center justify-center shrink-0", typeColors[n.type])}>
-                  <n.icon className="w-4 h-4" />
+            {items.filter(n => n.type === "task").map((n) => {
+              const Icon = typeIcons[n.type] || typeIcons.default;
+              return (
+                <div key={n.id} className="p-3 rounded-lg hover:bg-muted/50 flex items-start gap-3">
+                  <div className={cn("w-9 h-9 rounded-lg flex items-center justify-center shrink-0", typeColors[n.type] || typeColors.default)}>
+                    <Icon className="w-4 h-4" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-foreground">{n.title}</p>
+                    <p className="text-sm text-muted-foreground">{n.message}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{formatTime(n.createdAt)}</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-sm font-medium text-foreground">{n.title}</p>
-                  <p className="text-sm text-muted-foreground">{n.description}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">{n.time}</p>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </TabsContent>
         </Tabs>
       </div>

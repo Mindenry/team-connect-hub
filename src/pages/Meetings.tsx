@@ -29,6 +29,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import CreateMeetingDialog from "@/components/dialogs/CreateMeetingDialog";
 import { getSocket } from "@/lib/websocket";
 import { auth } from "@/lib/auth";
+import { apiGet } from "@/lib/api";
+
+const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
 
 interface Meeting {
   id: string;
@@ -59,7 +62,7 @@ interface Team {
   meetings: Meeting[];
 }
 
-const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
+
 
 function mapMeeting(m: any): Meeting {
   const start = new Date(m.startTime);
@@ -475,13 +478,15 @@ export default function Meetings() {
       setLoading(true);
       setError(null);
       try {
-        const res = await fetch(`${API_BASE}/meetings`);
-        if (!res.ok) throw new Error(`Failed to load (${res.status})`);
-        const data = await res.json();
-        const mapped: Meeting[] = data.map(mapMeeting);
+        const data = await apiGet<any[]>("/meetings").catch(() => []);
+        const mapped: Meeting[] = Array.isArray(data) ? data.map(mapMeeting) : [];
         if (!cancelled) setItems(mapped);
       } catch (e: any) {
-        if (!cancelled) setError(e.message ?? "Failed to load meetings");
+        if (!cancelled) {
+          console.error("Failed to load meetings:", e);
+          setError(e.message ?? "Failed to load meetings");
+          setItems([]);
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -565,6 +570,8 @@ export default function Meetings() {
   return (
     <div className="min-h-screen bg-[#fafafa] dark:bg-background/95">
       <CreateMeetingDialog open={showCreateMeeting} onOpenChange={setShowCreateMeeting} />
+
+      {/* Filter Dialog */}
       <Dialog open={showFilter} onOpenChange={setShowFilter}>
         <DialogContent className="max-w-xs rounded-xl p-6">
           <DialogHeader>

@@ -2,30 +2,11 @@ import { useState, useEffect, useMemo } from "react";
 import { useLocation, Link, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  LayoutDashboard,
-  Video,
-  MessageSquare,
-  CheckSquare,
-  Users,
-  BarChart3,
-  Settings,
-  Bell,
-  Shield,
-  ChevronRight,
-  Folder,
-  Hash,
-  Volume2,
-  Megaphone,
-  Plus,
-  Search,
-  LogOut,
-  MapPin,
-  Headphones,
-  Phone ,
-  Zap,
-  CalendarDays,
-  TrendingUp,
-  BellOff,
+  LayoutDashboard, Video, MessageSquare, CheckSquare, Users,
+  BarChart3, Settings, Bell, Shield, ChevronRight,
+  Hash, Volume2, Megaphone, Plus, Search, LogOut, MapPin, Headphones,
+  Phone, Zap, Folder, Clock, FileText, Code, Sparkles,
+  CalendarDays, TrendingUp, BellOff,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -34,6 +15,7 @@ import StatusIndicator from "@/components/shared/StatusIndicator";
 import { auth, useAuth } from "@/lib/auth";
 import { usePresence } from "@/hooks/usePresence";
 import { getSocket } from "@/lib/websocket";
+import { apiGet } from "@/lib/api";
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
 
@@ -74,14 +56,20 @@ const mainNav: NavItem[] = [
   { title: "Calendar", url: "/calendar", icon: CalendarDays },
   { title: "Shared Drive", url: "/drive", icon: Folder },
   { title: "Chat", url: "/chat", icon: MessageSquare },
-   { title: "AI Copilot", url: "/copilot", icon: Zap },
+  { title: "AI Chat", url: "/ai-chat", icon: Sparkles },
   { title: "Tasks", url: "/tasks", icon: CheckSquare },
+  { title: "Repositories", url: "/repositories", icon: Code },
+  { title: "Workflows", url: "/workflows", icon: Zap },
+  { title: "Documents", url: "/documents", icon: Folder },
+  { title: "Time Tracking", url: "/time-tracking", icon: Clock },
   { title: "Teams", url: "/teams", icon: Users },
+  { title: "Analytics", url: "/analytics", icon: BarChart3 },
   { title: "Reports", url: "/reports", icon: BarChart3 },
   { title: "Performance", url: "/performance", icon: TrendingUp },
 ];
 
 const bottomNav: NavItem[] = [
+  { title: "Reminders", url: "/reminders", icon: FileText },
   { title: "Notifications", url: "/notifications", icon: Bell },
   { title: "Admin", url: "/admin", icon: Shield },
   { title: "Settings", url: "/settings", icon: Settings },
@@ -102,7 +90,7 @@ export default function AppSidebar({ onNavigate }: AppSidebarProps) {
   const [teams, setTeams] = useState<Team[]>([]);
   const [channels, setChannels] = useState<Channel[]>([]);
   const [allUsers, setAllUsers] = useState<UserInfo[]>([]);
-  const { onlineUserIds, activeRooms, isUserOnline } = usePresence();
+  const { onlineUserIds, activeRooms } = usePresence();
 
   const currentUserId = currentUser?.id;
 
@@ -110,15 +98,20 @@ export default function AppSidebar({ onNavigate }: AppSidebarProps) {
     const loadData = async () => {
       try {
         const [teamsRes, channelsRes, usersRes] = await Promise.all([
-          fetch(`${API_BASE}/teams`).then((r) => r.json()),
-          fetch(`${API_BASE}/channels`).then((r) => r.json()),
-          fetch(`${API_BASE}/users`).then((r) => r.json()),
+          apiGet<Team[]>("/teams").catch(() => []),
+          apiGet<Channel[]>("/channels").catch(() => []),
+          apiGet<UserInfo[]>("/users").catch(() => []),
         ]);
-        setTeams(teamsRes);
-        setChannels(channelsRes);
-        setAllUsers(usersRes);
-        if (teamsRes.length > 0 && expandedTeams.length === 0) {
-          setExpandedTeams([teamsRes[0].id]);
+
+        const safeTeams = Array.isArray(teamsRes) ? teamsRes : [];
+        const safeChannels = Array.isArray(channelsRes) ? channelsRes : [];
+        const safeUsers = Array.isArray(usersRes) ? usersRes : [];
+
+        setTeams(safeTeams);
+        setChannels(safeChannels);
+        setAllUsers(safeUsers);
+        if (safeTeams.length > 0 && expandedTeams.length === 0) {
+          setExpandedTeams([safeTeams[0].id]);
         }
       } catch (err) {
         console.error("Failed to load sidebar data:", err);
@@ -168,13 +161,15 @@ export default function AppSidebar({ onNavigate }: AppSidebarProps) {
   // Other users for DM section (exclude current user)
   const dmUsers = allUsers.filter((u) => u.id !== currentUser?.id);
 
+  const isUserOnline = (userId: string) => onlineUserIds.has(userId);
+
   // Derived current status (includes DND / focus)
   const derivedCurrentStatus = useMemo(() => {
     const storedStatus = (currentUser as any)?.status as string | undefined;
     if (storedStatus) return storedStatus as "online" | "busy" | "away" | "offline" | "dnd";
     if (!currentUserId) return "offline";
     return isUserOnline(currentUserId) ? "online" : "offline";
-  }, [currentUser, currentUserId, isUserOnline]);
+  }, [currentUser, currentUserId, onlineUserIds]);
 
   const statusLabel =
     derivedCurrentStatus === "online"
@@ -208,7 +203,6 @@ export default function AppSidebar({ onNavigate }: AppSidebarProps) {
       console.error("Failed to toggle focus mode:", err);
     }
   };
-
   return (
     <aside
       className={cn(

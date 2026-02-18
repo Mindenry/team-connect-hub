@@ -24,6 +24,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import StatusIndicator from "@/components/shared/StatusIndicator";
 import InviteUserDialog from "@/components/dialogs/InviteUserDialog";
 import CreateChannelDialog from "@/components/dialogs/CreateChannelDialog";
+import { apiGet, apiPost, apiPatch } from "@/lib/api";
 import {
   Dialog,
   DialogContent,
@@ -35,8 +36,6 @@ import {
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { usePresence } from "@/hooks/usePresence";
-
-const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
 
 interface TeamMember {
   name: string;
@@ -75,91 +74,96 @@ export default function Teams() {
   const [loading, setLoading] = useState(true);
   const [teamName, setTeamName] = useState("");
   const [teamDescription, setTeamDescription] = useState("");
+  const [showEditTeam, setShowEditTeam] = useState(false);
+  const [editTeamName, setEditTeamName] = useState("");
+  const [editTeamDescription, setEditTeamDescription] = useState("");
+
+  const loadTeams = async () => {
+    try {
+      setLoading(true);
+      const [teamsRes, tasksRes] = await Promise.all([
+        apiGet<any[]>("/teams").catch(() => []),
+        apiGet<any[]>("/tasks").catch(() => []),
+      ]);
+
+      if (!Array.isArray(teamsRes)) {
+        console.error("Teams response is not an array:", teamsRes);
+        setTeams([]);
+        return;
+      }
+
+      const teamsWithData = await Promise.all(
+        teamsRes.map(async (team: any) => {
+          const membersRes = await apiGet<any[]>(`/teams/${team.id}/members`).catch(() => []);
+          const members = Array.isArray(membersRes) ? membersRes.map((m: any) => ({
+            name: m.user?.name || "Unknown",
+            initials: (m.user?.name || "U").split(" ").map((n: string) => n[0]).join(""),
+            email: m.user?.email || "",
+            role: m.role === "admin" ? "lead" : "member",
+            status: (isUserOnline(m.user?.id) ? "online" : "offline") as const,
+            joinedDate: new Date(m.createdAt).toLocaleDateString("en-US", { month: "short", year: "numeric" }),
+            userId: m.user?.id,
+          })) : [];
+
+          const channelsRes = await apiGet<any[]>("/channels").catch(() => []);
+          const teamChannels = Array.isArray(channelsRes) ? channelsRes.filter((c: any) => c.teamId === team.id).map((c: any) => ({
+            id: c.id,
+            name: c.name,
+            type: c.type || "general",
+            messages: c._count?.messages || 0,
+          })) : [];
+
+          const teamTasks = Array.isArray(tasksRes) ? tasksRes.filter((t: any) => t.teamId === team.id) : [];
+          const activeTasks = teamTasks.filter((t: any) => t.status !== "done").length;
+
+          return {
+            id: team.id,
+            name: team.name,
+            description: team.description || "",
+            members,
+            channels: teamChannels,
+            activeTasks,
+            createdDate: new Date(team.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+          };
+        })
+      );
+
+      setTeams(teamsWithData);
+      if (teamsWithData.length > 0 && !selectedTeam) {
+        setSelectedTeam(teamsWithData[0].id);
+      }
+    } catch (err) {
+      console.error("Failed to load teams:", err);
+      setTeams([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const loadTeams = async () => {
-      try {
-        const [teamsRes, tasksRes] = await Promise.all([
-          fetch(`${API_BASE}/teams`).then((r) => r.json()),
-          fetch(`${API_BASE}/tasks`).then((r) => r.json()),
-        ]);
-
-        const teamsWithData = await Promise.all(
-          teamsRes.map(async (team: any) => {
-            const membersRes = await fetch(`${API_BASE}/teams/${team.id}/members`).then((r) => r.json());
-            const members = membersRes.map((m: any) => ({
-              name: m.user.name,
-              initials: m.user.name.split(" ").map((n: string) => n[0]).join(""),
-              email: m.user.email,
-              role: m.role === "admin" ? "lead" : "member",
-              status: (isUserOnline(m.user.id) ? "online" : "offline") as const,
-              joinedDate: new Date(m.createdAt).toLocaleDateString("en-US", { month: "short", year: "numeric" }),
-              userId: m.user.id,
-            }));
-
-            const channelsRes = await fetch(`${API_BASE}/channels`).then(r => r.json());
-            const teamChannels = channelsRes.filter((c: any) => c.teamId === team.id).map((c: any) => ({
-              id: c.id,
-              name: c.name,
-              type: c.type || "general",
-              messages: c._count?.messages || 0,
-            }));
-
-            const teamTasks = tasksRes.filter((t: any) => t.teamId === team.id);
-            const activeTasks = teamTasks.filter((t: any) => t.status !== "done").length;
-
-            return {
-              id: team.id,
-              name: team.name,
-              description: team.description || "",
-              members,
-              channels: teamChannels,
-              activeTasks,
-              createdDate: new Date(team.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
-            };
-          })
-        );
-
-        setTeams(teamsWithData);
-        if (teamsWithData.length > 0 && !selectedTeam) {
-          setSelectedTeam(teamsWithData[0].id);
-        }
-      } catch (err) {
-        console.error("Failed to load teams:", err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     loadTeams();
   }, []);
 
   const handleCreateTeam = async () => {
     try {
-      const res = await fetch(`${API_BASE}/teams`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: teamName }),
-      });
-      if (res.ok) {
-        const newTeam = await res.json();
-        setShowCreateTeam(false);
-        setTeamName("");
-        setTeamDescription("");
-        // Add the new team to state immediately
-        const teamData: Team = {
-          id: newTeam.id,
-          name: newTeam.name,
-          description: newTeam.description || "",
-          members: [],
-          channels: [],
-          activeTasks: 0,
-          createdDate: new Date(newTeam.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
-        };
-        setTeams(prev => [...prev, teamData]);
-        setSelectedTeam(newTeam.id);
-      }
-    } catch (err) {
+      const newTeam = await apiPost("/teams", { name: teamName });
+      setShowCreateTeam(false);
+      setTeamName("");
+      setTeamDescription("");
+      // Add the new team to state immediately
+      const teamData: Team = {
+        id: newTeam.id,
+        name: newTeam.name,
+        description: newTeam.description || "",
+        members: [],
+        channels: [],
+        activeTasks: 0,
+        createdDate: new Date(newTeam.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+      };
+      setTeams(prev => [...prev, teamData]);
+      setSelectedTeam(newTeam.id);
+      loadTeams();
+    } catch (err: any) {
       console.error("Failed to create team:", err);
     }
   };
@@ -168,8 +172,37 @@ export default function Teams() {
 
   return (
     <div className="flex h-screen">
-      <InviteUserDialog open={showInvite} onOpenChange={setShowInvite} teamId={selectedTeam || undefined} />
+      <InviteUserDialog open={showInvite} onOpenChange={setShowInvite} teamId={selectedTeam || undefined} onInviteSuccess={loadTeams} />
       <CreateChannelDialog open={showCreateChannel} onOpenChange={setShowCreateChannel} />
+
+      {/* Edit Team Dialog */}
+      <Dialog open={showEditTeam} onOpenChange={setShowEditTeam}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Edit className="w-5 h-5 text-primary" /> Edit Team</DialogTitle>
+            <DialogDescription>Update team information</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div><Label>Team Name</Label><Input placeholder="e.g., Marketing" className="mt-1" value={editTeamName} onChange={(e) => setEditTeamName(e.target.value)} /></div>
+            <div><Label>Description</Label><Textarea placeholder="What does this team do?" className="mt-1" value={editTeamDescription} onChange={(e) => setEditTeamDescription(e.target.value)} /></div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setShowEditTeam(false); setEditTeamName(""); setEditTeamDescription(""); }}>Cancel</Button>
+            <Button onClick={async () => {
+              if (!selectedTeam || !editTeamName.trim()) return;
+              try {
+                await apiPatch(`/teams/${selectedTeam}`, { name: editTeamName });
+                setShowEditTeam(false);
+                setEditTeamName("");
+                setEditTeamDescription("");
+                loadTeams();
+              } catch (err: any) {
+                console.error("Failed to update team:", err);
+              }
+            }} disabled={!editTeamName.trim()}>Save Changes</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Create Team Dialog */}
       <Dialog open={showCreateTeam} onOpenChange={setShowCreateTeam}>
@@ -243,7 +276,13 @@ export default function Teams() {
                 <Button variant="outline" size="sm" onClick={() => setShowInvite(true)}>
                   <UserPlus className="w-4 h-4 mr-2" />Add Member
                 </Button>
-                <Button variant="outline" size="sm"><Edit className="w-4 h-4 mr-2" />Edit</Button>
+                <Button variant="outline" size="sm" onClick={() => {
+                  if (activeTeam) {
+                    setEditTeamName(activeTeam.name);
+                    setEditTeamDescription(activeTeam.description);
+                    setShowEditTeam(true);
+                  }
+                }}><Edit className="w-4 h-4 mr-2" />Edit</Button>
                 <Button variant="outline" size="sm"><Settings className="w-4 h-4" /></Button>
               </div>
             </div>

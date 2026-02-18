@@ -50,6 +50,7 @@ import {
 import CreateTaskDialog from "@/components/dialogs/CreateTaskDialog";
 import TaskDetailDialog from "@/components/dialogs/TaskDetailDialog";
 import { getSocket } from "@/lib/websocket";
+import { apiGet, apiPatch } from "@/lib/api";
 import { auth } from "@/lib/auth";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
@@ -416,8 +417,8 @@ export default function Tasks() {
       setLoading(true);
       setError(null);
       try {
-        const [tasksRes, teamsRes, sprintsRes, epicsRes] = await Promise.all([
-          fetch(`${API_BASE}/tasks?${new URLSearchParams({
+        const [tasksData, teamsData, sprintsData, epicsData] = await Promise.all([
+          apiGet<any[]>(`/tasks?${new URLSearchParams({
             ...(filterStatus !== "all" && { status: filterStatus }),
             ...(filterPriority !== "all" && { priority: filterPriority }),
             ...(filterTeam !== "all" && { teamId: filterTeam }),
@@ -425,18 +426,9 @@ export default function Tasks() {
             ...(filterEpic !== "all" && { epicId: filterEpic }),
             ...(searchQuery && { search: searchQuery }),
           })}`),
-          fetch(`${API_BASE}/teams`),
-          fetch(`${API_BASE}/sprints${filterTeam !== "all" ? `?teamId=${filterTeam}` : ""}`),
-          fetch(`${API_BASE}/epics${filterTeam !== "all" ? `?teamId=${filterTeam}` : ""}`),
-        ]);
-
-        if (!tasksRes.ok) throw new Error(`Failed to load tasks (${tasksRes.status})`);
-
-        const [tasksData, teamsData, sprintsData, epicsData] = await Promise.all([
-          tasksRes.json(),
-          teamsRes.json(),
-          sprintsRes.json(),
-          epicsRes.json(),
+          apiGet<any[]>("/teams"),
+          apiGet<any[]>(`/sprints${filterTeam !== "all" ? `?teamId=${filterTeam}` : ""}`),
+          apiGet<any[]>(`/epics${filterTeam !== "all" ? `?teamId=${filterTeam}` : ""}`),
         ]);
 
         if (!cancelled) {
@@ -579,20 +571,16 @@ export default function Tasks() {
 
     const activeCol = findColumnByTaskId(activeId);
     const overCol = findColumnByTaskId(overId) || columns.find((c) => c.id === overId);
-    
+
     if (!activeCol || !overCol) return;
 
     if (activeCol.id !== overCol.id) {
       const currentUser = auth.getUser();
       try {
-        await fetch(`${API_BASE}/tasks/${activeId}/position`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ 
+        await apiPatch(`/tasks/${activeId}/position`, { 
             status: overCol.id,
             position: overCol.tasks.length,
             teamId: filterTeam !== "all" ? filterTeam : undefined,
-          }),
         });
       } catch (err) {
         console.error("Failed to update task status:", err);
@@ -624,6 +612,7 @@ export default function Tasks() {
 
   const allTasks = columns.flatMap((col) => col.tasks.map((t) => ({ ...t, column: col.title, status: col.id })));
   
+  // Filter tasks
   const filteredTasks = allTasks.filter((task) => {
     const matchesSearch = searchQuery === "" || 
       task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -641,7 +630,7 @@ export default function Tasks() {
         onOpenChange={(open) => !open && setSelectedTask(null)}
         task={selectedTask || undefined}
       />
-      
+
       {/* Filter Dialog */}
       <Dialog open={showFilter} onOpenChange={setShowFilter}>
         <DialogContent className="max-w-md">
@@ -806,18 +795,6 @@ export default function Tasks() {
               )}
             </div>
             <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={() => setShowFilter(true)}
-              className={hasActiveFilters ? "bg-primary text-primary-foreground" : ""}
-            >
-              <Filter className="w-4 h-4 mr-2" />
-              Filter
-              {hasActiveFilters && (
-                <span className="ml-2 w-2 h-2 rounded-full bg-primary-foreground" />
-              )}
-            </Button>
-            <Button 
               size="sm" 
               onClick={() => setShowCreateTask(true)}
               className="bg-primary hover:bg-primary/90 shadow-lg"
@@ -825,7 +802,7 @@ export default function Tasks() {
               <Plus className="w-4 h-4 mr-2" />
               New Task
             </Button>
-          </div>
+        </div>
         </div>
       </div>
 

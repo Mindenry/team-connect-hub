@@ -30,28 +30,31 @@ export default function Login() {
     setError(null);
 
     try {
-      const response = await fetch(`${API_BASE}/auth/login`, {
+      const res = await fetch(`${API_BASE}/api/auth/login`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
       });
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ message: "Login failed" }));
-        setError(errorData.message || "Invalid email or password");
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({ message: "Invalid email or password" }));
+        setError(error.message || "Invalid email or password");
         setLoading(false);
         return;
       }
 
-      const data = await response.json();
-      auth.setUser({
-        id: data.user.id,
-        email: data.user.email,
-        name: data.user.name,
-      });
-      
+      const data = await res.json();
+      auth.setAuth(
+        {
+          id: data.user.id,
+          email: data.user.email,
+          name: data.user.name,
+          role: data.user.role,
+        },
+        data.accessToken,
+        data.refreshToken
+      );
+
       navigate("/", { replace: true });
     } catch (err: any) {
       setError(err.message ?? "Login failed");

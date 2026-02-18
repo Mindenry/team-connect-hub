@@ -25,8 +25,7 @@ import {
   AnimatedDialogTitle as DialogTitle,
 } from "@/components/shared/AnimatedDialog";
 import { auth } from "@/lib/auth";
-
-const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
+import { apiGet, apiPost } from "@/lib/api";
 
 interface CreateMeetingDialogProps {
   open: boolean;
@@ -69,10 +68,9 @@ export default function CreateMeetingDialog({ open, onOpenChange }: CreateMeetin
 
   useEffect(() => {
     if (open) {
-      fetch(`${API_BASE}/teams`)
-        .then((r) => r.json())
-        .then((data) => setTeams(data))
-        .catch(() => {});
+      apiGet<any[]>("/teams")
+        .then((data) => setTeams(Array.isArray(data) ? data : []))
+        .catch(() => setTeams([]));
       setAvailability(null);
     }
   }, [open]);
@@ -359,12 +357,12 @@ export default function CreateMeetingDialog({ open, onOpenChange }: CreateMeetin
             <div><Label>Agenda (optional)</Label><Textarea placeholder="Add meeting agenda items..." className="mt-1 min-h-[80px]" value={description} onChange={(e) => setDescription(e.target.value)} /></div>
             <div>
               <Label>Meeting Password (optional)</Label>
-              <Input 
-                type="password" 
-                placeholder="Set a password for this meeting" 
-                className="mt-1" 
-                value={password} 
-                onChange={(e) => setPassword(e.target.value)} 
+              <Input
+                type="password"
+                placeholder="Set a password for this meeting"
+                className="mt-1"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
               />
               <p className="text-[10px] text-muted-foreground mt-1">If set, participants must enter this password to join.</p>
             </div>
@@ -422,29 +420,24 @@ export default function CreateMeetingDialog({ open, onOpenChange }: CreateMeetin
                   endTime = new Date(startTime.getTime() + parseInt(duration) * 60000);
                 }
 
-                const res = await fetch(`${API_BASE}/meetings`, {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    title,
-                    description: description || null,
-                    startTime: startTime.toISOString(),
-                    endTime: endTime.toISOString(),
-                    password: password.trim() ? password.trim() : undefined,
-                    waitingRoom,
-                    allowScreenShare,
-                    status: meetingType === "instant" ? "live" : "scheduled",
-                    isInstant: meetingType === "instant",
-                    teamId: teamId || null,
-                    hostId: user.id,
-                    isRecurring: meetingType === "scheduled" ? isRecurring : false,
-                    recurringPattern: meetingType === "scheduled" && isRecurring ? recurringPattern : undefined,
-                    recurringDays: meetingType === "scheduled" && isRecurring && recurringPattern === "weekly" ? recurringDays : undefined,
-                    recurringEndDate: meetingType === "scheduled" && isRecurring && recurringEndDate ? new Date(recurringEndDate).toISOString() : undefined,
-                  }),
+                const result = await apiPost("/meetings", {
+                  title,
+                  description: description || null,
+                  startTime: startTime.toISOString(),
+                  endTime: endTime.toISOString(),
+                  password: password.trim() ? password.trim() : undefined,
+                  waitingRoom,
+                  allowScreenShare,
+                  status: meetingType === "instant" ? "live" : "upcoming",
+                  isInstant: meetingType === "instant",
+                  teamId: teamId && teamId !== "none" ? teamId : null,
+                  hostId: user.id,
+                  isRecurring: meetingType === "scheduled" ? isRecurring : false,
+                  recurringPattern: meetingType === "scheduled" && isRecurring ? recurringPattern : undefined,
+                  recurringDays: meetingType === "scheduled" && isRecurring && recurringPattern === "weekly" ? recurringDays : undefined,
+                  recurringEndDate: meetingType === "scheduled" && isRecurring && recurringEndDate ? new Date(recurringEndDate).toISOString() : undefined,
                 });
 
-                const result = await res.json();
                 onOpenChange(false);
                 setTitle("");
                 setDescription("");
