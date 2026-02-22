@@ -89,7 +89,16 @@ export default function InviteSetup() {
         return;
       }
 
-      const data = await response.json();
+      const responseData = await response.json();
+      // Handle TransformInterceptor wrapper: { success: true, data: {...}, timestamp: ... }
+      const data = responseData.data || responseData;
+      
+      if (!data || !data.user) {
+        setError('Invalid response from server');
+        setLoading(false);
+        return;
+      }
+      
       auth.setUser({
         id: data.user.id,
         email: data.user.email,

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   CalendarDays,
   CalendarRange,
@@ -12,6 +12,11 @@ import {
   Loader2,
   Users,
   Video,
+  Sparkles,
+  TrendingUp,
+  Zap,
+  ChevronDown,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -24,6 +29,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import {
   DndContext,
@@ -36,8 +47,7 @@ import {
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
-
-const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
+import { apiGet, apiPatch } from "@/lib/api";
 
 type ViewMode = "day" | "week" | "month";
 
@@ -68,8 +78,8 @@ interface RawTask {
 type CalendarEventType = "meeting" | "task" | "holiday";
 
 interface CalendarEvent {
-  id: string; // prefixed with type
-  entityId: string; // underlying ID
+  id: string;
+  entityId: string;
   type: CalendarEventType;
   title: string;
   start: Date;
@@ -102,8 +112,8 @@ function endOfDay(date: Date) {
 
 function startOfWeek(date: Date) {
   const d = startOfDay(date);
-  const day = d.getDay(); // 0 = Sunday
-  const diff = (day + 6) % 7; // make Monday = 0
+  const day = d.getDay();
+  const diff = (day + 6) % 7;
   d.setDate(d.getDate() - diff);
   return d;
 }
@@ -137,11 +147,10 @@ function isSameDay(a: Date, b: Date) {
 }
 
 function dateKey(date: Date) {
-  // IMPORTANT: use local date parts (NOT toISOString / UTC), otherwise the day shifts in non-UTC timezones.
   const y = date.getFullYear();
   const m = (date.getMonth() + 1).toString().padStart(2, "0");
   const d = date.getDate().toString().padStart(2, "0");
-  return `${y}-${m}-${d}`; // YYYY-MM-DD (local)
+  return `${y}-${m}-${d}`;
 }
 
 function addDays(date: Date, days: number) {
@@ -173,58 +182,76 @@ function EventCardBase({
 }) {
   const isMeeting = event.type === "meeting";
   const isHoliday = event.type === "holiday";
+  const isTask = event.type === "task";
 
   return (
-    <div
+    <motion.div
       ref={setNodeRef}
       style={style}
       {...(draggable ? dragAttributes : {})}
       {...(draggable ? dragListeners : {})}
+      initial={{ opacity: 1, scale: 1 }}
+      animate={{ opacity: isDragging ? 0.6 : 1, scale: isDragging ? 0.95 : 1 }}
+      transition={{ duration: 0.1 }}
       className={cn(
-        "rounded-md px-2 py-1.5 text-xs mb-1 shadow-sm border",
+        "group rounded-md px-2.5 py-1.5 text-xs mb-1 shadow-sm border transition-all duration-200",
+        "hover:shadow-md hover:-translate-y-0.5",
+        "ring-0 hover:ring-1 hover:ring-current/20",
         isHoliday
-          ? "bg-red-50 border-red-200 text-red-900 cursor-default"
+          ? "bg-gradient-to-br from-red-50 via-red-100/70 to-red-50 border-red-200/70 text-red-900 cursor-default shadow-red-100/40"
           : isMeeting
-          ? "bg-primary/10 border-primary/30 text-primary-foreground cursor-grab active:cursor-grabbing"
-          : "bg-amber-50 border-amber-200 text-amber-900 cursor-grab active:cursor-grabbing",
-        isDragging && "opacity-60 ring-2 ring-primary/40",
+          ? "bg-gradient-to-br from-primary/20 via-primary/15 to-primary/10 border-primary/50 text-primary-foreground cursor-grab active:cursor-grabbing shadow-primary/25 ring-primary/10"
+          : "bg-gradient-to-br from-amber-50 via-amber-100/60 to-amber-50 border-amber-200/70 text-amber-900 cursor-grab active:cursor-grabbing shadow-amber-100/40",
+        isDragging && "opacity-60 ring-2 ring-primary/60 shadow-xl z-50 scale-105",
         className
       )}
     >
-      <div className="flex items-center gap-1 mb-0.5">
-        {isHoliday ? (
-          <CalendarDays className="w-3 h-3 text-red-700" />
-        ) : isMeeting ? (
-          <Video className="w-3 h-3 text-primary" />
-        ) : (
-          <CheckSquare className="w-3 h-3 text-amber-700" />
-        )}
-        <span className="truncate font-medium">{event.title}</span>
-      </div>
-      <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
-        {!event.allDay && (
-          <>
-            <Clock className="w-3 h-3" />
-            <span>
-              {event.start.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} -{" "}
-              {event.end.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-            </span>
-          </>
-        )}
-        {event.allDay && <span>All day</span>}
-      </div>
-      {(event.teamName || event.assigneeName) && (
-        <div className="flex items-center gap-1 text-[10px] mt-0.5">
-          {event.teamName && (
-            <>
-              <Users className="w-3 h-3" />
-              <span className="truncate">{event.teamName}</span>
-            </>
+      <div className="flex items-start gap-1.5">
+        <div className={cn(
+          "w-4 h-4 rounded flex items-center justify-center shrink-0 transition-all duration-200",
+          "group-hover:scale-110",
+          isHoliday ? "bg-red-200/70" : isMeeting ? "bg-primary/25" : "bg-amber-200/70"
+        )}>
+          {isHoliday ? (
+            <Sparkles className="w-2.5 h-2.5 text-red-700" />
+          ) : isMeeting ? (
+            <Video className="w-2.5 h-2.5 text-primary" />
+          ) : (
+            <CheckSquare className="w-2.5 h-2.5 text-amber-700" />
           )}
-          {!event.teamName && event.assigneeName && <span className="truncate">{event.assigneeName}</span>}
         </div>
-      )}
-    </div>
+        <div className="flex-1 min-w-0">
+          <div className="font-semibold text-[10px] leading-tight truncate">
+            {event.title}
+          </div>
+          {!event.allDay && (
+            <div className="flex items-center gap-1 text-[9px] text-muted-foreground/75 mt-0.5">
+              <Clock className="w-2 h-2 shrink-0" />
+              <span>
+                {event.start.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} -{" "}
+                {event.end.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+              </span>
+            </div>
+          )}
+          {event.allDay && (
+            <div className="text-[9px] text-muted-foreground/70 font-medium mt-0.5">ทั้งวัน</div>
+          )}
+          {(event.teamName || event.assigneeName) && (
+            <div className="flex items-center gap-1 text-[9px] text-muted-foreground/70 mt-0.5">
+              {event.teamName && (
+                <>
+                  <Users className="w-2 h-2 shrink-0" />
+                  <span className="truncate">{event.teamName}</span>
+                </>
+              )}
+              {!event.teamName && event.assigneeName && (
+                <span className="truncate">{event.assigneeName}</span>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </motion.div>
   );
 }
 
@@ -262,9 +289,10 @@ interface DroppableDayProps {
   date: Date;
   children: React.ReactNode;
   id?: string;
+  className?: string;
 }
 
-function DroppableDay({ date, children, id }: DroppableDayProps) {
+function DroppableDay({ date, children, id, className }: DroppableDayProps) {
   const droppableId = id ?? `day-${dateKey(date)}`;
   const { setNodeRef, isOver } = useDroppable({ id: droppableId });
 
@@ -272,8 +300,10 @@ function DroppableDay({ date, children, id }: DroppableDayProps) {
     <div
       ref={setNodeRef}
       className={cn(
-        "flex flex-col border rounded-md px-1.5 py-1.5 min-h-[90px] bg-background/80",
-        isOver && "ring-2 ring-primary/40 bg-primary/5"
+        "flex flex-col border rounded-md px-1.5 py-1.5 min-h-[60px] bg-gradient-to-br from-background via-muted/20 to-background transition-all duration-200",
+        "hover:border-border/80 hover:bg-muted/30",
+        isOver && "ring-2 ring-primary/60 bg-primary/15 shadow-xl scale-[1.02] border-primary/40",
+        className
       )}
     >
       {children}
@@ -294,6 +324,13 @@ export default function TeamCalendar() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeEvent, setActiveEvent] = useState<CalendarEvent | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [showFilters, setShowFilters] = useState(false);
+  const [filterTypes, setFilterTypes] = useState({
+    meetings: true,
+    tasks: true,
+    holidays: true,
+  });
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -301,17 +338,14 @@ export default function TeamCalendar() {
     })
   );
 
-  // Load teams once
   useEffect(() => {
     let cancelled = false;
     const loadTeams = async () => {
       try {
-        const res = await fetch(`${API_BASE}/teams`);
-        if (!res.ok) return;
-        const data = await res.json();
+        const data = await apiGet<any[]>("/teams").catch(() => []);
         if (!cancelled) {
           setTeams(
-            data.map((t: any) => ({
+            (Array.isArray(data) ? data : []).map((t: any) => ({
               id: t.id,
               name: t.name,
             }))
@@ -327,7 +361,6 @@ export default function TeamCalendar() {
     };
   }, []);
 
-  // Visible date range based on view (calculate first)
   const { rangeStart, rangeEnd, visibleDays } = useMemo(() => {
     if (view === "day") {
       const start = startOfDay(currentDate);
@@ -343,7 +376,6 @@ export default function TeamCalendar() {
       }
       return { rangeStart: start, rangeEnd: end, visibleDays: days };
     }
-    // month
     const start = startOfMonth(currentDate);
     const end = endOfMonth(currentDate);
     const days: Date[] = [];
@@ -355,7 +387,6 @@ export default function TeamCalendar() {
     return { rangeStart: start, rangeEnd: end, visibleDays: days };
   }, [currentDate, view]);
 
-  // Load meetings + tasks + holidays (filtered by team)
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
@@ -363,21 +394,17 @@ export default function TeamCalendar() {
       setError(null);
       try {
         const qs = teamFilter !== "all" ? `?teamId=${encodeURIComponent(teamFilter)}` : "";
-        const [meetingsRes, tasksRes, holidaysRes] = await Promise.all([
-          fetch(`${API_BASE}/meetings${qs}`),
-          fetch(`${API_BASE}/tasks${qs}`),
-          fetch(`${API_BASE}/holidays/range?startDate=${rangeStart.toISOString()}&endDate=${rangeEnd.toISOString()}`),
+        const [meetingsData, tasksData, holidaysData] = await Promise.all([
+          apiGet<RawMeeting[]>(`/meetings${qs}`).catch(() => []),
+          apiGet<RawTask[]>(`/tasks${qs}`).catch(() => []),
+          apiGet<any[]>(
+            `/holidays/range?startDate=${rangeStart.toISOString()}&endDate=${rangeEnd.toISOString()}`
+          ).catch(() => []),
         ]);
-        if (!meetingsRes.ok || !tasksRes.ok) {
-          throw new Error("Failed to load calendar data");
-        }
-        const meetingsData = await meetingsRes.json();
-        const tasksData = await tasksRes.json();
-        const holidaysData = holidaysRes.ok ? await holidaysRes.json() : [];
         if (!cancelled) {
-          setMeetings(meetingsData);
-          setTasks(tasksData);
-          setHolidays(holidaysData);
+          setMeetings(Array.isArray(meetingsData) ? meetingsData : []);
+          setTasks(Array.isArray(tasksData) ? tasksData : []);
+          setHolidays(Array.isArray(holidaysData) ? holidaysData : []);
         }
       } catch (e: any) {
         if (!cancelled) {
@@ -394,48 +421,73 @@ export default function TeamCalendar() {
     };
   }, [teamFilter, rangeStart, rangeEnd]);
 
-  // Map to unified events
   const events: CalendarEvent[] = useMemo(() => {
+    // Include refreshKey to force recalculation when tasks are updated
+    void refreshKey;
     const mappedMeetings: CalendarEvent[] = meetings
       .filter((m) => m.startTime)
       .map((m) => {
-        const start = new Date(m.startTime);
-        const end = m.endTime ? new Date(m.endTime) : new Date(start.getTime() + 60 * 60 * 1000);
-        return {
-          id: `meeting-${m.id}`,
-          entityId: m.id,
-          type: "meeting",
-          title: m.title,
-          start,
-          end,
-          allDay: false,
-          teamName: m.team?.name ?? undefined,
-          assigneeName: m.host?.name ?? undefined,
-          status: m.status,
-        };
-      });
+        try {
+          const start = new Date(m.startTime);
+          if (isNaN(start.getTime())) {
+            console.warn("Invalid startTime for meeting:", m.id, m.startTime);
+            return null;
+          }
+          const end = m.endTime ? new Date(m.endTime) : new Date(start.getTime() + 60 * 60 * 1000);
+          if (isNaN(end.getTime())) {
+            console.warn("Invalid endTime for meeting:", m.id, m.endTime);
+            return null;
+          }
+          return {
+            id: `meeting-${m.id}`,
+            entityId: m.id,
+            type: "meeting" as const,
+            title: m.title,
+            start,
+            end,
+            allDay: false,
+            teamName: m.team?.name ?? undefined,
+            assigneeName: m.host?.name ?? undefined,
+            status: m.status,
+          };
+        } catch (err) {
+          console.error("Error mapping meeting:", m.id, err);
+          return null;
+        }
+      })
+      .filter((m) => m !== null) as CalendarEvent[];
 
     const mappedTasks: CalendarEvent[] = tasks
       .filter((t) => t.dueDate)
       .map((t) => {
-        const due = new Date(t.dueDate as string);
-        // Treat task deadlines as all-day events on that date
-        const start = startOfDay(due);
-        const end = endOfDay(due);
-        return {
-          id: `task-${t.id}`,
-          entityId: t.id,
-          type: "task",
-          title: t.title,
-          start,
-          end,
-          allDay: true,
-          teamName: t.team?.name ?? undefined,
-          assigneeName: t.assignee?.name ?? undefined,
-          status: t.status ?? undefined,
-          priority: t.priority ?? undefined,
-        };
-      });
+        try {
+          const due = new Date(t.dueDate as string);
+          // Validate date
+          if (isNaN(due.getTime())) {
+            console.warn("Invalid dueDate for task:", t.id, t.dueDate);
+            return null;
+          }
+          const start = startOfDay(due);
+          const end = endOfDay(due);
+          return {
+            id: `task-${t.id}`,
+            entityId: t.id,
+            type: "task" as const,
+            title: t.title,
+            start,
+            end,
+            allDay: true,
+            teamName: t.team?.name ?? undefined,
+            assigneeName: t.assignee?.name ?? undefined,
+            status: t.status ?? undefined,
+            priority: t.priority ?? undefined,
+          };
+        } catch (err) {
+          console.error("Error mapping task:", t.id, err);
+          return null;
+        }
+      })
+      .filter((t) => t !== null) as CalendarEvent[];
 
     const mappedHolidays: CalendarEvent[] = holidays.map((h) => {
       const date = new Date(h.date);
@@ -454,29 +506,45 @@ export default function TeamCalendar() {
     });
 
     return [...mappedMeetings, ...mappedTasks, ...mappedHolidays];
-  }, [meetings, tasks, holidays]);
+  }, [meetings, tasks, holidays, refreshKey]);
 
-
-  const eventsInRange = useMemo(
-    () =>
-      events.filter(
-        (e) =>
-          e.end >= rangeStart &&
-          e.start <= rangeEnd
-      ),
-    [events, rangeStart, rangeEnd]
-  );
+  const eventsInRange = useMemo(() => {
+    return events.filter((e) => {
+      // Check if event overlaps with the range
+      // Event is in range if it starts before range ends and ends after range starts
+      const overlaps = e.start <= rangeEnd && e.end >= rangeStart;
+      if (!overlaps) return false;
+      
+      // Apply type filters
+      if (e.type === "meeting" && !filterTypes.meetings) return false;
+      if (e.type === "task" && !filterTypes.tasks) return false;
+      if (e.type === "holiday" && !filterTypes.holidays) return false;
+      
+      return true;
+    });
+  }, [events, rangeStart, rangeEnd, filterTypes]);
 
   const eventsByDay = useMemo(() => {
     const map = new Map<string, CalendarEvent[]>();
     for (const ev of eventsInRange) {
-      const key = dateKey(ev.start);
-      if (!map.has(key)) map.set(key, []);
-      map.get(key)!.push(ev);
+      try {
+        const key = dateKey(ev.start);
+        if (!map.has(key)) {
+          map.set(key, []);
+        }
+        map.get(key)!.push(ev);
+      } catch (err) {
+        console.error("Error processing event:", ev.id, err);
+      }
     }
-    // sort each day by time + type
+    // Sort each day's events
     for (const [, list] of map) {
-      list.sort((a, b) => a.start.getTime() - b.start.getTime());
+      list.sort((a, b) => {
+        // All-day events first, then by time
+        if (a.allDay && !b.allDay) return -1;
+        if (!a.allDay && b.allDay) return 1;
+        return a.start.getTime() - b.start.getTime();
+      });
     }
     return map;
   }, [eventsInRange]);
@@ -522,35 +590,40 @@ export default function TeamCalendar() {
 
     const activeId = active.id as string;
     const overId = over.id as string;
+    
+    // Handle both "day-YYYY-MM-DD" and "day-YYYY-MM-DD-all" / "day-YYYY-MM-DD-time" formats
     if (!overId.startsWith("day-")) return;
 
     const ev = events.find((e) => e.id === activeId);
     if (!ev) return;
 
-    // Don't allow dragging holidays
     if (ev.type === "holiday") return;
 
+    // Parse date from overId - handle formats like "day-2024-02-16" or "day-2024-02-16-all"
     const parts = overId.split("-");
     if (parts.length < 4) return;
-    const [year, month, day] = parts.slice(1, 4).map((v) => parseInt(v, 10));
-    if (Number.isNaN(year) || Number.isNaN(month) || Number.isNaN(day)) return;
-
-    const current = ev.start;
-    const newStart = new Date(current);
-    newStart.setFullYear(year, month - 1, day);
-
-    let newEnd = new Date(ev.end);
-    const duration = ev.end.getTime() - ev.start.getTime();
-    if (ev.type === "meeting") {
-      newEnd = new Date(newStart.getTime() + duration);
-    } else {
-      // tasks remain all-day on the new date
-      newStart.setHours(0, 0, 0, 0);
-      newEnd = endOfDay(newStart);
+    
+    // Extract year, month, day from parts[1], parts[2], parts[3]
+    const year = parseInt(parts[1], 10);
+    const month = parseInt(parts[2], 10);
+    const day = parseInt(parts[3], 10);
+    
+    if (Number.isNaN(year) || Number.isNaN(month) || Number.isNaN(day)) {
+      console.error("Invalid date parts:", parts);
+      return;
     }
 
-    // Optimistic UI update
+    // Create new date with proper timezone handling
+    const newStart = new Date(year, month - 1, day);
+    const current = ev.start;
+    
+    // Preserve time for meetings, reset to start of day for tasks
     if (ev.type === "meeting") {
+      newStart.setHours(current.getHours(), current.getMinutes(), current.getSeconds(), current.getMilliseconds());
+      const duration = ev.end.getTime() - ev.start.getTime();
+      const newEnd = new Date(newStart.getTime() + duration);
+      
+      // Optimistic update
       setMeetings((prev) =>
         prev.map((m) =>
           m.id === ev.entityId
@@ -562,50 +635,78 @@ export default function TeamCalendar() {
             : m
         )
       );
-    } else {
-      setTasks((prev) =>
-        prev.map((t) =>
-          t.id === ev.entityId
-            ? {
-                ...t,
-                dueDate: newStart.toISOString(),
-              }
-            : t
-        )
-      );
-    }
 
-    // Persist to backend
-    try {
-      if (ev.type === "meeting") {
-        await fetch(`${API_BASE}/meetings/${ev.entityId}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            startTime: newStart.toISOString(),
-            endTime: newEnd.toISOString(),
-          }),
+      // Persist to backend
+      try {
+        await apiPatch(`/meetings/${ev.entityId}`, {
+          startTime: newStart.toISOString(),
+          endTime: newEnd.toISOString(),
         });
-      } else {
-        await fetch(`${API_BASE}/tasks/${ev.entityId}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            dueDate: newStart.toISOString(),
-          }),
-        });
+      } catch (err) {
+        console.error("Failed to update meeting time", err);
+        // Revert on error - reload data
+        const qs = teamFilter !== "all" ? `?teamId=${encodeURIComponent(teamFilter)}` : "";
+        const meetingsData = await apiGet<RawMeeting[]>(`/meetings${qs}`).catch(() => []);
+        setMeetings(Array.isArray(meetingsData) ? meetingsData : []);
       }
-    } catch (err) {
-      console.error("Failed to update event time", err);
-      // Silently ignore for now; WebSocket updates from server will correct state if implemented
+    } else {
+      // For tasks, set to start of day
+      newStart.setHours(0, 0, 0, 0);
+      const newDueDate = newStart.toISOString();
+      
+      // Find the original task to preserve all properties
+      const originalTask = tasks.find((t) => t.id === ev.entityId);
+      if (!originalTask) {
+        console.error("Task not found:", ev.entityId);
+        return;
+      }
+      
+      // Optimistic update - create completely new object and array to force re-render
+      const updatedTasks = tasks.map((t) => {
+        if (t.id === ev.entityId) {
+          // Create completely new object with updated dueDate
+          return {
+            ...t,
+            dueDate: newDueDate,
+          };
+        }
+        // Return new object reference for all items to ensure React detects change
+        return { ...t };
+      });
+      
+      // Update state immediately with new array reference
+      setTasks(updatedTasks);
+      // Force refresh by updating refresh key to trigger memoization recalculation
+      setRefreshKey((k) => k + 1);
+
+      // Persist to backend
+      try {
+        await apiPatch(`/tasks/${ev.entityId}`, {
+          dueDate: newDueDate,
+        });
+        // After successful update, reload tasks to ensure sync
+        // This ensures the UI reflects the backend state correctly
+        const qs = teamFilter !== "all" ? `?teamId=${encodeURIComponent(teamFilter)}` : "";
+        const tasksData = await apiGet<RawTask[]>(`/tasks${qs}`).catch(() => []);
+        setTasks(Array.isArray(tasksData) ? tasksData : []);
+        // Force refresh again after reload
+        setRefreshKey((k) => k + 1);
+      } catch (err) {
+        console.error("Failed to update task due date", err);
+        // Revert on error - reload data
+        const qs = teamFilter !== "all" ? `?teamId=${encodeURIComponent(teamFilter)}` : "";
+        const tasksData = await apiGet<RawTask[]>(`/tasks${qs}`).catch(() => []);
+        setTasks(Array.isArray(tasksData) ? tasksData : []);
+        setRefreshKey((k) => k + 1);
+      }
     }
   };
 
   const titleLabel = useMemo(() => {
     if (view === "day") {
-      return currentDate.toLocaleDateString(undefined, {
+      return currentDate.toLocaleDateString("th-TH", {
         weekday: "long",
-        month: "short",
+        month: "long",
         day: "numeric",
         year: "numeric",
       });
@@ -613,18 +714,18 @@ export default function TeamCalendar() {
     if (view === "week") {
       const start = startOfWeek(currentDate);
       const end = endOfWeek(currentDate);
-      const startLabel = start.toLocaleDateString(undefined, {
+      const startLabel = start.toLocaleDateString("th-TH", {
         month: "short",
         day: "numeric",
       });
-      const endLabel = end.toLocaleDateString(undefined, {
+      const endLabel = end.toLocaleDateString("th-TH", {
         month: "short",
         day: "numeric",
         year: "numeric",
       });
       return `${startLabel} – ${endLabel}`;
     }
-    return currentDate.toLocaleDateString(undefined, {
+    return currentDate.toLocaleDateString("th-TH", {
       month: "long",
       year: "numeric",
     });
@@ -645,280 +746,510 @@ export default function TeamCalendar() {
     return summary;
   }, [eventsInRange]);
 
+  const stats = useMemo(() => {
+    const totalMeetings = eventsInRange.filter((e) => e.type === "meeting").length;
+    const totalTasks = eventsInRange.filter((e) => e.type === "task").length;
+    const totalHolidays = eventsInRange.filter((e) => e.type === "holiday").length;
+    return { totalMeetings, totalTasks, totalHolidays };
+  }, [eventsInRange]);
+
   return (
-    <div className="flex flex-col h-screen">
-      {/* Header */}
-      <div className="flex items-center justify-between px-6 h-14 border-b shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
-            <CalendarDays className="w-4 h-4 text-primary" />
-          </div>
-          <div>
-            <h1 className="text-lg font-semibold text-foreground">Team Calendar</h1>
-            <p className="text-xs text-muted-foreground">
-              View meetings, task deadlines, and team workload in one place
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-3">
-          <Tabs value={view} onValueChange={(v) => setView(v as ViewMode)}>
-            <TabsList className="h-8">
-              <TabsTrigger value="day" className="h-7 px-3 text-xs">
-                <CalendarSearch className="w-3.5 h-3.5 mr-1" />
-                Day
-              </TabsTrigger>
-              <TabsTrigger value="week" className="h-7 px-3 text-xs">
-                <CalendarRange className="w-3.5 h-3.5 mr-1" />
-                Week
-              </TabsTrigger>
-              <TabsTrigger value="month" className="h-7 px-3 text-xs">
-                <CalendarDays className="w-3.5 h-3.5 mr-1" />
-                Month
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
-          <div className="flex items-center gap-1">
-            <Button variant="outline" size="icon" className="h-8 w-8" onClick={handlePrev}>
-              <ChevronLeft className="w-4 h-4" />
-            </Button>
-            <Button variant="outline" size="icon" className="h-8 w-8" onClick={handleNext}>
-              <ChevronRight className="w-4 h-4" />
-            </Button>
-            <Button variant="outline" size="sm" className="h-8 text-xs" onClick={handleToday}>
-              Today
-            </Button>
-          </div>
-        </div>
-      </div>
+    <TooltipProvider>
+      <div className="flex flex-col h-screen bg-gradient-to-br from-background via-background to-muted/20">
+        {/* Modern Header */}
+        <div className="border-b border-border/50 bg-background/95 backdrop-blur-xl supports-[backdrop-filter]:bg-background/80">
+          <div className="max-w-[1920px] mx-auto px-6 lg:px-8">
+            <div className="h-20 flex items-center justify-between gap-6">
+              {/* Left: Logo & Title */}
+              <div className="flex items-center gap-4 min-w-0 flex-1">
+                <div className="relative">
+                  <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-primary/20 via-primary/10 to-primary/5 flex items-center justify-center shadow-lg shadow-primary/5 ring-1 ring-primary/10">
+                    <CalendarDays className="w-6 h-6 text-primary" />
+                  </div>
+                  <div className="absolute -top-1 -right-1 w-4 h-4 bg-primary rounded-full border-2 border-background animate-pulse-soft" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h1 className="text-xl font-bold text-foreground tracking-tight">Team Calendar</h1>
+                  <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                    ดูการประชุม · กำหนดส่งงาน · วันหยุด · จัดการตารางงานของทีม
+                  </p>
+                </div>
+              </div>
 
-      {/* Toolbar */}
-      <div className="px-6 py-3 border-b flex items-center justify-between gap-4">
-        <div className="flex items-center gap-2">
-          <h2 className="text-sm font-medium text-foreground">{titleLabel}</h2>
-          <Badge variant="secondary" className="text-[10px] px-2 py-0.5">
-            {eventsInRange.length} items
-          </Badge>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">Team</span>
-            <Select value={teamFilter} onValueChange={setTeamFilter}>
-              <SelectTrigger className="h-8 w-[160px] text-xs">
-                <SelectValue placeholder="All teams" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All teams</SelectItem>
-                {teams.map((team) => (
-                  <SelectItem key={team.id} value={team.id}>
-                    {team.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <Button variant="outline" size="sm" className="h-8 text-xs">
-            <Filter className="w-4 h-4 mr-1" />
-            Filters
-          </Button>
-        </div>
-      </div>
-
-      {/* Content */}
-      <div className="flex-1 overflow-auto p-4">
-        {loading ? (
-          <div className="h-full flex items-center justify-center">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="w-4 h-4 animate-spin" />
-              <span>Loading calendar...</span>
-            </div>
-          </div>
-        ) : error ? (
-          <div className="h-full flex items-center justify-center">
-            <div className="text-sm text-destructive bg-destructive/10 px-3 py-2 rounded-md">
-              Failed to load calendar: {error}
-            </div>
-          </div>
-        ) : (
-          <DndContext
-            sensors={sensors}
-            onDragStart={handleDragStart}
-            onDragEnd={handleDragEnd}
-          >
-            {view === "month" ? (
-              <div className="grid grid-cols-7 gap-2">
-                {visibleDays.map((day) => {
-                  const key = dateKey(day);
-                  const dayEvents = eventsByDay.get(key) ?? [];
-                  const summary = workloadSummary.get(key) ?? { meetings: 0, tasks: 0 };
-                  return (
-                    <Card
-                      key={key}
+              {/* Right: View Toggle & Navigation */}
+              <div className="flex items-center gap-3">
+                <Tabs value={view} onValueChange={(v) => setView(v as ViewMode)}>
+                  <TabsList className="h-10 bg-muted/40 border border-border/50 p-1">
+                    <TabsTrigger
+                      value="day"
                       className={cn(
-                        "border-muted bg-card/80",
-                        isToday(day) && "border-primary/60 shadow-sm"
+                        "h-8 px-4 text-xs font-medium transition-all duration-200",
+                        "data-[state=active]:bg-background data-[state=active]:shadow-sm data-[state=active]:ring-1 data-[state=active]:ring-border/50"
                       )}
                     >
-                      <CardHeader className="py-2 px-2.5 flex flex-row items-center justify-between">
-                        <div className="flex items-center gap-1.5">
-                          <span
-                            className={cn(
-                              "text-xs font-medium",
-                              isToday(day) && "text-primary"
-                            )}
-                          >
-                            {day.getDate()}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          {summary.holidays > 0 && (
-                            <Badge className="bg-red-100 text-red-900 border-0 text-[9px] px-1.5">
-                              🎉
-                            </Badge>
-                          )}
-                          {summary.meetings > 0 && (
-                            <Badge className="bg-primary/10 text-primary border-0 text-[9px] px-1.5">
-                              {summary.meetings} mtg
-                            </Badge>
-                          )}
-                          {summary.tasks > 0 && (
-                            <Badge className="bg-amber-100 text-amber-900 border-0 text-[9px] px-1.5">
-                              {summary.tasks} task
-                            </Badge>
-                          )}
-                        </div>
-                      </CardHeader>
-                      <CardContent className="px-2.5 pb-2">
-                        <DroppableDay date={day}>
-                          {dayEvents.slice(0, 4).map((ev) => (
-                            <DraggableEventCard key={ev.id} event={ev} />
-                          ))}
-                          {dayEvents.length > 4 && (
-                            <p className="text-[10px] text-muted-foreground mt-1">
-                              +{dayEvents.length - 4} more
-                            </p>
-                          )}
-                        </DroppableDay>
-                      </CardContent>
-                    </Card>
-                  );
-                })}
-              </div>
-            ) : (
-              <Card className="h-full">
-                <CardContent className="p-3 h-full">
-                  <div className="grid grid-cols-[64px_minmax(0,1fr)] h-full">
-                    {/* Time column */}
-                    <div className="flex flex-col text-[10px] text-muted-foreground pr-2 border-r">
-                      {Array.from({ length: 12 }).map((_, i) => {
-                        const hour = 8 + i; // 8:00 - 19:00
-                        return (
-                          <div
-                            key={hour}
-                            className="h-10 flex items-start justify-end pr-1"
-                          >
-                            <span>{`${hour.toString().padStart(2, "0")}:00`}</span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                    {/* Day columns */}
-                    <div className="flex flex-col overflow-x-auto">
-                      <div
-                        className={cn(
-                          "grid gap-2",
-                          view === "day" ? "grid-cols-1" : "grid-cols-7"
-                        )}
+                      <CalendarSearch className="w-3.5 h-3.5 mr-1.5" />
+                      วัน
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="week"
+                      className={cn(
+                        "h-8 px-4 text-xs font-medium transition-all duration-200",
+                        "data-[state=active]:bg-background data-[state=active]:shadow-sm data-[state=active]:ring-1 data-[state=active]:ring-border/50"
+                      )}
+                    >
+                      <CalendarRange className="w-3.5 h-3.5 mr-1.5" />
+                      สัปดาห์
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="month"
+                      className={cn(
+                        "h-8 px-4 text-xs font-medium transition-all duration-200",
+                        "data-[state=active]:bg-background data-[state=active]:shadow-sm data-[state=active]:ring-1 data-[state=active]:ring-border/50"
+                      )}
+                    >
+                      <CalendarDays className="w-3.5 h-3.5 mr-1.5" />
+                      เดือน
+                    </TabsTrigger>
+                  </TabsList>
+                </Tabs>
+                <div className="flex items-center gap-1 border border-border/50 rounded-lg p-1 bg-muted/30">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 hover:bg-background"
+                        onClick={handlePrev}
                       >
-                        {(view === "day" ? [currentDate] : visibleDays.slice(0, 7)).map(
-                          (day) => {
-                            const key = dateKey(day);
-                            const dayEvents = eventsByDay.get(key) ?? [];
-                            const allDayEvents = dayEvents.filter((e) => e.allDay);
-                            const timedEvents = dayEvents.filter((e) => !e.allDay);
-                            const summary =
-                              workloadSummary.get(key) ?? { meetings: 0, tasks: 0 };
-                            return (
-                              <div key={key} className="flex flex-col">
-                                {/* Column header */}
-                                <div className="flex items-center justify-between mb-1">
-                                  <div className="flex items-baseline gap-1.5">
-                                    <span
-                                      className={cn(
-                                        "text-xs font-medium",
-                                        isToday(day) && "text-primary"
-                                      )}
-                                    >
-                                      {day.toLocaleDateString(undefined, {
-                                        weekday: "short",
-                                        day: "numeric",
-                                      })}
-                                    </span>
-                                  </div>
-                                  <div className="flex items-center gap-1">
-                                    {summary.holidays > 0 && (
-                                      <Badge className="bg-red-100 text-red-900 border-0 text-[9px] px-1.5">
-                                        🎉
-                                      </Badge>
-                                    )}
-                                    {summary.meetings > 0 && (
-                                      <Badge className="bg-primary/10 text-primary border-0 text-[9px] px-1.5">
-                                        {summary.meetings} mtg
-                                      </Badge>
-                                    )}
-                                    {summary.tasks > 0 && (
-                                      <Badge className="bg-amber-100 text-amber-900 border-0 text-[9px] px-1.5">
-                                        {summary.tasks} task
-                                      </Badge>
-                                    )}
-                                  </div>
-                                </div>
+                        <ChevronLeft className="w-4 h-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>ก่อนหน้า</TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 hover:bg-background"
+                        onClick={handleNext}
+                      >
+                        <ChevronRight className="w-4 h-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>ถัดไป</TooltipContent>
+                  </Tooltip>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 text-xs px-3 border-border/50 bg-background/50 hover:bg-background"
+                    onClick={handleToday}
+                  >
+                    วันนี้
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
 
-                                {/* All-day row */}
-                                <DroppableDay date={day} id={`day-${key}-all`}>
-                                  {allDayEvents.map((ev) => (
-                                    <DraggableEventCard key={ev.id} event={ev} />
-                                  ))}
-                                </DroppableDay>
-
-                                {/* Timed events grid */}
-                                <div className="mt-1 relative border rounded-md bg-muted/40 overflow-hidden">
-                                  <div className="absolute inset-0 pointer-events-none">
-                                    {Array.from({ length: 12 }).map((_, i) => (
-                                      <div
-                                        key={i}
-                                        className={cn(
-                                          "border-b border-border/40 h-10",
-                                          i === 0 && "border-t"
-                                        )}
-                                      />
-                                    ))}
-                                  </div>
-                                  <DroppableDay date={day} id={`day-${key}-time`}>
-                                    <div className="relative h-[120px] overflow-y-auto pt-1">
-                                      {timedEvents.map((ev) => (
-                                        <StaticEventCard key={ev.id} event={ev} />
-                                      ))}
-                                    </div>
-                                  </DroppableDay>
-                                </div>
-                              </div>
-                            );
-                          }
-                        )}
+        {/* Toolbar */}
+        <div className="border-b border-border/50 bg-gradient-to-r from-muted/30 to-transparent">
+          <div className="max-w-[1920px] mx-auto px-6 lg:px-8 py-4">
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+              <div className="flex items-center gap-4">
+                <div>
+                  <h2 className="text-base font-bold text-foreground">{titleLabel}</h2>
+                  <div className="flex items-center gap-2 mt-1">
+                    <Badge variant="secondary" className="text-[10px] px-2 py-0.5 h-5 bg-primary/10 text-primary border-primary/20">
+                      {eventsInRange.length} รายการ
+                    </Badge>
+                    {stats.totalMeetings > 0 && (
+                      <Badge variant="outline" className="text-[10px] px-2 py-0.5 h-5 border-primary/30 text-primary bg-primary/5">
+                        <Video className="w-2.5 h-2.5 mr-1" />
+                        {stats.totalMeetings} การประชุม
+                      </Badge>
+                    )}
+                    {stats.totalTasks > 0 && (
+                      <Badge variant="outline" className="text-[10px] px-2 py-0.5 h-5 border-amber-300 text-amber-700 bg-amber-50">
+                        <CheckSquare className="w-2.5 h-2.5 mr-1" />
+                        {stats.totalTasks} งาน
+                      </Badge>
+                    )}
+                    {stats.totalHolidays > 0 && (
+                      <Badge variant="outline" className="text-[10px] px-2 py-0.5 h-5 border-red-300 text-red-700 bg-red-50">
+                        <Sparkles className="w-2.5 h-2.5 mr-1" />
+                        {stats.totalHolidays} วันหยุด
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground font-medium">ทีม</span>
+                  <Select value={teamFilter} onValueChange={setTeamFilter}>
+                    <SelectTrigger className="h-9 w-[180px] text-xs border-border/50 bg-background/50 hover:bg-background">
+                      <SelectValue placeholder="ทุกทีม" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">ทุกทีม</SelectItem>
+                      {teams.map((team) => (
+                        <SelectItem key={team.id} value={team.id}>
+                          {team.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Popover open={showFilters} onOpenChange={setShowFilters}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className={cn(
+                        "h-9 text-xs gap-2 transition-all duration-200",
+                        "border-border/60 bg-background hover:bg-muted hover:border-border",
+                        "text-foreground hover:text-foreground",
+                        "shadow-sm hover:shadow-md",
+                        showFilters && "bg-primary/10 border-primary/50 text-primary ring-1 ring-primary/20"
+                      )}
+                      title="ตัวกรองเพิ่มเติม"
+                    >
+                      <Filter className="w-3.5 h-3.5" />
+                      <span className="hidden sm:inline">ตัวกรอง</span>
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-64 p-4" align="end" sideOffset={8}>
+                    <div className="space-y-4">
+                      <div>
+                        <h4 className="text-sm font-semibold text-foreground mb-3">ตัวกรอง</h4>
+                        <div className="space-y-3">
+                          <div className="flex items-center space-x-2">
+                            <Checkbox
+                              id="filter-meetings"
+                              checked={filterTypes.meetings}
+                              onCheckedChange={(checked) =>
+                                setFilterTypes((prev) => ({ ...prev, meetings: checked as boolean }))
+                              }
+                            />
+                            <Label
+                              htmlFor="filter-meetings"
+                              className="text-sm font-medium text-foreground cursor-pointer flex items-center gap-2"
+                            >
+                              <Video className="w-4 h-4 text-primary" />
+                              การประชุม
+                            </Label>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <Checkbox
+                              id="filter-tasks"
+                              checked={filterTypes.tasks}
+                              onCheckedChange={(checked) =>
+                                setFilterTypes((prev) => ({ ...prev, tasks: checked as boolean }))
+                              }
+                            />
+                            <Label
+                              htmlFor="filter-tasks"
+                              className="text-sm font-medium text-foreground cursor-pointer flex items-center gap-2"
+                            >
+                              <CheckSquare className="w-4 h-4 text-amber-600" />
+                              งาน
+                            </Label>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <Checkbox
+                              id="filter-holidays"
+                              checked={filterTypes.holidays}
+                              onCheckedChange={(checked) =>
+                                setFilterTypes((prev) => ({ ...prev, holidays: checked as boolean }))
+                              }
+                            />
+                            <Label
+                              htmlFor="filter-holidays"
+                              className="text-sm font-medium text-foreground cursor-pointer flex items-center gap-2"
+                            >
+                              <Sparkles className="w-4 h-4 text-red-600" />
+                              วันหยุด
+                            </Label>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="pt-3 border-t border-border/50">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="w-full h-8 text-xs"
+                          onClick={() => {
+                            setFilterTypes({ meetings: true, tasks: true, holidays: true });
+                          }}
+                        >
+                          รีเซ็ตทั้งหมด
+                        </Button>
                       </div>
                     </div>
+                  </PopoverContent>
+                </Popover>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-hidden flex flex-col">
+          <div className="max-w-[1920px] mx-auto px-6 lg:px-8 py-4 h-full flex flex-col">
+            {loading ? (
+              <div className="h-full flex items-center justify-center">
+                <div className="flex flex-col items-center gap-3">
+                  <Loader2 className="w-8 h-8 text-primary animate-spin" />
+                  <span className="text-sm text-muted-foreground font-medium">กำลังโหลดปฏิทิน...</span>
+                </div>
+              </div>
+            ) : error ? (
+              <Card className="border-destructive/50 bg-destructive/5">
+                <CardContent className="flex flex-col items-center justify-center py-12">
+                  <div className="w-16 h-16 rounded-2xl bg-destructive/10 flex items-center justify-center mb-4">
+                    <X className="w-8 h-8 text-destructive" />
                   </div>
+                  <h3 className="text-lg font-semibold text-foreground mb-1">โหลดปฏิทินไม่สำเร็จ</h3>
+                  <p className="text-sm text-muted-foreground">{error}</p>
                 </CardContent>
               </Card>
-            )}
+            ) : (
+              <DndContext
+                sensors={sensors}
+                onDragStart={handleDragStart}
+                onDragEnd={handleDragEnd}
+              >
+                <AnimatePresence mode="wait">
+                  {view === "month" ? (
+                    <motion.div
+                      key="month"
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -20 }}
+                      transition={{ duration: 0.2 }}
+                      className="grid grid-cols-7 gap-3"
+                    >
+                      {/* Weekday headers */}
+                      {["อา", "จ", "อ", "พ", "พฤ", "ศ", "ส"].map((day) => (
+                        <div
+                          key={day}
+                          className="text-center py-3 text-xs font-bold text-muted-foreground uppercase tracking-wider bg-muted/30 rounded-lg"
+                        >
+                          {day}
+                        </div>
+                      ))}
+                      {visibleDays.map((day) => {
+                        const key = dateKey(day);
+                        const dayEvents = eventsByDay.get(key) ?? [];
+                        const summary = workloadSummary.get(key) ?? { meetings: 0, tasks: 0, holidays: 0 };
+                        const isCurrentMonth = day.getMonth() === currentDate.getMonth();
+                        // Use events length as part of key to force re-render when events change
+                        const eventsKey = `${key}-${dayEvents.length}-${dayEvents.map(e => e.id).join(',')}`;
+                        return (
+                          <motion.div
+                            key={eventsKey}
+                            initial={{ opacity: 0, scale: 0.95 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            transition={{ duration: 0.15 }}
+                          >
+                            <Card
+                              className={cn(
+                                "border-border/50 bg-card/70 hover:bg-card hover:border-border/80 transition-all duration-300",
+                                "hover:shadow-xl hover:shadow-black/10 hover:-translate-y-1",
+                                "ring-0 hover:ring-1 hover:ring-primary/20",
+                                isToday(day) && "ring-2 ring-primary/50 bg-gradient-to-br from-primary/10 via-primary/5 to-background border-primary/70 shadow-lg",
+                                !isCurrentMonth && "opacity-50"
+                              )}
+                            >
+                              <CardHeader className="py-3.5 px-3.5 flex flex-row items-center justify-between bg-gradient-to-r from-transparent via-muted/10 to-transparent">
+                                <div className="flex items-center gap-2.5">
+                                  <span
+                                    className={cn(
+                                      "text-base font-bold transition-all duration-200",
+                                      isToday(day) && "text-primary scale-110",
+                                      !isCurrentMonth && "text-muted-foreground"
+                                    )}
+                                  >
+                                    {day.getDate()}
+                                  </span>
+                                  {isToday(day) && (
+                                    <div className="w-2 h-2 rounded-full bg-primary animate-pulse shadow-lg shadow-primary/50" />
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-1 flex-wrap">
+                                  {summary.holidays > 0 && (
+                                    <Badge className="bg-gradient-to-r from-red-100 via-red-50 to-red-100 text-red-900 border-0 text-[9px] px-2 h-4.5 shadow-sm font-semibold">
+                                      🎉
+                                    </Badge>
+                                  )}
+                                  {summary.meetings > 0 && (
+                                    <Badge className="bg-gradient-to-r from-primary/20 via-primary/15 to-primary/20 text-primary border-0 text-[9px] px-2 h-4.5 shadow-sm font-semibold">
+                                      {summary.meetings}
+                                    </Badge>
+                                  )}
+                                  {summary.tasks > 0 && (
+                                    <Badge className="bg-gradient-to-r from-amber-100 via-amber-50 to-amber-100 text-amber-900 border-0 text-[9px] px-2 h-4.5 shadow-sm font-semibold">
+                                      {summary.tasks}
+                                    </Badge>
+                                  )}
+                                </div>
+                              </CardHeader>
+                              <CardContent className="px-3 pb-3">
+                                <DroppableDay date={day}>
+                                  {dayEvents.slice(0, 4).map((ev) => (
+                                    <DraggableEventCard key={`${ev.id}-${refreshKey}`} event={ev} />
+                                  ))}
+                                  {dayEvents.length > 4 && (
+                                    <div className="text-[10px] text-muted-foreground mt-1 font-medium px-1">
+                                      +{dayEvents.length - 4} เพิ่มเติม
+                                    </div>
+                                  )}
+                                </DroppableDay>
+                              </CardContent>
+                            </Card>
+                          </motion.div>
+                        );
+                      })}
+                    </motion.div>
+                  ) : (
+                    <motion.div
+                      key={view}
+                      initial={{ opacity: 0, x: 20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: -20 }}
+                      transition={{ duration: 0.2 }}
+                      className="h-full"
+                    >
+                      <Card className="flex-1 border-border/50 bg-card/50 shadow-xl flex flex-col min-h-0">
+                        <CardContent className="p-4 flex-1 flex flex-col min-h-0 overflow-hidden">
+                          <div className="grid grid-cols-[70px_minmax(0,1fr)] flex-1 gap-3 min-h-0">
+                            {/* Time column */}
+                            <div className="flex flex-col text-xs text-muted-foreground pr-3 border-r border-border/60 shrink-0">
+                              {Array.from({ length: 12 }).map((_, i) => {
+                                const hour = 8 + i;
+                                return (
+                                  <div
+                                    key={hour}
+                                    className="h-12 flex items-start justify-end pr-2 pt-0.5"
+                                  >
+                                    <span className="font-medium text-[11px]">{`${hour.toString().padStart(2, "0")}:00`}</span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                            {/* Day columns */}
+                            <div className="flex flex-col overflow-x-auto overflow-y-hidden min-w-0">
+                              <div
+                                className={cn(
+                                  "grid gap-2 flex-1 min-h-0",
+                                  view === "day" ? "grid-cols-1" : "grid-cols-7"
+                                )}
+                              >
+                                {(view === "day" ? [currentDate] : visibleDays.slice(0, 7)).map(
+                                  (day) => {
+                                    const key = dateKey(day);
+                                    const dayEvents = eventsByDay.get(key) ?? [];
+                                    const allDayEvents = dayEvents.filter((e) => e.allDay);
+                                    const timedEvents = dayEvents.filter((e) => !e.allDay);
+                                    const summary =
+                                      workloadSummary.get(key) ?? { meetings: 0, tasks: 0, holidays: 0 };
+                                    // Use events as part of key to force re-render when events change
+                                    const eventsKey = `${key}-${dayEvents.length}-${dayEvents.map(e => e.id).join(',')}`;
+                                    return (
+                                      <div key={eventsKey} className="flex flex-col">
+                                        {/* Column header */}
+                                        <div className="flex items-center justify-between mb-2 px-2">
+                                          <div className="flex items-baseline gap-2">
+                                            <span
+                                              className={cn(
+                                                "text-sm font-bold",
+                                                isToday(day) && "text-primary"
+                                              )}
+                                            >
+                                              {day.toLocaleDateString("th-TH", {
+                                                weekday: "short",
+                                                day: "numeric",
+                                              })}
+                                            </span>
+                                            {isToday(day) && (
+                                              <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+                                            )}
+                                          </div>
+                                          <div className="flex items-center gap-1">
+                                            {summary.holidays > 0 && (
+                                              <Badge className="bg-red-100 text-red-900 border-0 text-[9px] px-1.5 h-4">
+                                                🎉
+                                              </Badge>
+                                            )}
+                                            {summary.meetings > 0 && (
+                                              <Badge className="bg-primary/10 text-primary border-0 text-[9px] px-1.5 h-4">
+                                                {summary.meetings}
+                                              </Badge>
+                                            )}
+                                            {summary.tasks > 0 && (
+                                              <Badge className="bg-amber-100 text-amber-900 border-0 text-[9px] px-1.5 h-4">
+                                                {summary.tasks}
+                                              </Badge>
+                                            )}
+                                          </div>
+                                        </div>
 
-            <DragOverlay>
-              {activeEvent ? <DraggableEventCard event={activeEvent} /> : null}
-            </DragOverlay>
-          </DndContext>
-        )}
+                                        {/* All-day row */}
+                                        <DroppableDay date={day} id={`day-${key}-all`}>
+                                          {allDayEvents.map((ev) => (
+                                            <DraggableEventCard key={`${ev.id}-${refreshKey}`} event={ev} />
+                                          ))}
+                                        </DroppableDay>
+
+                                        {/* Timed events grid */}
+                                        <div className="mt-1.5 relative border border-border/60 rounded-lg bg-gradient-to-br from-muted/40 via-muted/25 to-background overflow-hidden shadow-md flex-1 min-h-0">
+                                          <div className="absolute inset-0 pointer-events-none">
+                                            {Array.from({ length: 12 }).map((_, i) => (
+                                              <div
+                                                key={i}
+                                                className={cn(
+                                                  "border-b border-border/40",
+                                                  "h-12",
+                                                  i === 0 && "border-t"
+                                                )}
+                                              />
+                                            ))}
+                                          </div>
+                                          <DroppableDay date={day} id={`day-${key}-time`} className="h-full min-h-0">
+                                            <div className="relative h-full overflow-y-auto pt-0.5 px-1">
+                                              {timedEvents.map((ev) => (
+                                                <StaticEventCard key={`${ev.id}-${refreshKey}`} event={ev} />
+                                              ))}
+                                            </div>
+                                          </DroppableDay>
+                                        </div>
+                                      </div>
+                                    );
+                                  }
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                <DragOverlay>
+                  {activeEvent ? (
+                    <div className="opacity-90">
+                      <DraggableEventCard event={activeEvent} />
+                    </div>
+                  ) : null}
+                </DragOverlay>
+              </DndContext>
+            )}
+          </div>
+        </div>
       </div>
-    </div>
+    </TooltipProvider>
   );
 }
-

@@ -1,12 +1,16 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useLocation, Link, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  LayoutDashboard, Video, MessageSquare, CheckSquare, Users,
-  BarChart3, Settings, Bell, Shield, ChevronRight,
-  Hash, Volume2, Megaphone, Plus, Search, LogOut, MapPin, Headphones,
-  Phone, Zap, Folder, Clock, FileText, Code, Sparkles,
-  CalendarDays, TrendingUp, BellOff,
+  LayoutDashboard, Video, MessageSquare, CheckSquare,
+  Settings, Bell, Shield, ChevronRight, ChevronDown,
+  Search, LogOut, Headphones,
+  Folder, FileText,
+  CalendarDays, BellOff, Users, FileSearch,
+  BookOpen,
+  Megaphone,
+  FileBarChart,
+  MoreHorizontal,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -14,8 +18,6 @@ import { Badge } from "@/components/ui/badge";
 import StatusIndicator from "@/components/shared/StatusIndicator";
 import { auth, useAuth } from "@/lib/auth";
 import { usePresence } from "@/hooks/usePresence";
-import { getSocket } from "@/lib/websocket";
-import { apiGet } from "@/lib/api";
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
 
@@ -26,119 +28,87 @@ interface NavItem {
   badge?: number;
 }
 
-interface Channel {
-  id: string;
-  name: string;
-  type: string;
-  teamId: string;
-}
-
-interface Team {
-  id: string;
-  name: string;
-}
-
-interface UserInfo {
-  id: string;
-  name: string;
-  email: string;
-  status: string;
-  activity?: string;
+interface NavSection {
+  title: string;
+  items: NavItem[];
+  defaultOpen?: boolean;
 }
 
 interface AppSidebarProps {
   onNavigate?: () => void;
 }
 
+// Main navigation - ใช้บ่อยที่สุด (always visible)
 const mainNav: NavItem[] = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
   { title: "Meetings", url: "/meetings", icon: Video },
   { title: "Calendar", url: "/calendar", icon: CalendarDays },
-  { title: "Shared Drive", url: "/drive", icon: Folder },
   { title: "Chat", url: "/chat", icon: MessageSquare },
-  { title: "AI Chat", url: "/ai-chat", icon: Sparkles },
   { title: "Tasks", url: "/tasks", icon: CheckSquare },
-  { title: "Repositories", url: "/repositories", icon: Code },
-  { title: "Workflows", url: "/workflows", icon: Zap },
-  { title: "Documents", url: "/documents", icon: Folder },
-  { title: "Time Tracking", url: "/time-tracking", icon: Clock },
   { title: "Teams", url: "/teams", icon: Users },
-  { title: "Analytics", url: "/analytics", icon: BarChart3 },
-  { title: "Reports", url: "/reports", icon: BarChart3 },
-  { title: "Performance", url: "/performance", icon: TrendingUp },
 ];
 
-const bottomNav: NavItem[] = [
+// Secondary navigation - grouped in collapsible sections
+const secondarySections: NavSection[] = [
+  {
+    title: "Resources",
+    items: [
+      { title: "Shared Drive", url: "/drive", icon: Folder },
+      { title: "Knowledge Base", url: "/wiki", icon: BookOpen },
+    ],
+    defaultOpen: false,
+  },
+  {
+    title: "Tools",
+    items: [
+      { title: "Announcements", url: "/announcements", icon: Megaphone },
+      { title: "Reports", url: "/reports", icon: FileBarChart },
+    ],
+    defaultOpen: false,
+  },
+];
+
+// System & Settings (always visible, compact)
+const systemNav: NavItem[] = [
   { title: "Reminders", url: "/reminders", icon: FileText },
   { title: "Notifications", url: "/notifications", icon: Bell },
-  { title: "Admin", url: "/admin", icon: Shield },
   { title: "Settings", url: "/settings", icon: Settings },
 ];
 
-const channelIcons: Record<string, React.ElementType> = {
-  general: Hash,
-  announcement: Megaphone,
-  voice: Volume2,
-};
+// Admin Only
+const adminNav: NavItem[] = [
+  { title: "Admin", url: "/admin", icon: Shield },
+  { title: "Audit Trail", url: "/audit-trail", icon: FileSearch },
+];
 
 export default function AppSidebar({ onNavigate }: AppSidebarProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const { user: currentUser } = useAuth();
-  const [expandedTeams, setExpandedTeams] = useState<string[]>([]);
   const [collapsed, setCollapsed] = useState(false);
-  const [teams, setTeams] = useState<Team[]>([]);
-  const [channels, setChannels] = useState<Channel[]>([]);
-  const [allUsers, setAllUsers] = useState<UserInfo[]>([]);
+  const [focusMode, setFocusMode] = useState(false);
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
   const { onlineUserIds, activeRooms } = usePresence();
 
   const currentUserId = currentUser?.id;
 
+  // Initialize section states
   useEffect(() => {
-    const loadData = async () => {
-      try {
-        const [teamsRes, channelsRes, usersRes] = await Promise.all([
-          apiGet<Team[]>("/teams").catch(() => []),
-          apiGet<Channel[]>("/channels").catch(() => []),
-          apiGet<UserInfo[]>("/users").catch(() => []),
-        ]);
-
-        const safeTeams = Array.isArray(teamsRes) ? teamsRes : [];
-        const safeChannels = Array.isArray(channelsRes) ? channelsRes : [];
-        const safeUsers = Array.isArray(usersRes) ? usersRes : [];
-
-        setTeams(safeTeams);
-        setChannels(safeChannels);
-        setAllUsers(safeUsers);
-        if (safeTeams.length > 0 && expandedTeams.length === 0) {
-          setExpandedTeams([safeTeams[0].id]);
-        }
-      } catch (err) {
-        console.error("Failed to load sidebar data:", err);
-      }
-    };
-    loadData();
+    const initial: Record<string, boolean> = {};
+    secondarySections.forEach((section) => {
+      initial[section.title] = section.defaultOpen ?? false;
+    });
+    setOpenSections(initial);
   }, []);
 
-  // Listen for realtime status changes from backend
+  // Restore focus mode from previous sessions
   useEffect(() => {
-    const socket = getSocket();
-    const handleStatusChanged = (payload: { userId: string; status: string }) => {
-      setAllUsers((prev) =>
-        prev.map((u) => (u.id === payload.userId ? { ...u, status: payload.status } : u)),
-      );
-    };
-    socket.on("user:status:changed", handleStatusChanged);
-    return () => {
-      socket.off("user:status:changed", handleStatusChanged);
-    };
+    if (typeof window === "undefined") return;
+    const stored = window.localStorage.getItem("focusMode");
+    if (stored === "true") {
+      setFocusMode(true);
+    }
   }, []);
-
-  const toggleTeam = (id: string) => {
-    setExpandedTeams((prev) =>
-      prev.includes(id) ? prev.filter((t) => t !== id) : [...prev, id]
-    );
-  };
 
   const isActive = (url: string) => {
     if (url === "/") return location.pathname === "/";
@@ -152,24 +122,33 @@ export default function AppSidebar({ onNavigate }: AppSidebarProps) {
     navigate("/login");
   };
 
-  const getTeamChannels = (teamId: string) => channels.filter((c) => c.teamId === teamId);
+  const toggleSection = (title: string) => {
+    setOpenSections((prev) => ({ ...prev, [title]: !prev[title] }));
+  };
 
   // Quick Huddle participants from active rooms
   const quickHuddleRoom = activeRooms.find((r) => r.roomId === "quick-huddle");
   const quickHuddleParticipants = quickHuddleRoom?.participants || [];
 
-  // Other users for DM section (exclude current user)
-  const dmUsers = allUsers.filter((u) => u.id !== currentUser?.id);
-
-  const isUserOnline = (userId: string) => onlineUserIds.has(userId);
-
-  // Derived current status (includes DND / focus)
+  // Derived current status
   const derivedCurrentStatus = useMemo(() => {
     const storedStatus = (currentUser as any)?.status as string | undefined;
-    if (storedStatus) return storedStatus as "online" | "busy" | "away" | "offline" | "dnd";
-    if (!currentUserId) return "offline";
-    return isUserOnline(currentUserId) ? "online" : "offline";
-  }, [currentUser, currentUserId, onlineUserIds]);
+    const isOnline = currentUserId ? onlineUserIds.has(currentUserId) : false;
+
+    if (focusMode) {
+      return "dnd" as const;
+    }
+
+    if (!isOnline) {
+      return "offline" as const;
+    }
+
+    if (storedStatus && ["online", "busy", "away", "dnd"].includes(storedStatus)) {
+      return storedStatus as "online" | "busy" | "away" | "dnd";
+    }
+
+    return "online" as const;
+  }, [currentUser, currentUserId, onlineUserIds, focusMode]);
 
   const statusLabel =
     derivedCurrentStatus === "online"
@@ -184,7 +163,8 @@ export default function AppSidebar({ onNavigate }: AppSidebarProps) {
 
   const toggleFocusMode = async () => {
     if (!currentUser || !currentUser.id) return;
-    const nextStatus = derivedCurrentStatus === "dnd" ? "online" : "dnd";
+    const nextFocusMode = !focusMode;
+    const nextStatus = nextFocusMode ? "dnd" : "online";
     try {
       await fetch(`${API_BASE}/users/${currentUser.id}/status`, {
         method: "PATCH",
@@ -196,13 +176,18 @@ export default function AppSidebar({ onNavigate }: AppSidebarProps) {
       });
       const updatedUser = { ...(currentUser as any), status: nextStatus };
       auth.setUser(updatedUser);
-      setAllUsers((prev) =>
-        prev.map((u) => (u.id === currentUser.id ? { ...u, status: nextStatus } : u)),
-      );
+      setFocusMode(nextFocusMode);
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem("focusMode", nextFocusMode ? "true" : "false");
+      }
     } catch (err) {
       console.error("Failed to toggle focus mode:", err);
     }
   };
+
+  const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'org_owner';
+  const activeMeetingsCount = activeRooms.filter(r => r.roomId !== "quick-huddle").length;
+
   return (
     <aside
       className={cn(
@@ -225,6 +210,7 @@ export default function AppSidebar({ onNavigate }: AppSidebarProps) {
           <button
             onClick={() => setCollapsed(!collapsed)}
             className="p-1 rounded hover:bg-sidebar-accent text-sidebar-muted hover:text-sidebar-accent-foreground transition-colors"
+            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
           >
             <ChevronRight className={cn("w-4 h-4 transition-transform", !collapsed && "rotate-180")} />
           </button>
@@ -233,7 +219,7 @@ export default function AppSidebar({ onNavigate }: AppSidebarProps) {
 
       {/* Search */}
       {(!collapsed || onNavigate) && (
-        <div className="px-3 py-2">
+        <div className="px-3 py-2 border-b border-sidebar-border/50">
           <button className="w-full flex items-center gap-2 px-3 py-1.5 rounded-lg bg-sidebar-accent/50 text-sidebar-muted text-xs hover:text-sidebar-accent-foreground hover:bg-sidebar-accent transition-colors">
             <Search className="w-3.5 h-3.5" />
             <span>Search...</span>
@@ -244,7 +230,7 @@ export default function AppSidebar({ onNavigate }: AppSidebarProps) {
 
       {/* Quick Huddle */}
       {(!collapsed || onNavigate) && (
-        <div className="px-3 pb-2">
+        <div className="px-3 py-2 border-b border-sidebar-border/50">
           <Link
             to="/meeting-lobby/quick-huddle"
             onClick={handleNav}
@@ -275,21 +261,21 @@ export default function AppSidebar({ onNavigate }: AppSidebarProps) {
       )}
 
       {/* Active Meeting Rooms */}
-      {(!collapsed || onNavigate) && activeRooms.filter(r => r.roomId !== "quick-huddle").length > 0 && (
-        <div className="px-3 pb-2 space-y-1">
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-sidebar-muted px-1">Live Rooms</p>
-          {activeRooms.filter(r => r.roomId !== "quick-huddle").map((room) => (
+      {(!collapsed || onNavigate) && activeMeetingsCount > 0 && (
+        <div className="px-3 pb-2 border-b border-sidebar-border/50 space-y-1">
+          <p className="px-1 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-sidebar-muted">Live</p>
+          {activeRooms.filter(r => r.roomId !== "quick-huddle").slice(0, 2).map((room) => (
             <Link
               key={room.roomId}
               to={`/meeting-lobby/${room.roomId}`}
               onClick={handleNav}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs text-green-400 hover:bg-green-500/10 transition-colors"
+              className="flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs text-green-400 hover:bg-green-500/10 transition-colors"
             >
               <div className="relative">
                 <Video className="w-3.5 h-3.5" />
                 <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
               </div>
-              <span className="flex-1 truncate">{room.name}</span>
+              <span className="flex-1 truncate text-[11px]">{room.name}</span>
               <Badge className="bg-green-500/20 text-green-400 text-[9px] h-4 px-1">
                 {room.participants.length}
               </Badge>
@@ -299,7 +285,7 @@ export default function AppSidebar({ onNavigate }: AppSidebarProps) {
       )}
 
       {/* Main Nav */}
-      <nav className="flex-1 overflow-y-auto scrollbar-thin px-2 py-1 space-y-0.5">
+      <nav className="flex-1 overflow-y-auto scrollbar-thin px-2 py-2 space-y-0.5">
         {mainNav.map((item) => (
           <Link
             key={item.url}
@@ -323,69 +309,74 @@ export default function AppSidebar({ onNavigate }: AppSidebarProps) {
             {(!collapsed || onNavigate) && (
               <>
                 <span className="flex-1">{item.title}</span>
-                {item.title === "Meetings" && (
-                  <div className="flex items-center gap-1.5">
-                    {activeRooms.filter(r => r.roomId !== "quick-huddle").length > 0 && (
-                      <Badge className="h-4.5 min-w-[18px] px-1 text-[10px] flex items-center justify-center bg-green-500 text-white animate-pulse">
-                        {activeRooms.filter(r => r.roomId !== "quick-huddle").length}
-                      </Badge>
-                    )}
-                    <ChevronRight className="w-3 h-3 text-sidebar-muted opacity-0 group-hover:opacity-100 transition-opacity" />
-                  </div>
+                {item.title === "Meetings" && activeMeetingsCount > 0 && (
+                  <Badge className="h-4.5 min-w-[18px] px-1 text-[10px] flex items-center justify-center bg-green-500 text-white">
+                    {activeMeetingsCount}
+                  </Badge>
                 )}
               </>
             )}
           </Link>
         ))}
 
-        {/* Teams/Channels */}
+        {/* Secondary Sections - Collapsible */}
         {(!collapsed || onNavigate) && (
-          <div className="pt-3">
-            <div className="flex items-center justify-between px-3 py-1">
-              <span className="text-[10px] font-semibold uppercase tracking-widest text-sidebar-muted">Teams</span>
-              <button className="p-0.5 rounded hover:bg-sidebar-accent text-sidebar-muted hover:text-sidebar-accent-foreground">
-                <Plus className="w-3 h-3" />
-              </button>
-            </div>
-            {teams.map((team) => {
-              const teamChannels = getTeamChannels(team.id);
+          <div className="pt-2 space-y-0.5">
+            {secondarySections.map((section) => {
+              const isOpen = openSections[section.title] ?? false;
+              const hasActiveItem = section.items.some((item) => isActive(item.url));
+
               return (
-                <div key={team.id}>
+                <div key={section.title} className="space-y-0.5">
                   <button
-                    onClick={() => toggleTeam(team.id)}
-                    className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-sidebar-foreground hover:bg-sidebar-accent/50 rounded-lg transition-colors"
-                  >
-                    <motion.div animate={{ rotate: expandedTeams.includes(team.id) ? 90 : 0 }} transition={{ duration: 0.15 }}>
-                      <ChevronRight className="w-3 h-3" />
-                    </motion.div>
-                    <span className="font-medium text-xs">{team.name}</span>
-                    {teamChannels.length > 0 && (
-                      <span className="text-[10px] text-sidebar-muted ml-auto">{teamChannels.length}</span>
+                    onClick={() => toggleSection(section.title)}
+                    className={cn(
+                      "w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-xs font-medium transition-colors",
+                      hasActiveItem
+                        ? "text-sidebar-accent-foreground bg-sidebar-accent/30"
+                        : "text-sidebar-muted hover:text-sidebar-foreground hover:bg-sidebar-accent/30"
                     )}
+                  >
+                    <span className="uppercase tracking-wider">{section.title}</span>
+                    <ChevronDown
+                      className={cn(
+                        "w-3 h-3 transition-transform",
+                        isOpen && "rotate-180"
+                      )}
+                    />
                   </button>
                   <AnimatePresence>
-                    {expandedTeams.includes(team.id) && (
+                    {isOpen && (
                       <motion.div
                         initial={{ height: 0, opacity: 0 }}
                         animate={{ height: "auto", opacity: 1 }}
                         exit={{ height: 0, opacity: 0 }}
-                        transition={{ duration: 0.15 }}
-                        className="overflow-hidden ml-4 space-y-0.5"
+                        transition={{ duration: 0.2 }}
+                        className="overflow-hidden"
                       >
-                        {teamChannels.map((ch) => {
-                          const Icon = channelIcons[ch.type] || Hash;
-                          return (
+                        <div className="space-y-0.5 pl-2">
+                          {section.items.map((item) => (
                             <Link
-                              key={ch.id}
-                              to={`/chat?channel=${ch.id}`}
+                              key={item.url}
+                              to={item.url}
                               onClick={handleNav}
-                              className="flex items-center gap-2 px-3 py-1 text-xs text-sidebar-muted hover:text-sidebar-accent-foreground hover:bg-sidebar-accent/50 rounded-lg transition-colors"
+                              className={cn(
+                                "flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs transition-colors",
+                                isActive(item.url)
+                                  ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+                                  : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
+                              )}
                             >
-                              <Icon className="w-3 h-3" />
-                              <span className="flex-1">{ch.name}</span>
+                              <item.icon className="w-3.5 h-3.5 shrink-0" />
+                              <span className="flex-1">{item.title}</span>
+                              {item.badge && item.badge > 0 && (
+                                <Badge variant="destructive" className="h-4 min-w-[16px] px-1 text-[9px]">
+                                  {item.badge}
+                                </Badge>
+                              )}
                             </Link>
-                          );
-                        })}
+                          ))}
+                        </div>
                       </motion.div>
                     )}
                   </AnimatePresence>
@@ -394,74 +385,28 @@ export default function AppSidebar({ onNavigate }: AppSidebarProps) {
             })}
           </div>
         )}
-
-        {/* Direct Messages with online indicators */}
-        {(!collapsed || onNavigate) && (
-          <div className="pt-3">
-            <div className="flex items-center justify-between px-3 py-1">
-              <span className="text-[10px] font-semibold uppercase tracking-widest text-sidebar-muted">Direct Messages</span>
-              <button className="p-0.5 rounded hover:bg-sidebar-accent text-sidebar-muted hover:text-sidebar-accent-foreground">
-                <Plus className="w-3 h-3" />
-              </button>
-            </div>
-            {dmUsers.map((user) => {
-              const online = isUserOnline(user.id);
-              const initials = user.name.split(" ").map(n => n[0]).join("").toUpperCase();
-              const presenceStatus =
-                (user.status as "online" | "busy" | "away" | "offline" | "dnd" | undefined) ||
-                (online ? "online" : "offline");
-              return (
-                <Link
-                  key={user.id}
-                  to={`/chat`}
-                  onClick={handleNav}
-                  className="flex items-center gap-2 px-3 py-1.5 text-xs text-sidebar-foreground hover:bg-sidebar-accent/50 rounded-lg transition-colors"
-                >
-                  <div className="relative">
-                    <Avatar className="h-5 w-5">
-                      <AvatarFallback className="bg-sidebar-accent text-sidebar-accent-foreground text-[8px] font-medium">
-                        {initials.slice(0, 2)}
-                      </AvatarFallback>
-                    </Avatar>
-                    <StatusIndicator
-                      status={presenceStatus}
-                      className="absolute -bottom-0.5 -right-0.5 w-2 h-2 border-sidebar"
-                    />
-                  </div>
-                  <span className="flex-1 truncate">{user.name}</span>
-                  {presenceStatus === "dnd" && (
-                    <span className="text-[9px] text-sidebar-muted shrink-0">Focus</span>
-                  )}
-                  {presenceStatus !== "dnd" && online && (
-                    <span className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" />
-                  )}
-                </Link>
-              );
-            })}
-          </div>
-        )}
       </nav>
 
-      {/* Bottom Nav */}
-      <div className="px-2 py-2 space-y-0.5 border-t border-sidebar-border">
-        {bottomNav.map((item) => (
+      {/* System & Settings - Compact */}
+      <div className="px-2 py-2 space-y-0.5 border-t border-sidebar-border shrink-0">
+        {systemNav.map((item) => (
           <Link
             key={item.url}
             to={item.url}
             onClick={handleNav}
             className={cn(
-              "flex items-center gap-3 px-3 py-1.5 rounded-lg text-sm transition-colors",
+              "flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs transition-colors",
               isActive(item.url)
                 ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
-                : "text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
+                : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
             )}
           >
-            <item.icon className="w-4 h-4 shrink-0" />
+            <item.icon className="w-3.5 h-3.5 shrink-0" />
             {(!collapsed || onNavigate) && (
               <>
-                <span className="flex-1 text-xs">{item.title}</span>
+                <span className="flex-1">{item.title}</span>
                 {item.badge && item.badge > 0 && (
-                  <Badge variant="destructive" className="h-4.5 min-w-[18px] px-1 text-[10px] flex items-center justify-center">
+                  <Badge variant="destructive" className="h-4 min-w-[16px] px-1 text-[9px]">
                     {item.badge}
                   </Badge>
                 )}
@@ -469,11 +414,33 @@ export default function AppSidebar({ onNavigate }: AppSidebarProps) {
             )}
           </Link>
         ))}
+
+        {/* Admin Section - Compact */}
+        {isAdmin && (!collapsed || onNavigate) && (
+          <div className="pt-1 space-y-0.5 border-t border-sidebar-border/50 mt-1">
+            {adminNav.map((item) => (
+              <Link
+                key={item.url}
+                to={item.url}
+                onClick={handleNav}
+                className={cn(
+                  "flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs transition-colors",
+                  isActive(item.url)
+                    ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+                    : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
+                )}
+              >
+                <item.icon className="w-3.5 h-3.5 shrink-0" />
+                <span className="flex-1">{item.title}</span>
+              </Link>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* User Profile */}
-      <div className="px-3 py-3 border-t border-sidebar-border">
-        <div className="flex items-center gap-3">
+      <div className="px-3 py-2.5 border-t border-sidebar-border shrink-0">
+        <div className="flex items-center gap-2.5">
           <div className="relative">
             <Avatar className="h-8 w-8 ring-2 ring-sidebar-primary/30">
               <AvatarFallback className="bg-sidebar-primary text-sidebar-primary-foreground text-xs font-medium">
@@ -486,29 +453,29 @@ export default function AppSidebar({ onNavigate }: AppSidebarProps) {
             />
           </div>
           {(!collapsed || onNavigate) && (
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-semibold text-sidebar-accent-foreground truncate">
-                {currentUser?.name || "Guest User"}
-              </p>
-              <p className="text-[10px] text-sidebar-muted truncate">{statusLabel}</p>
-            </div>
-          )}
-          {(!collapsed || onNavigate) && (
             <>
-              <button
-                onClick={toggleFocusMode}
-                className="p-1 rounded hover:bg-sidebar-accent text-sidebar-muted hover:text-sidebar-accent-foreground transition-colors"
-                title={derivedCurrentStatus === "dnd" ? "Exit Focus mode" : "Enable Focus mode / Do Not Disturb"}
-              >
-                <BellOff className="w-3.5 h-3.5" />
-              </button>
-              <button
-                onClick={handleLogout}
-                className="p-1 rounded hover:bg-sidebar-accent text-sidebar-muted hover:text-sidebar-accent-foreground transition-colors"
-                title="Log out"
-              >
-                <LogOut className="w-3.5 h-3.5" />
-              </button>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold text-sidebar-accent-foreground truncate">
+                  {currentUser?.name || "Guest User"}
+                </p>
+                <p className="text-[10px] text-sidebar-muted truncate">{statusLabel}</p>
+              </div>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={toggleFocusMode}
+                  className="p-1.5 rounded hover:bg-sidebar-accent text-sidebar-muted hover:text-sidebar-accent-foreground transition-colors"
+                  title={derivedCurrentStatus === "dnd" ? "Exit Focus mode" : "Enable Focus mode"}
+                >
+                  <BellOff className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  onClick={handleLogout}
+                  className="p-1.5 rounded hover:bg-sidebar-accent text-sidebar-muted hover:text-sidebar-accent-foreground transition-colors"
+                  title="Log out"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </>
           )}
         </div>

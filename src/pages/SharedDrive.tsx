@@ -1,15 +1,51 @@
 import { useEffect, useMemo, useState } from "react";
-import { Folder, FileText, Upload, Link as LinkIcon, RefreshCw, History, MoreHorizontal, Image as ImageIcon, FileArchive, File as FileIcon, Download, Eye, Plus } from "lucide-react";
+import {
+  Folder,
+  FileText,
+  Upload,
+  Link as LinkIcon,
+  RefreshCw,
+  History,
+  MoreHorizontal,
+  Image as ImageIcon,
+  FileArchive,
+  File as FileIcon,
+  Download,
+  Eye,
+  Plus,
+  Search,
+  Grid3x3,
+  List,
+  ChevronRight,
+  Clock,
+  HardDrive,
+  FolderOpen,
+  X,
+  Share2,
+  Copy,
+  Check,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/ui/use-toast";
 import { auth } from "@/lib/auth";
+import { apiGet, apiPost, apiFetch } from "@/lib/api";
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
 
@@ -49,6 +85,8 @@ interface DriveEntryWithVersions {
   }[];
 }
 
+type ViewMode = "grid" | "list";
+
 const formatBytes = (bytes?: number) => {
   if (!bytes && bytes !== 0) return "-";
   if (bytes === 0) return "0 B";
@@ -58,12 +96,35 @@ const formatBytes = (bytes?: number) => {
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
 };
 
+const formatDate = (dateString: string) => {
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+
+  if (diffMins < 1) return "เมื่อสักครู่";
+  if (diffMins < 60) return `${diffMins} นาทีที่แล้ว`;
+  if (diffHours < 24) return `${diffHours} ชั่วโมงที่แล้ว`;
+  if (diffDays < 7) return `${diffDays} วันที่แล้ว`;
+  return date.toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "numeric" });
+};
+
 const iconForMime = (mime?: string) => {
   if (!mime) return FileIcon;
   if (mime.startsWith("image/")) return ImageIcon;
   if (mime === "application/pdf") return FileText;
   if (mime.includes("zip") || mime.includes("rar") || mime.includes("7z")) return FileArchive;
   return FileIcon;
+};
+
+const getFileColor = (mime?: string) => {
+  if (!mime) return "text-muted-foreground";
+  if (mime.startsWith("image/")) return "text-blue-500";
+  if (mime === "application/pdf") return "text-red-500";
+  if (mime.includes("zip") || mime.includes("rar") || mime.includes("7z")) return "text-yellow-500";
+  return "text-muted-foreground";
 };
 
 export default function SharedDrive() {
@@ -75,6 +136,8 @@ export default function SharedDrive() {
 
   const [entries, setEntries] = useState<DriveEntry[]>([]);
   const [loadingEntries, setLoadingEntries] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [viewMode, setViewMode] = useState<ViewMode>("grid");
 
   const [currentPath, setCurrentPath] = useState<string>("/");
   const [creatingFolder, setCreatingFolder] = useState(false);
@@ -86,15 +149,17 @@ export default function SharedDrive() {
   const [versionsData, setVersionsData] = useState<DriveEntryWithVersions | null>(null);
   const [loadingVersions, setLoadingVersions] = useState(false);
   const [showNewFolderDialog, setShowNewFolderDialog] = useState(false);
+  const [copiedLink, setCopiedLink] = useState<string | null>(null);
+  const [imageError, setImageError] = useState(false);
+  const [imageLoading, setImageLoading] = useState(true);
 
   const loadTeams = async () => {
     try {
-      const res = await fetch(`${API_BASE}/teams`);
-      if (!res.ok) return;
-      const data = await res.json();
-      setTeams(data);
-      if (data.length && !selectedTeamId) {
-        setSelectedTeamId(data[0].id);
+      const data = await apiGet<Team[]>("/teams").catch(() => []);
+      const safe = Array.isArray(data) ? data : [];
+      setTeams(safe);
+      if (safe.length && !selectedTeamId) {
+        setSelectedTeamId(safe[0].id);
       }
     } catch (e) {
       console.error("Failed to load teams for drive:", e);
@@ -112,10 +177,10 @@ export default function SharedDrive() {
     try {
       const params = new URLSearchParams();
       if (currentPath) params.set("path", currentPath);
-      const res = await fetch(`${API_BASE}/drive/teams/${selectedTeamId}?${params.toString()}`);
-      if (!res.ok) throw new Error(await res.text());
-      const data = await res.json();
-      setEntries(data);
+      const data = await apiGet<DriveEntry[]>(`/drive/teams/${selectedTeamId}?${params.toString()}`).catch(
+        () => [],
+      );
+      setEntries(Array.isArray(data) ? data : []);
     } catch (e: any) {
       console.error("Failed to load drive entries:", e);
       toast({
@@ -132,6 +197,16 @@ export default function SharedDrive() {
     loadEntries();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedTeamId, currentPath]);
+
+  const filteredEntries = useMemo(() => {
+    if (!searchQuery.trim()) return entries;
+    const query = searchQuery.toLowerCase();
+    return entries.filter(
+      (entry) =>
+        entry.name.toLowerCase().includes(query) ||
+        entry.path.toLowerCase().includes(query),
+    );
+  }, [entries, searchQuery]);
 
   const breadcrumb = useMemo(() => {
     if (!currentPath || currentPath === "/") return [];
@@ -151,19 +226,11 @@ export default function SharedDrive() {
     if (!name) return;
     setCreatingFolder(true);
     try {
-      const res = await fetch(`${API_BASE}/drive/teams/${selectedTeamId}/folders`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name,
-          path: currentPath,
-          createdById: currentUser.id,
-        }),
+      await apiPost(`/drive/teams/${selectedTeamId}/folders`, {
+        name,
+        path: currentPath,
+        createdById: currentUser.id,
       });
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(text || "Failed to create folder");
-      }
       setNewFolderName("");
       await loadEntries();
       toast({
@@ -191,7 +258,7 @@ export default function SharedDrive() {
         fd.append("file", file);
         fd.append("path", currentPath);
         fd.append("createdById", currentUser.id);
-        const res = await fetch(`${API_BASE}/drive/teams/${selectedTeamId}/upload`, {
+        const res = await apiFetch(`/drive/teams/${selectedTeamId}/upload`, {
           method: "POST",
           body: fd,
         });
@@ -223,6 +290,8 @@ export default function SharedDrive() {
     } else {
       setPreviewEntry(entry);
       setVersionsData(null);
+      setImageError(false);
+      setImageLoading(true);
       void loadVersions(entry.id);
     }
   };
@@ -238,9 +307,7 @@ export default function SharedDrive() {
   const loadVersions = async (entryId: string) => {
     setLoadingVersions(true);
     try {
-      const res = await fetch(`${API_BASE}/drive/entries/${entryId}/versions`);
-      if (!res.ok) throw new Error(await res.text());
-      const data = await res.json();
+      const data = await apiGet<DriveEntryWithVersions>(`/drive/entries/${entryId}/versions`);
       setVersionsData(data);
     } catch (e) {
       console.error("Load versions error:", e);
@@ -249,29 +316,28 @@ export default function SharedDrive() {
     }
   };
 
-  const handleCopyLink = (url?: string) => {
+  const handleCopyLink = async (url?: string) => {
     if (!url) return;
     const full = url.startsWith("http") ? url : `${API_BASE}${url}`;
-    navigator.clipboard
-      .writeText(full)
-      .then(() => {
-        toast({
-          title: "คัดลอกลิงก์แล้ว",
-          description: "สามารถนำไปวางในแชทได้เลย",
-        });
-      })
-      .catch(() => {
-        toast({
-          variant: "destructive",
-          title: "คัดลอกลิงก์ไม่สำเร็จ",
-        });
+    try {
+      await navigator.clipboard.writeText(full);
+      setCopiedLink(full);
+      toast({
+        title: "คัดลอกลิงก์แล้ว",
+        description: "สามารถนำไปวางในแชทได้เลย",
       });
+      setTimeout(() => setCopiedLink(null), 2000);
+    } catch {
+      toast({
+        variant: "destructive",
+        title: "คัดลอกลิงก์ไม่สำเร็จ",
+      });
+    }
   };
 
   const handleDownload = (url?: string, filename?: string) => {
     if (!url) return;
     const full = url.startsWith("http") ? url : `${API_BASE}${url}`;
-    // ใช้ลิงก์ชั่วคราว + download attribute บังคับให้ browser ดาวน์โหลดไฟล์จริง ๆ
     const a = document.createElement("a");
     a.href = full;
     if (filename) {
@@ -285,426 +351,824 @@ export default function SharedDrive() {
     document.body.removeChild(a);
   };
 
-  const rootEntries = entries;
-
   return (
-    <div className="flex flex-col h-screen bg-gradient-to-b from-background via-muted/30 to-background">
-      {/* Header */}
-      <div className="border-b bg-background/80 backdrop-blur-sm">
-        <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center shadow-sm">
-              <Folder className="w-4 h-4 text-primary" />
-            </div>
-            <div>
-              <h1 className="text-lg font-semibold text-foreground">Shared Drive</h1>
-              <p className="text-xs text-muted-foreground">
-                ที่เก็บเอกสารกลางของทีม ใช้อัปโหลด · แชร์ลิงก์ · ดูไฟล์ PDF/รูปภาพ ได้ในที่เดียว
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <Select
-              value={selectedTeamId}
-              onValueChange={(v) => {
-                setSelectedTeamId(v);
-                setCurrentPath("/");
-              }}
-            >
-              <SelectTrigger className="w-44 h-8 text-xs">
-                <SelectValue placeholder="เลือกทีม" />
-              </SelectTrigger>
-              <SelectContent>
-                {teams.map((t) => (
-                  <SelectItem key={t.id} value={t.id}>
-                    {t.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 text-xs gap-1.5"
-              onClick={() => loadEntries()}
-            >
-              <RefreshCw className="w-3 h-3" />
-              Refresh
-            </Button>
-          </div>
-        </div>
-      </div>
+    <TooltipProvider>
+      <div className="flex flex-col h-screen bg-gradient-to-br from-background via-background to-muted/20">
+        {/* Modern Header */}
+        <div className="border-b border-border/50 bg-background/95 backdrop-blur-xl supports-[backdrop-filter]:bg-background/80">
+          <div className="max-w-7xl mx-auto px-6 lg:px-8">
+            <div className="h-20 flex items-center justify-between gap-6">
+              {/* Left: Logo & Title */}
+              <div className="flex items-center gap-4 min-w-0 flex-1">
+                <div className="relative">
+                  <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-primary/20 via-primary/10 to-primary/5 flex items-center justify-center shadow-lg shadow-primary/5 ring-1 ring-primary/10">
+                    <HardDrive className="w-6 h-6 text-primary" />
+                  </div>
+                  <div className="absolute -top-1 -right-1 w-4 h-4 bg-primary rounded-full border-2 border-background animate-pulse-soft" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h1 className="text-xl font-bold text-foreground tracking-tight">Shared Drive</h1>
+                  <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                    ที่เก็บเอกสารกลางของทีม · แชร์ · จัดการ · ทำงานร่วมกัน
+                  </p>
+                </div>
+              </div>
 
-      <div className="flex-1 overflow-y-auto">
-        <div className="max-w-6xl mx-auto px-6 py-5 space-y-4">
-          {/* Path + actions */}
-          <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <button
-              className={cn(
-                "px-1.5 py-0.5 rounded hover:bg-muted",
-                currentPath === "/" && "font-semibold text-foreground"
-              )}
-              onClick={() => handleBreadcrumbClick(null)}
-            >
-              Root
-            </button>
-            {breadcrumb.map((c, idx) => (
-              <div key={c.path} className="flex items-center gap-2">
-                <span className="text-muted-foreground">/</span>
-                <button
-                  className={cn(
-                    "px-1.5 py-0.5 rounded hover:bg-muted",
-                    idx === breadcrumb.length - 1 && "font-semibold text-foreground"
-                  )}
-                  onClick={() => handleBreadcrumbClick(c.path)}
+              {/* Right: Team Selector & Actions */}
+              <div className="flex items-center gap-3">
+                <Select
+                  value={selectedTeamId}
+                  onValueChange={(v) => {
+                    setSelectedTeamId(v);
+                    setCurrentPath("/");
+                  }}
                 >
-                  {c.label}
-                </button>
-              </div>
-            ))}
-          </div>
-
-          <div className="flex items-center gap-2">
-            <Button
-              size="sm"
-              className="h-8 text-xs gap-1.5"
-              disabled={creatingFolder || !selectedTeamId}
-              onClick={() => setShowNewFolderDialog(true)}
-            >
-              <Plus className="w-3 h-3" />
-              New folder
-            </Button>
-            <label className="inline-flex items-center gap-1.5 px-3 h-8 rounded-md border bg-background text-xs cursor-pointer hover:bg-muted">
-              <Upload className="w-3 h-3" />
-              <span>Upload</span>
-              <input
-                type="file"
-                multiple
-                className="hidden"
-                onChange={(e) => handleUploadFiles(e.target.files)}
-              />
-            </label>
-          </div>
-          </div>
-
-          {/* List */}
-          <Card className="shadow-sm border-border/60">
-            <CardHeader className="py-3 border-b bg-muted/40">
-              <CardTitle className="text-sm flex items-center justify-between">
-                <span>รายการไฟล์และโฟลเดอร์</span>
-                {uploading && (
-                  <span className="text-[11px] text-muted-foreground flex items-center gap-1">
-                    <RefreshCw className="w-3 h-3 animate-spin" />
-                    กำลังอัปโหลด...
-                  </span>
-                )}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-0">
-            <div className="grid grid-cols-[minmax(0,2.5fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(auto,120px)] gap-2 px-4 pb-2 text-[11px] text-muted-foreground border-b">
-              <span>Name</span>
-              <span>Size</span>
-              <span>Updated</span>
-              <span className="text-right pr-4">Actions</span>
-            </div>
-            <ScrollArea className="max-h-[520px]">
-              <div className="divide-y">
-                {loadingEntries && (
-                  <div className="px-4 py-6 text-center text-xs text-muted-foreground">
-                    กำลังโหลดรายการไฟล์...
-                  </div>
-                )}
-                {!loadingEntries && rootEntries.length === 0 && (
-                  <div className="px-4 py-10 text-center text-xs text-muted-foreground">
-                    ยังไม่มีไฟล์หรือโฟลเดอร์ในตำแหน่งนี้
-                  </div>
-                )}
-                {!loadingEntries &&
-                  rootEntries.map((entry) => {
-                    const version = entry.latestVersion;
-                    const Icon = entry.isFolder
-                      ? Folder
-                      : iconForMime(version?.mimeType);
-                    return (
-                      <button
-                        key={entry.id}
-                        className="w-full grid grid-cols-[minmax(0,2.5fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(auto,120px)] gap-2 px-4 py-2 text-xs items-center hover:bg-muted/60 text-left"
-                        onClick={() => handleOpenEntry(entry)}
-                      >
-                        <div className="flex items-center gap-2">
-                          <Icon className={cn("w-4 h-4", entry.isFolder ? "text-primary" : "text-muted-foreground")} />
-                          <span className="truncate">{entry.name}</span>
-                          {!entry.isFolder && version && (
-                            <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4">
-                              v{version.version}
-                            </Badge>
-                          )}
-                        </div>
-                        <span className="text-muted-foreground text-[11px]">
-                          {entry.isFolder ? "-" : formatBytes(version?.size)}
-                        </span>
-                        <span className="text-muted-foreground text-[11px]">
-                          {new Date(entry.updatedAt).toLocaleString()}
-                        </span>
-                        <div className="flex items-center justify-end gap-1.5">
-                          {!entry.isFolder && version && (
-                            <>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-7 w-7"
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleDownload(version.url, entry.name);
-                                }}
-                              >
-                                <Download className="w-3 h-3" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-7 w-7"
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleCopyLink(version.url);
-                                }}
-                              >
-                                <LinkIcon className="w-3 h-3" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-7 w-7"
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setPreviewEntry(entry);
-                                  setVersionsData(null);
-                                  void loadVersions(entry.id);
-                                }}
-                              >
-                                <MoreHorizontal className="w-3 h-3" />
-                              </Button>
-                            </>
-                          )}
-                        </div>
-                      </button>
-                    );
-                  })}
-              </div>
-            </ScrollArea>
-          </CardContent>
-          </Card>
-        </div>
-      </div>
-
-      {/* New Folder dialog */}
-      <Dialog
-        open={showNewFolderDialog}
-        onOpenChange={(open) => {
-          setShowNewFolderDialog(open);
-          if (!open) {
-            setNewFolderName("");
-          }
-        }}
-      >
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle className="text-sm">สร้างโฟลเดอร์ใหม่</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3 py-1">
-            <Input
-              autoFocus
-              placeholder="ตั้งชื่อโฟลเดอร์..."
-              value={newFolderName}
-              onChange={(e) => setNewFolderName(e.target.value)}
-            />
-            <p className="text-[11px] text-muted-foreground">
-              โฟลเดอร์นี้จะถูกสร้างภายใต้เส้นทาง <span className="font-medium">{currentPath || "/"}</span> ของทีมที่เลือก
-            </p>
-          </div>
-          <div className="flex justify-end gap-2 pt-1">
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 text-xs"
-              onClick={() => setShowNewFolderDialog(false)}
-            >
-              ยกเลิก
-            </Button>
-            <Button
-              size="sm"
-              className="h-8 text-xs"
-              disabled={!newFolderName.trim() || creatingFolder}
-              onClick={async () => {
-                await handleCreateFolder();
-                setShowNewFolderDialog(false);
-              }}
-            >
-              สร้างโฟลเดอร์
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Preview / Versions dialog */}
-      <Dialog
-        open={!!previewEntry}
-        onOpenChange={(open) => {
-          if (!open) {
-            setPreviewEntry(null);
-            setVersionsData(null);
-          }
-        }}
-      >
-        <DialogContent className="max-w-4xl h-[80vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-sm">
-              <FileText className="w-4 h-4" />
-              {previewEntry?.name || "File"}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="flex-1 grid grid-cols-1 md:grid-cols-[2fr,1fr] gap-4 overflow-hidden pt-2">
-            <div className="border rounded-md bg-muted/40 flex items-center justify-center overflow-hidden">
-              {previewEntry && previewEntry.latestVersion && (
-                (() => {
-                  const v = previewEntry.latestVersion;
-                  const src = v.url.startsWith("http") ? v.url : `${API_BASE}${v.url}`;
-                  if (v.mimeType.startsWith("image/")) {
-                    return (
-                      <img
-                        src={src}
-                        alt={previewEntry.name}
-                        className="max-h-full max-w-full object-contain"
-                      />
-                    );
-                  }
-                  if (v.mimeType === "application/pdf") {
-                    return (
-                      <div className="flex flex-col w-full h-full">
-                        <div className="flex items-center justify-end gap-2 px-3 py-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-8 text-xs"
-                            onClick={() => window.open(src, "_blank")}
-                          >
-                            <Eye className="w-3 h-3 mr-1" />
-                            เปิดในแท็บใหม่
-                          </Button>
-                          <Button
-                            size="sm"
-                            className="h-8 text-xs"
-                            onClick={() => handleDownload(v.url)}
-                          >
-                            <Download className="w-3 h-3 mr-1" />
-                            ดาวน์โหลด
-                          </Button>
-                        </div>
-                        <iframe
-                          src={src}
-                          title={previewEntry.name}
-                          className="w-full flex-1 border-0"
-                        />
-                      </div>
-                    );
-                  }
-                  return (
-                    <div className="flex flex-col items-center gap-3 text-xs text-muted-foreground">
-                      <FileIcon className="w-8 h-8" />
-                      <p>ไม่สามารถ preview ไฟล์ประเภทนี้ได้</p>
-                      <Button
-                        size="sm"
-                        className="h-8 text-xs"
-                        onClick={() => handleDownload(v.url, previewEntry.name)}
-                      >
-                        <Eye className="w-3 h-3 mr-1" />
-                        เปิดไฟล์
-                      </Button>
-                    </div>
-                  );
-                })()
-              )}
-            </div>
-            <div className="flex flex-col">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-medium flex items-center gap-1">
-                  <History className="w-3 h-3" />
-                  Version history
-                </span>
-                {previewEntry && previewEntry.latestVersion && (
-                  <div className="flex items-center gap-1">
+                  <SelectTrigger className="w-48 h-10 border-border/60 bg-background/50 hover:bg-background transition-colors">
+                    <SelectValue placeholder="เลือกทีม" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {teams.map((t) => (
+                      <SelectItem key={t.id} value={t.id}>
+                        {t.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Tooltip>
+                  <TooltipTrigger asChild>
                     <Button
                       variant="outline"
                       size="icon"
-                      className="h-7 w-7"
-                      onClick={() => handleCopyLink(previewEntry.latestVersion?.url)}
+                      className="h-10 w-10 border-border/60 bg-background/50 hover:bg-background"
+                      onClick={() => loadEntries()}
                     >
-                      <LinkIcon className="w-3 h-3" />
+                      <RefreshCw className={cn("w-4 h-4", loadingEntries && "animate-spin")} />
                     </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>รีเฟรช</TooltipContent>
+                </Tooltip>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Main Content */}
+        <div className="flex-1 overflow-hidden">
+          <div className="max-w-7xl mx-auto px-6 lg:px-8 h-full flex flex-col">
+            {/* Toolbar */}
+            <div className="py-6 space-y-4">
+              {/* Breadcrumb Navigation */}
+              <Breadcrumb>
+                <BreadcrumbList>
+                  <BreadcrumbItem>
+                    <BreadcrumbLink
+                      asChild
+                      className={cn(
+                        "text-sm font-medium transition-colors hover:text-foreground",
+                        currentPath === "/" && "text-foreground"
+                      )}
+                    >
+                      <button onClick={() => handleBreadcrumbClick(null)} className="flex items-center gap-1.5">
+                        <FolderOpen className="w-4 h-4" />
+                        <span>Root</span>
+                      </button>
+                    </BreadcrumbLink>
+                  </BreadcrumbItem>
+                  {breadcrumb.map((crumb, idx) => (
+                    <div key={crumb.path} className="flex items-center">
+                      <BreadcrumbSeparator>
+                        <ChevronRight className="w-4 h-4 text-muted-foreground/60" />
+                      </BreadcrumbSeparator>
+                      <BreadcrumbItem>
+                        {idx === breadcrumb.length - 1 ? (
+                          <BreadcrumbPage className="text-sm font-semibold">{crumb.label}</BreadcrumbPage>
+                        ) : (
+                          <BreadcrumbLink
+                            asChild
+                            className="text-sm font-medium transition-colors hover:text-foreground"
+                          >
+                            <button onClick={() => handleBreadcrumbClick(crumb.path)}>{crumb.label}</button>
+                          </BreadcrumbLink>
+                        )}
+                      </BreadcrumbItem>
+                    </div>
+                  ))}
+                </BreadcrumbList>
+              </Breadcrumb>
+
+              {/* Search & Actions Bar */}
+              <div className="flex items-center gap-3 flex-wrap">
+                {/* Search */}
+                <div className="relative flex-1 min-w-[280px]">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    placeholder="ค้นหาไฟล์หรือโฟลเดอร์..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-9 h-10 bg-background/50 border-border/60 focus-visible:ring-2 focus-visible:ring-primary/20"
+                  />
+                  {searchQuery && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8"
+                      onClick={() => setSearchQuery("")}
+                    >
+                      <X className="w-4 h-4" />
+                    </Button>
+                  )}
+                </div>
+
+                {/* View Mode Toggle */}
+                <div className="flex items-center gap-1 p-1 bg-muted/40 rounded-lg border border-border/50 backdrop-blur-sm">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant={viewMode === "grid" ? "default" : "ghost"}
+                        size="icon"
+                        className={cn(
+                          "h-8 w-8 transition-all duration-200",
+                          viewMode === "grid" && "bg-background shadow-md ring-1 ring-border/50"
+                        )}
+                        onClick={() => setViewMode("grid")}
+                      >
+                        <Grid3x3 className={cn("w-4 h-4 transition-colors", viewMode === "grid" ? "text-primary" : "")} />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>มุมมองแบบ Grid</TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant={viewMode === "list" ? "default" : "ghost"}
+                        size="icon"
+                        className={cn(
+                          "h-8 w-8 transition-all duration-200",
+                          viewMode === "list" && "bg-background shadow-md ring-1 ring-border/50"
+                        )}
+                        onClick={() => setViewMode("list")}
+                      >
+                        <List className={cn("w-4 h-4 transition-colors", viewMode === "list" ? "text-primary" : "")} />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>มุมมองแบบ List</TooltipContent>
+                  </Tooltip>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex items-center gap-2">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-10 gap-2 border-border/50 bg-background/60 hover:bg-background hover:border-border/80 transition-all duration-200 shadow-sm hover:shadow-md"
+                        disabled={creatingFolder || !selectedTeamId}
+                        onClick={() => setShowNewFolderDialog(true)}
+                      >
+                        <Plus className="w-4 h-4" />
+                        <span className="hidden sm:inline">โฟลเดอร์ใหม่</span>
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>สร้างโฟลเดอร์ใหม่</TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <label className="inline-flex items-center gap-2 px-4 h-10 rounded-md border border-border/50 bg-background/60 hover:bg-background hover:border-border/80 cursor-pointer transition-all duration-200 shadow-sm hover:shadow-md">
+                        <Upload className="w-4 h-4" />
+                        <span className="hidden sm:inline">อัปโหลด</span>
+                        <input
+                          type="file"
+                          multiple
+                          className="hidden"
+                          onChange={(e) => handleUploadFiles(e.target.files)}
+                          disabled={uploading || !selectedTeamId}
+                        />
+                      </label>
+                    </TooltipTrigger>
+                    <TooltipContent>อัปโหลดไฟล์</TooltipContent>
+                  </Tooltip>
+                </div>
+              </div>
+            </div>
+
+            {/* Content Area */}
+            <div className="flex-1 overflow-hidden pb-6">
+              {uploading && (
+                <div className="mb-4 p-4 bg-gradient-to-r from-primary/10 via-primary/5 to-transparent border border-primary/30 rounded-xl flex items-center gap-3 shadow-sm">
+                  <RefreshCw className="w-5 h-5 text-primary animate-spin" />
+                  <span className="text-sm font-medium text-foreground">กำลังอัปโหลดไฟล์...</span>
+                </div>
+              )}
+
+              {loadingEntries ? (
+                <div className="space-y-4">
+                  {viewMode === "grid" ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                      {[...Array(8)].map((_, i) => (
+                        <Card key={i} className="border-border/60">
+                          <CardContent className="p-6">
+                            <Skeleton className="h-12 w-12 rounded-xl mb-4" />
+                            <Skeleton className="h-4 w-3/4 mb-2" />
+                            <Skeleton className="h-3 w-1/2" />
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {[...Array(8)].map((_, i) => (
+                        <Card key={i} className="border-border/60">
+                          <CardContent className="p-4">
+                            <div className="flex items-center gap-4">
+                              <Skeleton className="h-10 w-10 rounded-lg" />
+                              <div className="flex-1 space-y-2">
+                                <Skeleton className="h-4 w-1/3" />
+                                <Skeleton className="h-3 w-1/4" />
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : filteredEntries.length === 0 ? (
+                <Card className="border-border/50 border-dashed bg-card/40">
+                  <CardContent className="flex flex-col items-center justify-center py-20 px-6">
+                    <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-muted/60 to-muted/40 flex items-center justify-center mb-5 shadow-sm">
+                      {searchQuery ? (
+                        <Search className="w-10 h-10 text-muted-foreground" />
+                      ) : (
+                        <Folder className="w-10 h-10 text-muted-foreground" />
+                      )}
+                    </div>
+                    <h3 className="text-lg font-bold text-foreground mb-2">
+                      {searchQuery ? "ไม่พบผลลัพธ์" : "ยังไม่มีไฟล์หรือโฟลเดอร์"}
+                    </h3>
+                    <p className="text-sm text-muted-foreground text-center max-w-sm leading-relaxed">
+                      {searchQuery
+                        ? "ลองค้นหาด้วยคำอื่น หรือลบคำค้นหาเพื่อดูรายการทั้งหมด"
+                        : "เริ่มต้นด้วยการสร้างโฟลเดอร์หรืออัปโหลดไฟล์แรกของคุณ"}
+                    </p>
+                  </CardContent>
+                </Card>
+              ) : viewMode === "grid" ? (
+                <ScrollArea className="h-full">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 pb-4">
+                    {filteredEntries.map((entry) => {
+                      const version = entry.latestVersion;
+                      const Icon = entry.isFolder ? Folder : iconForMime(version?.mimeType);
+                      const fileColor = entry.isFolder ? "text-primary" : getFileColor(version?.mimeType);
+
+                      return (
+                        <Card
+                          key={entry.id}
+                          className={cn(
+                            "group border-border/50 bg-card/60 hover:bg-card hover:border-border/80 transition-all duration-300 cursor-pointer",
+                            "hover:shadow-xl hover:shadow-black/10 hover:-translate-y-1.5",
+                            "ring-0 hover:ring-1 hover:ring-primary/20"
+                          )}
+                          onClick={() => handleOpenEntry(entry)}
+                        >
+                          <CardContent className="p-5">
+                            <div className="flex items-start justify-between mb-4">
+                              <div
+                                className={cn(
+                                  "w-14 h-14 rounded-xl flex items-center justify-center transition-all duration-300 shadow-sm",
+                                  entry.isFolder
+                                    ? "bg-gradient-to-br from-primary/15 to-primary/5 group-hover:from-primary/20 group-hover:to-primary/10"
+                                    : "bg-gradient-to-br from-muted/60 to-muted/40 group-hover:from-muted/70 group-hover:to-muted/50",
+                                  "group-hover:scale-110 group-hover:shadow-md"
+                                )}
+                              >
+                                <Icon className={cn("w-7 h-7 transition-transform duration-300", fileColor)} />
+                              </div>
+                              {!entry.isFolder && version && (
+                                <Badge
+                                  variant="secondary"
+                                  className="text-[10px] px-2 py-0 h-5 bg-muted/80"
+                                >
+                                  v{version.version}
+                                </Badge>
+                              )}
+                            </div>
+                            <h3 className="font-semibold text-sm text-foreground mb-1.5 line-clamp-2 group-hover:text-primary transition-colors duration-200">
+                              {entry.name}
+                            </h3>
+                            <div className="flex items-center gap-3 text-xs text-muted-foreground mt-2.5">
+                              {entry.isFolder ? (
+                                <span className="flex items-center gap-1">
+                                  <Folder className="w-3 h-3" />
+                                  <span>โฟลเดอร์</span>
+                                </span>
+                              ) : (
+                                <>
+                                  <span>{formatBytes(version?.size)}</span>
+                                  <span className="flex items-center gap-1">
+                                    <Clock className="w-3 h-3" />
+                                    {formatDate(entry.updatedAt)}
+                                  </span>
+                                </>
+                              )}
+                            </div>
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+                  </div>
+                </ScrollArea>
+              ) : (
+                <ScrollArea className="h-full">
+                  <div className="space-y-1 pb-4">
+                    {filteredEntries.map((entry) => {
+                      const version = entry.latestVersion;
+                      const Icon = entry.isFolder ? Folder : iconForMime(version?.mimeType);
+                      const fileColor = entry.isFolder ? "text-primary" : getFileColor(version?.mimeType);
+
+                      return (
+                        <Card
+                          key={entry.id}
+                          className={cn(
+                            "group border-border/50 bg-card/60 hover:bg-card hover:border-border/80 transition-all duration-300 cursor-pointer",
+                            "hover:shadow-lg hover:shadow-black/8",
+                            "ring-0 hover:ring-1 hover:ring-primary/10"
+                          )}
+                          onClick={() => handleOpenEntry(entry)}
+                        >
+                          <CardContent className="p-4">
+                            <div className="flex items-center gap-4">
+                              <div
+                                className={cn(
+                                  "w-12 h-12 rounded-lg flex items-center justify-center transition-all duration-300 shadow-sm",
+                                  entry.isFolder
+                                    ? "bg-gradient-to-br from-primary/15 to-primary/5 group-hover:from-primary/20 group-hover:to-primary/10"
+                                    : "bg-gradient-to-br from-muted/60 to-muted/40 group-hover:from-muted/70 group-hover:to-muted/50",
+                                  "group-hover:scale-110 group-hover:shadow-md"
+                                )}
+                              >
+                                <Icon className={cn("w-6 h-6 transition-transform duration-300", fileColor)} />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 mb-1.5">
+                                  <h3 className="font-semibold text-sm text-foreground truncate group-hover:text-primary transition-colors duration-200">
+                                    {entry.name}
+                                  </h3>
+                                  {!entry.isFolder && version && (
+                                    <Badge
+                                      variant="secondary"
+                                      className="text-[10px] px-1.5 py-0 h-4 bg-muted/80"
+                                    >
+                                      v{version.version}
+                                    </Badge>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                                  {entry.isFolder ? (
+                                    <span className="flex items-center gap-1">
+                                      <Folder className="w-3 h-3" />
+                                      <span>โฟลเดอร์</span>
+                                    </span>
+                                  ) : (
+                                    <>
+                                      <span>{formatBytes(version?.size)}</span>
+                                      <span className="flex items-center gap-1">
+                                        <Clock className="w-3 h-3" />
+                                        {formatDate(entry.updatedAt)}
+                                      </span>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                              {!entry.isFolder && version && (
+                                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-8 w-8"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleDownload(version.url, entry.name);
+                                        }}
+                                      >
+                                        <Download className="w-4 h-4" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>ดาวน์โหลด</TooltipContent>
+                                  </Tooltip>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-8 w-8"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleCopyLink(version.url);
+                                        }}
+                                      >
+                                        <LinkIcon className="w-4 h-4" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>คัดลอกลิงก์</TooltipContent>
+                                  </Tooltip>
+                                </div>
+                              )}
+                            </div>
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+                  </div>
+                </ScrollArea>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* New Folder Dialog */}
+        <Dialog
+          open={showNewFolderDialog}
+          onOpenChange={(open) => {
+            setShowNewFolderDialog(open);
+            if (!open) {
+              setNewFolderName("");
+            }
+          }}
+        >
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Folder className="w-5 h-5 text-primary" />
+                <span>สร้างโฟลเดอร์ใหม่</span>
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-foreground">ชื่อโฟลเดอร์</label>
+                <Input
+                  autoFocus
+                  placeholder="ตั้งชื่อโฟลเดอร์..."
+                  value={newFolderName}
+                  onChange={(e) => setNewFolderName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && newFolderName.trim()) {
+                      handleCreateFolder().then(() => setShowNewFolderDialog(false));
+                    }
+                  }}
+                  className="h-10"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-9"
+                onClick={() => setShowNewFolderDialog(false)}
+              >
+                ยกเลิก
+              </Button>
+              <Button
+                size="sm"
+                className="h-9"
+                disabled={!newFolderName.trim() || creatingFolder}
+                onClick={async () => {
+                  await handleCreateFolder();
+                  setShowNewFolderDialog(false);
+                }}
+              >
+                {creatingFolder ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                    กำลังสร้าง...
+                  </>
+                ) : (
+                  "สร้างโฟลเดอร์"
+                )}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Preview / Versions Dialog */}
+        <Dialog
+          open={!!previewEntry}
+          onOpenChange={(open) => {
+            if (!open) {
+              setPreviewEntry(null);
+              setVersionsData(null);
+              setImageError(false);
+              setImageLoading(true);
+            }
+          }}
+        >
+          <DialogContent className="max-w-6xl h-[85vh] flex flex-col p-0 gap-0 overflow-hidden">
+            <DialogHeader className="px-6 py-5 border-b border-border/60 bg-gradient-to-r from-muted/30 to-transparent">
+              <div className="flex items-center justify-between">
+                <DialogTitle className="flex items-center gap-3.5">
+                  {previewEntry && (
+                    <>
+                      <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center shadow-sm ring-1 ring-primary/10">
+                        {(() => {
+                          const Icon = iconForMime(previewEntry.latestVersion?.mimeType);
+                          return <Icon className={cn("w-6 h-6", getFileColor(previewEntry.latestVersion?.mimeType))} />;
+                        })()}
+                      </div>
+                      <div>
+                        <div className="text-base font-bold text-foreground">{previewEntry.name}</div>
+                        {previewEntry.latestVersion && (
+                          <div className="text-xs text-muted-foreground mt-1 flex items-center gap-2">
+                            <span>{formatBytes(previewEntry.latestVersion.size)}</span>
+                            <span>·</span>
+                            <span className="truncate max-w-xs">{previewEntry.latestVersion.mimeType}</span>
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </DialogTitle>
+                {previewEntry && previewEntry.latestVersion && (
+                  <div className="flex items-center gap-2">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-9 gap-2 border-border/60 hover:bg-muted/50"
+                          onClick={() => handleCopyLink(previewEntry?.latestVersion?.url)}
+                        >
+                          {copiedLink === previewEntry.latestVersion.url ? (
+                            <>
+                              <Check className="w-4 h-4 text-primary" />
+                              <span>คัดลอกแล้ว</span>
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="w-4 h-4" />
+                              <span>คัดลอกลิงก์</span>
+                            </>
+                          )}
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>คัดลอกลิงก์แชร์</TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          size="sm"
+                          className="h-9 gap-2"
+                          onClick={() => handleDownload(previewEntry?.latestVersion?.url, previewEntry?.name)}
+                        >
+                          <Download className="w-4 h-4" />
+                          <span>ดาวน์โหลด</span>
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>ดาวน์โหลดไฟล์</TooltipContent>
+                    </Tooltip>
                   </div>
                 )}
               </div>
-              <ScrollArea className="flex-1 border rounded-md">
-                <div className="divide-y">
-                  {loadingVersions && (
-                    <div className="px-3 py-4 text-[11px] text-muted-foreground">
-                      กำลังโหลด version history...
-                    </div>
-                  )}
-                  {!loadingVersions && versionsData && versionsData.versions.length === 0 && (
-                    <div className="px-3 py-4 text-[11px] text-muted-foreground">
-                      ยังไม่มี version อื่นของไฟล์นี้
-                    </div>
-                  )}
-                  {!loadingVersions &&
-                    versionsData &&
-                    versionsData.versions.map((v) => (
-                      <div key={v.id} className="px-3 py-2 text-[11px] flex items-center gap-2">
-                        <Badge
-                          variant={v.version === versionsData.versions[0].version ? "default" : "outline"}
-                          className="h-5 px-2 text-[10px]"
+            </DialogHeader>
+            <div className="flex-1 grid grid-cols-1 lg:grid-cols-[1.5fr,1fr] gap-0 overflow-hidden">
+              {/* Preview Area */}
+              <div className="border-r border-border/60 bg-gradient-to-br from-muted/30 via-background to-muted/20 flex items-center justify-center overflow-hidden p-6">
+                {previewEntry && previewEntry.latestVersion && (
+                  (() => {
+                    const v = previewEntry.latestVersion;
+                    const src = v.url.startsWith("http") ? v.url : `${API_BASE}${v.url}`;
+                    if (v.mimeType.startsWith("image/")) {
+                      return (
+                        <div className="w-full h-full flex items-center justify-center relative">
+                          {imageLoading && (
+                            <div className="absolute inset-0 flex items-center justify-center">
+                              <div className="flex flex-col items-center gap-3">
+                                <RefreshCw className="w-8 h-8 text-muted-foreground animate-spin" />
+                                <p className="text-sm text-muted-foreground">กำลังโหลดภาพ...</p>
+                              </div>
+                            </div>
+                          )}
+                          {imageError ? (
+                            <div className="flex flex-col items-center gap-4 text-center p-8">
+                              <div className="w-20 h-20 rounded-2xl bg-muted/50 flex items-center justify-center">
+                                <ImageIcon className="w-10 h-10 text-muted-foreground" />
+                              </div>
+                              <div>
+                                <p className="text-sm font-medium text-foreground mb-1">ไม่สามารถแสดงภาพได้</p>
+                                <p className="text-xs text-muted-foreground mb-4">อาจเกิดจากปัญหา CORS หรือ URL ไม่ถูกต้อง</p>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-9 gap-2"
+                                  onClick={() => {
+                                    setImageError(false);
+                                    setImageLoading(true);
+                                    const img = new Image();
+                                    img.onload = () => setImageLoading(false);
+                                    img.onerror = () => {
+                                      setImageError(true);
+                                      setImageLoading(false);
+                                    };
+                                    img.src = src;
+                                  }}
+                                >
+                                  <RefreshCw className="w-4 h-4" />
+                                  ลองอีกครั้ง
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  className="h-9 gap-2 ml-2"
+                                  onClick={() => handleDownload(v.url, previewEntry.name)}
+                                >
+                                  <Download className="w-4 h-4" />
+                                  ดาวน์โหลด
+                                </Button>
+                              </div>
+                            </div>
+                          ) : (
+                            <img
+                              src={src}
+                              alt={previewEntry.name}
+                              className={cn(
+                                "max-h-full max-w-full object-contain rounded-xl shadow-2xl transition-opacity duration-300",
+                                imageLoading ? "opacity-0" : "opacity-100"
+                              )}
+                              onLoad={() => setImageLoading(false)}
+                              onError={() => {
+                                setImageError(true);
+                                setImageLoading(false);
+                              }}
+                              style={{ maxHeight: "calc(85vh - 200px)" }}
+                            />
+                          )}
+                        </div>
+                      );
+                    }
+                    if (v.mimeType === "application/pdf") {
+                      return (
+                        <div className="flex flex-col w-full h-full bg-background rounded-xl overflow-hidden shadow-2xl border border-border/60">
+                          <div className="flex items-center justify-between px-5 py-3.5 border-b border-border/60 bg-gradient-to-r from-muted/50 to-muted/30">
+                            <div className="flex items-center gap-2">
+                              <FileText className="w-4 h-4 text-primary" />
+                              <span className="text-sm font-semibold text-foreground">PDF Preview</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-8 text-xs gap-1.5 border-border/60"
+                                onClick={() => window.open(src, "_blank")}
+                              >
+                                <Eye className="w-3.5 h-3.5" />
+                                เปิดในแท็บใหม่
+                              </Button>
+                              <Button
+                                size="sm"
+                                className="h-8 text-xs gap-1.5"
+                                onClick={() => handleDownload(v.url)}
+                              >
+                                <Download className="w-3.5 h-3.5" />
+                                ดาวน์โหลด
+                              </Button>
+                            </div>
+                          </div>
+                          <div className="flex-1 bg-muted/20">
+                            <iframe
+                              src={src}
+                              title={previewEntry.name}
+                              className="w-full h-full border-0"
+                              style={{ minHeight: "500px" }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    }
+                    return (
+                      <div className="flex flex-col items-center gap-5 text-center p-10">
+                        <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-muted/60 to-muted/40 flex items-center justify-center shadow-lg">
+                          <FileIcon className="w-12 h-12 text-muted-foreground" />
+                        </div>
+                        <div>
+                          <p className="text-base font-semibold text-foreground mb-1.5">ไม่สามารถแสดงตัวอย่างได้</p>
+                          <p className="text-sm text-muted-foreground">ไฟล์ประเภทนี้ต้องดาวน์โหลดเพื่อเปิดดู</p>
+                        </div>
+                        <Button
+                          size="sm"
+                          className="h-10 gap-2 px-6"
+                          onClick={() => handleDownload(v.url, previewEntry.name)}
                         >
-                          v{v.version}
-                        </Badge>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs truncate">
-                            {formatBytes(v.size)} · {v.mimeType}
-                          </p>
-                          <p className="text-[10px] text-muted-foreground">
-                            {new Date(v.createdAt).toLocaleString()}
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-6 w-6"
-                            onClick={() => handleDownload(v.url, versionsData?.name)}
-                          >
-                            <Download className="w-3 h-3" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-6 w-6"
-                            onClick={() => handleCopyLink(v.url)}
-                          >
-                            <LinkIcon className="w-3 h-3" />
-                          </Button>
-                        </div>
+                          <Download className="w-4 h-4" />
+                          ดาวน์โหลดไฟล์
+                        </Button>
                       </div>
-                    ))}
+                    );
+                  })()
+                )}
+              </div>
+
+              {/* Versions Sidebar */}
+              <div className="flex flex-col bg-gradient-to-b from-background to-muted/10">
+                <div className="px-6 py-4 border-b border-border/60 bg-muted/20">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                      <History className="w-4 h-4 text-primary" />
+                    </div>
+                    <span className="text-sm font-semibold text-foreground">ประวัติเวอร์ชัน</span>
+                  </div>
                 </div>
-              </ScrollArea>
+                <ScrollArea className="flex-1">
+                  <div className="divide-y divide-border/40">
+                    {loadingVersions && (
+                      <div className="px-6 py-10 text-center">
+                        <RefreshCw className="w-6 h-6 text-muted-foreground animate-spin mx-auto mb-3" />
+                        <p className="text-xs text-muted-foreground">กำลังโหลดประวัติเวอร์ชัน...</p>
+                      </div>
+                    )}
+                    {!loadingVersions && versionsData && versionsData.versions.length === 0 && (
+                      <div className="px-6 py-10 text-center">
+                        <div className="w-12 h-12 rounded-xl bg-muted/50 flex items-center justify-center mx-auto mb-3">
+                          <History className="w-6 h-6 text-muted-foreground" />
+                        </div>
+                        <p className="text-xs text-muted-foreground">ยังไม่มีเวอร์ชันอื่น</p>
+                      </div>
+                    )}
+                    {!loadingVersions &&
+                      versionsData &&
+                      versionsData.versions.map((v, idx) => (
+                        <div
+                          key={v.id}
+                          className={cn(
+                            "px-6 py-4 hover:bg-muted/40 transition-all duration-200 group",
+                            idx === 0 && "bg-gradient-to-r from-primary/10 via-primary/5 to-transparent border-l-2 border-primary"
+                          )}
+                        >
+                          <div className="flex items-start gap-3">
+                            <Badge
+                              variant={idx === 0 ? "default" : "secondary"}
+                              className={cn(
+                                "h-7 px-2.5 text-xs shrink-0 font-semibold",
+                                idx === 0 && "bg-primary text-primary-foreground shadow-sm"
+                              )}
+                            >
+                              v{v.version}
+                            </Badge>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-1.5">
+                                <span className="text-xs font-semibold text-foreground">
+                                  {formatBytes(v.size)}
+                                </span>
+                                <span className="text-[10px] text-muted-foreground">·</span>
+                                <span className="text-[10px] text-muted-foreground truncate">{v.mimeType}</span>
+                              </div>
+                              <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                                <Clock className="w-3 h-3" />
+                                <span>{formatDate(v.createdAt)}</span>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8 hover:bg-muted"
+                                    onClick={() => handleDownload(v.url, versionsData?.name)}
+                                  >
+                                    <Download className="w-4 h-4" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>ดาวน์โหลด</TooltipContent>
+                              </Tooltip>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8 hover:bg-muted"
+                                    onClick={() => handleCopyLink(v.url)}
+                                  >
+                                    {copiedLink === v.url ? (
+                                      <Check className="w-4 h-4 text-primary" />
+                                    ) : (
+                                      <LinkIcon className="w-4 h-4" />
+                                    )}
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>คัดลอกลิงก์</TooltipContent>
+                              </Tooltip>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                </ScrollArea>
+              </div>
             </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-    </div>
+          </DialogContent>
+        </Dialog>
+      </div>
+    </TooltipProvider>
   );
 }
-

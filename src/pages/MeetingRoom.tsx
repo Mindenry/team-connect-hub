@@ -1262,15 +1262,6 @@ export default function MeetingRoom() {
         console.error("End meeting error:", e);
       }
 
-      // เรียก AI ให้สรุปประชุม + สร้าง action items / tasks อัตโนมัติ
-      try {
-        await fetch(`${API_BASE}/meetings/${meetingId}/ai-summary`, {
-          method: "POST",
-        });
-      } catch (e) {
-        console.error("AI summary error on leave:", e);
-      }
-
       // ทำความสะอาด state webrtc แล้วพา host ไปหน้า Meeting Summary
       socketRef.current.emit("meeting:leave", { meetingId: meetingCode, peerId: peerId.current });
       peersRef.current.forEach((p) => p.connection.close());

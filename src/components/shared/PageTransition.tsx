@@ -6,10 +6,11 @@ interface PageTransitionProps {
   className?: string;
 }
 
+// Simplified transition - show immediately, only animate exit
 const pageVariants = {
-  initial: { opacity: 0, y: 12 },
-  animate: { opacity: 1, y: 0 },
-  exit: { opacity: 0, y: -8 },
+  initial: { opacity: 1 },
+  animate: { opacity: 1 },
+  exit: { opacity: 0 },
 };
 
 export default function PageTransition({ children, className }: PageTransitionProps) {
@@ -19,7 +20,7 @@ export default function PageTransition({ children, className }: PageTransitionPr
       initial="initial"
       animate="animate"
       exit="exit"
-      transition={{ duration: 0.25, ease: "easeOut" }}
+      transition={{ duration: 0.1 }}
       className={className}
     >
       {children}

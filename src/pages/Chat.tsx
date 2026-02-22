@@ -1,53 +1,44 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, useLocation } from "react-router-dom";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { motion, AnimatePresence } from "framer-motion";
-import {
-  Hash, Send, Smile, Paperclip, Pin, Reply, Search, Plus, AtSign,
-  MoreHorizontal, Users, Volume2, Megaphone, Bookmark, X, MessageSquare, 
-  Folder as FolderIcon, ExternalLink,
-} from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import StatusIndicator from "@/components/shared/StatusIndicator";
-import CreateChannelDialog from "@/components/dialogs/CreateChannelDialog";
-import DeleteChannelDialog from "@/components/dialogs/DeleteChannelDialog";
-import EditChannelDialog from "@/components/dialogs/EditChannelDialog";
-import InviteUserDialog from "@/components/dialogs/InviteUserDialog";
 import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuTrigger,
-} from "@/components/ui/context-menu";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Mic, Headphones, Settings, Trash2, LogOut, ChevronDown } from "lucide-react";
-import { slidePanel } from "@/components/shared/PageTransition";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+  Search,
+  Folder as FolderIcon,
+  ExternalLink,
+  MessageSquare,
+  Hash,
+  Users,
+} from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { auth } from "@/lib/auth";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { auth, useAuth } from "@/lib/auth";
 import { getSocket } from "@/lib/websocket";
 import { usePresence } from "@/hooks/usePresence";
 import { apiGet, apiPost, apiFetch, apiDelete, apiPatch } from "@/lib/api";
 
+// Dialogs
+import CreateChannelDialog from "@/components/dialogs/CreateChannelDialog";
+import DeleteChannelDialog from "@/components/dialogs/DeleteChannelDialog";
+import EditChannelDialog from "@/components/dialogs/EditChannelDialog";
+import InviteUserDialog from "@/components/dialogs/InviteUserDialog";
+
+// Chat sub-components
+import ChatSidebar from "@/components/chat/ChatSidebar";
+import ChatHeader from "@/components/chat/ChatHeader";
+import MessageList from "@/components/chat/MessageList";
+import MessageComposer from "@/components/chat/MessageComposer";
+import ChatPanels from "@/components/chat/ChatPanels";
+import StatusIndicator from "@/components/shared/StatusIndicator";
+
 const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
+
+// ── Interfaces ──
 
 interface Channel {
   id: string;
   name: string;
-  type: "general" | "announcement" | "voice";
+  type: "general" | "announcement" | "voice" | "standup";
   teamId: string;
   team?: { id: string; name: string };
   description?: string;
@@ -83,99 +74,62 @@ interface DriveEntry {
   updatedAt: string;
 }
 
-const channelIcons: Record<string, React.ElementType> = {
-  general: Hash, announcement: Megaphone, voice: Volume2,
-};
+// ── Helpers ──
 
-// Emoji list
-const COMMON_EMOJIS = [
-  "😀", "😂", "🤣", "😍", "👍", "🙏", "👏", "🔥", "✨", "🙌",
-  "✅", "❌", "💯", "❤️", "🎉", "🎊", "😊", "😎", "🤔", "😴",
-  "😢", "😡", "🤯", "🥳", "🤝", "💪", "👀", "🎯", "🚀", "⭐"
-];
+const formatTime = (date: string) =>
+  new Date(date).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
-const getInitials = (name: string) => name.split(" ").map((n) => n[0]).join("").substring(0, 2).toUpperCase();
-const formatTime = (date: string) => new Date(date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-const formatDateHeader = (date: string) => new Date(date).toLocaleDateString([], { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-
-const apiLoadDmHistory = (userId: string): Message[] => {
-  try {
-    const history = localStorage.getItem(`dm_history_${userId}`);
-    return history ? JSON.parse(history) : [];
-  } catch (e) {
-    return [];
-  }
-};
-
-const apiSaveDmHistory = (userId: string, messages: Message[]) => {
-  try {
-    localStorage.setItem(`dm_history_${userId}`, JSON.stringify(messages));
-  } catch (e) {
-    console.error("Failed to save DM history", e);
-  }
-};
-
-const parseMentionsText = (text: string): string[] => {
+const parseMentions = (text: string): string[] => {
   const mentionRegex = /@(\w+)/g;
   const matches = text.match(mentionRegex);
   if (!matches) return [];
-  return matches.map(m => m.substring(1));
+  return matches.map((m) => m.substring(1));
 };
 
-const isSameDay = (a: string, b: string) => {
-  const da = new Date(a);
-  const db = new Date(b);
-  return (
-    da.getFullYear() === db.getFullYear() &&
-    da.getMonth() === db.getMonth() &&
-    da.getDate() === db.getDate()
-  );
+const getDmStorageKey = (userA: string, userB: string) => {
+  const [a, b] = [userA, userB].sort();
+  return `dm:${a}:${b}`;
 };
+
+// ── Component ──
 
 export default function Chat() {
   const isMobile = useIsMobile();
+  const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
-  const currentUser = auth.getUser();
-  const { isUserOnline } = usePresence();
+  const { user: currentUser } = useAuth();
+  const { isUserOnline, onlineCount: presenceOnlineCount } = usePresence();
 
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Channel + message state
   const [activeChannel, setActiveChannel] = useState<string | null>(null);
-  const [messageInput, setMessageInput] = useState("");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<Message[]>([]);
-  const [showSearchResults, setShowSearchResults] = useState(false);
-  const [showCreateChannel, setShowCreateChannel] = useState(false);
-  const [showDeleteChannel, setShowDeleteChannel] = useState(false);
-  const [showEditChannel, setShowEditChannel] = useState(false);
-  const [showInviteUser, setShowInviteUser] = useState(false);
-  const [channelToDelete, setChannelToDelete] = useState<Channel | null>(null);
-  const [channelToEdit, setChannelToEdit] = useState<Channel | null>(null);
-  const [showPinned, setShowPinned] = useState(false);
-  const [showMembers, setShowMembers] = useState(false);
-  const [showChannelList, setShowChannelList] = useState(!isMobile);
   const [channels, setChannels] = useState<Channel[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
-  const [dmContacts, setDmContacts] = useState<any[]>([]);
-  const [allUsers, setAllUsers] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
+  const [initialLoad, setInitialLoad] = useState(true);
 
   // DM state
   const [activeDm, setActiveDm] = useState<string | null>(null);
   const [dmMessages, setDmMessages] = useState<Message[]>([]);
+  const [dmContacts, setDmContacts] = useState<any[]>([]);
+  const [allUsers, setAllUsers] = useState<any[]>([]);
 
-  // Emoji and mentions state
+  // Input state
+  const [messageInput, setMessageInput] = useState("");
+  const [attachments, setAttachments] = useState<Array<{ url: string; name: string; type: string }>>([]);
+  const [replyingTo, setReplyingTo] = useState<Message | null>(null);
+
+  // Emoji + Mention state
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showMentionPicker, setShowMentionPicker] = useState(false);
   const [mentionQuery, setMentionQuery] = useState("");
   const [mentionStartPos, setMentionStartPos] = useState<number | null>(null);
-  const [attachments, setAttachments] = useState<Array<{ url: string; name: string; type: string }>>([]);
-  // Reactions and Threads state
+
+  // Reactions + Threads
   const [messageReactions, setMessageReactions] = useState<Record<string, Array<{ emoji: string; count: number; users: Array<{ id: string; name: string }> }>>>({});
-  const [showReactionPicker, setShowReactionPicker] = useState<{ messageId: string; x: number; y: number } | null>(null);
   const [activeThread, setActiveThread] = useState<string | null>(null);
   const [threadReplies, setThreadReplies] = useState<Record<string, Message[]>>({});
 
@@ -183,36 +137,85 @@ export default function Chat() {
   const [typingUsers, setTypingUsers] = useState<Record<string, Set<string>>>({});
   const typingTimeoutRef = useRef<Record<string, NodeJS.Timeout>>({});
 
-  const [replyingTo, setReplyingTo] = useState<Message | null>(null);
+  // UI toggles
+  const [showChannelList, setShowChannelList] = useState(!isMobile);
+  const [showPinned, setShowPinned] = useState(false);
+  const [showMembers, setShowMembers] = useState(false);
   const [showSearchBar, setShowSearchBar] = useState(false);
   const [channelSearchQuery, setChannelSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<Message[]>([]);
+  const [showSearchResults, setShowSearchResults] = useState(false);
+  const [sidebarSearchQuery, setSidebarSearchQuery] = useState("");
 
-  // Shared Drive picker state
+  // Dialogs
+  const [showCreateChannel, setShowCreateChannel] = useState(false);
+  const [showDeleteChannel, setShowDeleteChannel] = useState(false);
+  const [showEditChannel, setShowEditChannel] = useState(false);
+  const [showInviteUser, setShowInviteUser] = useState(false);
+  const [channelToDelete, setChannelToDelete] = useState<Channel | null>(null);
+  const [channelToEdit, setChannelToEdit] = useState<Channel | null>(null);
+
+  // Drive picker state
   const [showDrivePicker, setShowDrivePicker] = useState(false);
   const [driveLoading, setDriveLoading] = useState(false);
   const [driveEntries, setDriveEntries] = useState<DriveEntry[]>([]);
   const [drivePath, setDrivePath] = useState<string>("/");
   const [driveTeamId, setDriveTeamId] = useState<string | null>(null);
 
-  const handleSearch = async (query: string) => {
-    if (query.length < 3) return;
-    try {
-      const results = await apiGet<Message[]>(`/messages/search?query=${encodeURIComponent(query)}&limit=20`);
-      setSearchResults(results);
-      setShowSearchResults(true);
-    } catch (err) {
-      console.error("Search failed:", err);
-    }
-  };
+  // ── Derived state ──
 
-  // Infer teamId for active channel to scope drive
+  const currentChannel = channels.find((c) => c.id === activeChannel) || null;
+  const currentDmContact = dmContacts.find((c) => c.id === activeDm);
+  const rawMessages = activeDm ? dmMessages : messages;
+  const displayMessages = Array.isArray(rawMessages) ? rawMessages : [];
+
+  // DM contacts: ใช้ socket presence เป็นแหล่งความจริงสำหรับ online/offline
+  const dmContactsWithStatus = dmContacts.map((contact) => {
+    const isOnline = isUserOnline(contact.id);
+    return { ...contact, status: isOnline ? "online" : "offline" };
+  });
+
+  // Members lists: ใช้ socket presence เป็นแหล่งความจริง
+  const safeAllUsers = Array.isArray(allUsers) ? allUsers : [];
+  const membersOnline = safeAllUsers.filter((u) => isUserOnline(u.id));
+  const membersOffline = safeAllUsers.filter((u) => !isUserOnline(u.id));
+
+  // Typing names
+  const channelId = activeChannel || activeDm || "";
+  const typingSet = typingUsers[channelId];
+  const typingNames = typingSet ? Array.from(typingSet) : [];
+
+  // Mentionable users
+  const mentionableUsers = (Array.isArray(allUsers) ? allUsers : [])
+    .filter((u) => u.id !== currentUser?.id && u.name.toLowerCase().includes(mentionQuery.toLowerCase()))
+    .slice(0, 5);
+
+  // ── DM local storage helpers ──
+
+  const loadDmHistory = useCallback((otherUserId: string) => {
+    if (!currentUser) return [];
+    const key = getDmStorageKey(currentUser.id, otherUserId);
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? (parsed as Message[]) : [];
+    } catch {
+      return [];
+    }
+  }, [currentUser]);
+
+  const saveDmHistory = useCallback((otherUserId: string, msgs: Message[]) => {
+    if (!currentUser) return;
+    const key = getDmStorageKey(currentUser.id, otherUserId);
+    try { localStorage.setItem(key, JSON.stringify(msgs)); } catch { /* quota */ }
+  }, [currentUser]);
+
+  // ── Drive ──
+
   useEffect(() => {
     const ch = channels.find((c) => c.id === activeChannel);
-    if (ch?.teamId) {
-      setDriveTeamId(ch.teamId);
-    } else {
-      setDriveTeamId(null);
-    }
+    setDriveTeamId(ch?.teamId || null);
   }, [activeChannel, channels]);
 
   const loadDriveEntries = async (path: string = "/") => {
@@ -221,143 +224,209 @@ export default function Chat() {
     try {
       const params = new URLSearchParams();
       params.set("path", path);
-      const res = await fetch(`${API_BASE}/drive/teams/${driveTeamId}?${params.toString()}`);
-      if (!res.ok) throw new Error(await res.text());
-      const data = await res.json();
-      setDriveEntries(data);
+      const data = await apiGet<DriveEntry[]>(`/drive/teams/${driveTeamId}?${params.toString()}`).catch(() => []);
+      setDriveEntries(Array.isArray(data) ? data : []);
       setDrivePath(path);
     } catch (e) {
-      console.error("Failed to load drive entries for chat:", e);
+      console.error("Failed to load drive entries:", e);
     } finally {
       setDriveLoading(false);
     }
   };
 
-  // Load channels from API
+  // ── Load channels & users ──
+  // NEW: Simplified loading logic that always runs when component mounts or pathname changes
+
   useEffect(() => {
-    const loadChannels = async () => {
+    // Reset state when leaving chat page
+    if (location.pathname !== "/chat") {
+      setChannels([]);
+      setAllUsers([]);
+      setActiveChannel(null);
+      setActiveDm(null);
+      setMessages([]);
+      setDmMessages([]);
+      setDmContacts([]);
+      setInitialLoad(true);
+      return;
+    }
+
+    // Wait for currentUser to be available
+    if (!currentUser) {
+      setLoading(true);
+      return;
+    }
+
+    // Load data immediately
+    let cancelled = false;
+    const loadData = async () => {
       try {
+        if (initialLoad) {
+          setLoading(true);
+        }
+        
         const [channelsRes, usersRes] = await Promise.all([
           apiGet<Channel[]>("/channels").catch(() => []),
           apiGet<any[]>("/users").catch(() => []),
         ]);
-
+        
+        if (cancelled) return;
+        
         const safeChannels = Array.isArray(channelsRes) ? channelsRes : [];
         const safeUsers = Array.isArray(usersRes) ? usersRes : [];
-
+        
         setChannels(safeChannels);
         setAllUsers(safeUsers);
 
-        // Respect ?channel= from URL when opening Chat
+        // Set active channel
         const urlChannel = searchParams.get("channel");
-        if (safeChannels.length > 0) {
-          if (urlChannel && safeChannels.some((c: Channel) => c.id === urlChannel)) {
-            setActiveChannel(urlChannel);
-          } else if (!activeChannel) {
-            setActiveChannel(safeChannels[0].id);
+        setActiveChannel((prevChannel) => {
+          // Don't change if in DM mode
+          if (activeDm) {
+            return prevChannel;
           }
-        }
+          
+          if (safeChannels.length > 0) {
+            if (urlChannel && safeChannels.some((c) => c.id === urlChannel)) {
+              return urlChannel;
+            } else if (!prevChannel) {
+              return safeChannels[0].id;
+            } else if (prevChannel && !safeChannels.some((c) => c.id === prevChannel)) {
+              return safeChannels[0].id;
+            }
+          }
+          return prevChannel || null;
+        });
 
-        const contacts = safeUsers
-          .filter((u: any) => u.id !== currentUser?.id)
-          .map((u: any) => ({
-            id: u.id,
-            name: u.name,
-            initials: u.name.split(" ").map((n: string) => n[0]).join(""),
-            status: u.status || "online",
-            unread: 0,
-            lastMsg: "",
-          }));
-        setDmContacts(contacts);
+        // Set DM contacts
+        setDmContacts(
+          safeUsers
+            .filter((u: any) => u.id !== currentUser?.id)
+            .map((u: any) => ({
+              id: u.id,
+              name: u.name,
+              initials: u.name.split(" ").map((n: string) => n[0]).join(""),
+              status: u.status || "online",
+              unread: 0,
+              lastMsg: "",
+            }))
+        );
+        
+        setInitialLoad(false);
       } catch (err) {
         console.error("Failed to load channels:", err);
       } finally {
-        setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
     };
-    loadChannels();
-  }, [searchParams]);
 
-  // Load messages when channel changes
+    loadData();
+    
+    return () => {
+      cancelled = true;
+    };
+  }, [location.pathname, currentUser, searchParams, initialLoad, activeDm]);
+
+  // ── Load messages when channel changes ──
+
   useEffect(() => {
-    if (!activeChannel) return;
-
-    const loadMessages = async () => {
+    if (!activeChannel || !currentUser || location.pathname !== "/chat") return;
+    
+    let cancelled = false;
+    const load = async () => {
       try {
-        const data = await apiGet<any>(`/channels/${activeChannel}/messages`).catch(() => {
-          // Fallback: try to get channel with messages
-          return apiGet<any>(`/channels/${activeChannel}`).catch(() => null);
-        });
-
-        // Ensure messages state is always an array
-        if (Array.isArray(data)) {
-          setMessages(data);
-        } else if (data && Array.isArray((data as any).messages)) {
-          setMessages((data as any).messages);
-        } else if (data && (data as any).id) {
-          // If we got channel object, extract messages
-          setMessages((data as any).messages || []);
-        } else {
+        const data = await apiGet<any>(`/channels/${activeChannel}/messages`).catch(() =>
+          apiGet<any>(`/channels/${activeChannel}`).catch(() => null)
+        );
+        
+        if (cancelled) return;
+        
+        if (Array.isArray(data)) setMessages(data);
+        else if (data && Array.isArray(data.messages)) setMessages(data.messages);
+        else if (data && data.id) setMessages(data.messages || []);
+        else setMessages([]);
+      } catch {
+        if (!cancelled) {
           setMessages([]);
         }
-      } catch (err) {
-        console.error("Failed to load messages:", err);
-        setMessages([]);
       }
     };
-    loadMessages();
-  }, [activeChannel]);
+    load();
+    
+    return () => {
+      cancelled = true;
+    };
+  }, [activeChannel, currentUser, location.pathname]);
 
-  const getDmStorageKey = (userA: string, userB: string) => {
-    const [a, b] = [userA, userB].sort();
-    return `dm:${a}:${b}`;
-  };
+  // ── Reactions helpers ──
 
-  const loadDmHistory = (otherUserId: string) => {
-    if (!currentUser) return [];
-    const key = getDmStorageKey(currentUser.id, otherUserId);
+  const loadReactionsForMessage = async (messageId: string) => {
     try {
-      const raw = localStorage.getItem(key);
-      if (!raw) return [];
-      const parsed = JSON.parse(raw);
-      if (!Array.isArray(parsed)) return [];
-      return parsed as Message[];
-    } catch {
-      return [];
-    }
+      const reactions = await apiGet<Array<{ emoji: string; count: number; users: Array<{ id: string; name: string }> }>>(`/messages/${messageId}/reactions`);
+      setMessageReactions((prev) => ({ ...prev, [messageId]: reactions }));
+    } catch {}
   };
 
-  const saveDmHistory = (otherUserId: string, msgs: Message[]) => {
-    if (!currentUser) return;
-    const key = getDmStorageKey(currentUser.id, otherUserId);
-    try {
-      localStorage.setItem(key, JSON.stringify(msgs));
-    } catch {
-      // ignore quota errors
-    }
-  };
-
-  // WebSocket for real-time messages
   useEffect(() => {
+    if (displayMessages.length > 0) {
+      displayMessages.forEach((msg) => {
+        if (!messageReactions[msg.id]) loadReactionsForMessage(msg.id);
+      });
+    }
+  }, [displayMessages, messageReactions]);
+
+  const handleAddReaction = async (messageId: string, emoji: string) => {
+    if (!currentUser) return;
+    try {
+      await apiPost(`/messages/${messageId}/reactions`, { userId: currentUser.id, emoji });
+      loadReactionsForMessage(messageId);
+    } catch {}
+  };
+
+  // ── Thread helpers ──
+
+  const handleCreateThread = async (messageId: string) => {
+    if (!activeChannel || !currentUser) return;
+    try {
+      const thread = await apiPost("/threads", { channelId: activeChannel, messageId });
+      setActiveThread(thread.id);
+      const threadData = await apiGet(`/threads/${thread.id}`);
+      setThreadReplies((prev) => ({ ...prev, [thread.id]: (threadData as any).replies || [] }));
+    } catch {}
+  };
+
+  // ── Request notification permission ──
+  useEffect(() => {
+    if ("Notification" in window && Notification.permission === "default") {
+      Notification.requestPermission().catch(() => {
+        // User denied or error
+      });
+    }
+  }, []);
+
+  // ── WebSocket ──
+
+  useEffect(() => {
+    if (location.pathname !== "/chat") return;
+    
     const socket = getSocket();
 
     const handleNewMessage = (message: Message) => {
-      if (message.channelId === activeChannel) {
-        setMessages((prev) => [...prev, message]);
-      }
+      if (message.channelId === activeChannel) setMessages((prev) => [...prev, message]);
     };
-
     const handleMessageUpdated = (message: Message) => {
-      setMessages((prev) => prev.map((m) => m.id === message.id ? message : m));
+      setMessages((prev) => prev.map((m) => (m.id === message.id ? message : m)));
     };
 
-    // DM incoming messages
-    const handleDmMessage = (data: any) => {
+    const handleDmMessage = async (data: any) => {
       if (!currentUser) return;
+      console.log("Received DM message:", data);
       const fromId = data.senderId;
       const toId = data.receiverId;
       const otherUserId = fromId === currentUser.id ? toId : fromId;
-
+      const isFromMe = fromId === currentUser.id;
       const msg: Message = {
         id: data.id || `${Date.now()}-${Math.random().toString(36).slice(2)}`,
         text: data.text,
@@ -367,67 +436,109 @@ export default function Chat() {
         isPinned: false,
         isSystem: false,
         createdAt: data.createdAt || new Date().toISOString(),
+        attachments: data.attachments,
+        mentions: data.mentions,
       };
 
-      // Ensure contact exists
+      // Update contacts list
       setDmContacts((prev) => {
         const exists = prev.find((c) => c.id === otherUserId);
         const base = exists ?? {
           id: otherUserId,
           name: data.senderName || "User",
-          initials: (data.senderName || "U")
-            .split(" ")
-            .map((n: string) => n[0])
-            .join(""),
+          initials: (data.senderName || "U").split(" ").map((n: string) => n[0]).join(""),
           status: "online",
           unread: 0,
           lastMsg: "",
         };
-
         const updated = prev.filter((c) => c.id !== otherUserId);
         const isActive = activeDm === otherUserId;
-        return [
-          {
-            ...base,
-            lastMsg: data.text,
-            unread: isActive ? 0 : (base.unread || 0) + 1,
-          },
-          ...updated,
-        ];
+        return [{ ...base, lastMsg: data.text, unread: isActive ? 0 : (base.unread || 0) + (isFromMe ? 0 : 1) }, ...updated];
       });
 
-      // If this DM is currently open, append to thread + persist
-      if (activeDm && (fromId === activeDm || toId === activeDm)) {
+      // If DM is active, add message immediately
+      if (activeDm === otherUserId) {
+        console.log(`DM is active, adding message immediately`);
         setDmMessages((prev) => {
-          if (prev.some((m) => m.id === msg.id)) return prev;
+          if (prev.some((m) => m.id === msg.id)) {
+            console.log("Message already exists, skipping");
+            return prev;
+          }
           const next = [...prev, msg];
           saveDmHistory(otherUserId, next);
+          console.log(`Added message, total: ${next.length}`);
           return next;
         });
       } else {
-        // Not currently open: just persist to history
+        // If DM is not active, save to localStorage
+        console.log(`DM is not active, saving to localStorage`);
         const existing = loadDmHistory(otherUserId);
-        const next = [...existing, msg];
-        saveDmHistory(otherUserId, next);
+        const updated = [...existing, msg];
+        saveDmHistory(otherUserId, updated);
+        console.log(`Saved message to localStorage, total: ${updated.length}`);
+        
+        // Show notification and play sound if message is from someone else
+        if (!isFromMe) {
+          // Play notification sound
+          try {
+            const audio = new Audio('/notification.mp3');
+            audio.volume = 0.5;
+            audio.play().catch(() => {
+              // Fallback: use Web Audio API to generate a beep sound
+              const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+              const oscillator = audioContext.createOscillator();
+              const gainNode = audioContext.createGain();
+              
+              oscillator.connect(gainNode);
+              gainNode.connect(audioContext.destination);
+              
+              oscillator.frequency.value = 800;
+              oscillator.type = 'sine';
+              
+              gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+              gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+              
+              oscillator.start(audioContext.currentTime);
+              oscillator.stop(audioContext.currentTime + 0.3);
+            });
+          } catch (err) {
+            console.debug("Could not play notification sound:", err);
+          }
+          
+          // Show browser notification
+          const showNotification = () => {
+            if ("Notification" in window && Notification.permission === "granted") {
+              const notification = new Notification(`${data.senderName || "Someone"} sent you a message`, {
+                body: data.text.length > 100 ? data.text.substring(0, 100) + "..." : data.text,
+                icon: "/favicon.ico",
+                tag: `dm-${otherUserId}`,
+                requireInteraction: false,
+              });
+              
+              // Close notification after 5 seconds
+              setTimeout(() => {
+                notification.close();
+              }, 5000);
+            }
+          };
+          
+          if ("Notification" in window) {
+            if (Notification.permission === "granted") {
+              showNotification();
+            } else if (Notification.permission !== "denied") {
+              Notification.requestPermission().then((permission) => {
+                if (permission === "granted") {
+                  showNotification();
+                }
+              });
+            }
+          }
+        }
       }
     };
 
-    // Reactions handlers
-    const handleReactionAdded = (data: { messageId: string; reaction: any }) => {
-      loadReactionsForMessage(data.messageId);
-    };
-
-    const handleReactionRemoved = (data: { messageId: string; reaction: any }) => {
-      loadReactionsForMessage(data.messageId);
-    };
-
-    // Thread handlers
-    const handleThreadCreated = (thread: any) => {
-      if (thread.channelId === activeChannel) {
-        // Refresh messages to show thread indicator
-        // Could also update UI directly
-      }
-    };
+    const handleReactionAdded = (data: { messageId: string }) => loadReactionsForMessage(data.messageId);
+    const handleReactionRemoved = (data: { messageId: string }) => loadReactionsForMessage(data.messageId);
 
     const handleThreadReplyAdded = (data: { threadId: string; reply: any }) => {
       setThreadReplies((prev) => {
@@ -437,30 +548,19 @@ export default function Chat() {
       });
     };
 
+    const handleChannelCreated = (channel: any) => setChannels((prev) => [...prev, channel as Channel]);
+    const handleChannelUpdated = (updatedChannel: any) => setChannels((prev) => prev.map((c) => (c.id === updatedChannel.id ? (updatedChannel as Channel) : c)));
+    const handleChannelDeleted = (channelId: string) => {
+      setChannels((prev) => prev.filter((c) => c.id !== channelId));
+      if (activeChannel === channelId) setActiveChannel(null);
+    };
+
     socket.on("message:created", handleNewMessage);
     socket.on("message:updated", handleMessageUpdated);
     socket.on("dm:message", handleDmMessage);
     socket.on("reaction:added", handleReactionAdded);
     socket.on("reaction:removed", handleReactionRemoved);
-    socket.on("thread:created", handleThreadCreated);
     socket.on("thread:reply:added", handleThreadReplyAdded);
-
-    // Channel events
-    const handleChannelCreated = (channel: any) => {
-      setChannels((prev) => [...prev, channel as Channel]);
-    };
-
-    const handleChannelUpdated = (updatedChannel: any) => {
-      setChannels((prev) => prev.map((c) => c.id === updatedChannel.id ? (updatedChannel as Channel) : c));
-    };
-
-    const handleChannelDeleted = (channelId: string) => {
-      setChannels((prev) => prev.filter((c) => c.id !== channelId));
-      if (activeChannel === channelId) {
-        setActiveChannel(null);
-      }
-    };
-
     socket.on("channel:created", handleChannelCreated);
     socket.on("channel:updated", handleChannelUpdated);
     socket.on("channel:deleted", handleChannelDeleted);
@@ -471,128 +571,127 @@ export default function Chat() {
       socket.off("dm:message", handleDmMessage);
       socket.off("reaction:added", handleReactionAdded);
       socket.off("reaction:removed", handleReactionRemoved);
-      socket.off("thread:created", handleThreadCreated);
       socket.off("thread:reply:added", handleThreadReplyAdded);
       socket.off("channel:created", handleChannelCreated);
       socket.off("channel:updated", handleChannelUpdated);
       socket.off("channel:deleted", handleChannelDeleted);
     };
+  }, [activeChannel, activeDm, currentUser, location.pathname, loadDmHistory, saveDmHistory]);
+
+  // ── Message actions ──
+
+  const handlePinMessage = async (msg: Message) => {
+    try {
+      await apiPatch(`/messages/${msg.id}`, { isPinned: !msg.isPinned });
+      setMessages((prev) => prev.map((m) => (m.id === msg.id ? { ...m, isPinned: !m.isPinned } : m)));
+    } catch {}
+  };
+
+  const handleDeleteMessage = async (msg: Message) => {
+    try {
+      await apiDelete(`/messages/${msg.id}`);
+      setMessages((prev) => prev.filter((m) => m.id !== msg.id));
+    } catch {}
+  };
+
+  const handleReplyMessage = (msg: Message) => {
+    setReplyingTo(msg);
+    inputRef.current?.focus();
+  };
+
+  const handleDeleteChannel = async () => {
+    if (!channelToDelete) return;
+    try {
+      await apiDelete(`/channels/${channelToDelete.id}`);
+      setChannels((prev) => prev.filter((c) => c.id !== channelToDelete.id));
+      if (activeChannel === channelToDelete.id) setActiveChannel(null);
+      setShowDeleteChannel(false);
+      setChannelToDelete(null);
+    } catch {}
+  };
+
+  // ── Typing indicator ──
+
+  const handleTyping = useCallback(() => {
+    if (!currentUser || (!activeChannel && !activeDm)) return;
+    const chId = activeChannel || activeDm || "";
+    const socket = getSocket();
+    if (typingTimeoutRef.current[chId]) clearTimeout(typingTimeoutRef.current[chId]);
+    socket.emit("typing:start", { channelId: chId, userId: currentUser.id, userName: currentUser.name });
+    typingTimeoutRef.current[chId] = setTimeout(() => {
+      socket.emit("typing:stop", { channelId: chId, userId: currentUser.id });
+    }, 3000);
   }, [activeChannel, activeDm, currentUser]);
 
+  // ── Input handlers ──
 
-  // Load reactions for messages
-  const loadReactionsForMessage = async (messageId: string) => {
-    try {
-      const reactions = await apiGet<Array<{ emoji: string; count: number; users: Array<{ id: string; name: string }> }>>(`/messages/${messageId}/reactions`);
-      setMessageReactions((prev) => ({ ...prev, [messageId]: reactions }));
-    } catch (err) {
-      console.error("Failed to load reactions:", err);
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setMessageInput(value);
+    handleTyping();
+
+    const cursorPos = e.target.selectionStart || 0;
+    const textBeforeCursor = value.slice(0, cursorPos);
+    const lastAtIndex = textBeforeCursor.lastIndexOf("@");
+    if (lastAtIndex !== -1) {
+      const textAfterAt = textBeforeCursor.slice(lastAtIndex + 1);
+      if (!textAfterAt.includes(" ") && !textAfterAt.includes("\n")) {
+        setMentionQuery(textAfterAt);
+        setMentionStartPos(lastAtIndex);
+        setShowMentionPicker(true);
+        return;
+      }
     }
+    setShowMentionPicker(false);
   };
 
-  // Always work with an array for rendering messages to avoid runtime errors
-  const currentDmContact = dmContacts.find(c => c.id === activeDm);
-  const rawMessages = activeDm ? dmMessages : messages;
-  const displayMessages = Array.isArray(rawMessages) ? rawMessages : [];
-
-  // Load reactions when messages change
-  useEffect(() => {
-    if (displayMessages.length > 0) {
-      displayMessages.forEach((msg) => {
-        if (!messageReactions[msg.id]) {
-          loadReactionsForMessage(msg.id);
-        }
-      });
-    }
-  }, [displayMessages, messageReactions]);
-
-  // Add reaction handler
-  const handleAddReaction = async (messageId: string, emoji: string) => {
-    if (!currentUser) return;
-    try {
-      await apiPost(`/messages/${messageId}/reactions`, {
-        userId: currentUser.id,
-        emoji,
-      });
-      loadReactionsForMessage(messageId);
-    } catch (err) {
-      console.error("Failed to add reaction:", err);
-    }
+  const insertMention = (userName: string) => {
+    if (mentionStartPos === null) return;
+    const before = messageInput.slice(0, mentionStartPos);
+    const after = messageInput.slice(mentionStartPos + 1 + mentionQuery.length);
+    setMessageInput(before + `@${userName} ` + after);
+    setShowMentionPicker(false);
+    setMentionQuery("");
+    setMentionStartPos(null);
+    setTimeout(() => inputRef.current?.focus(), 0);
   };
 
-  // Create thread handler
-  const handleCreateThread = async (messageId: string) => {
-    if (!activeChannel || !currentUser) return;
-    try {
-      const thread = await apiPost("/threads", {
-        channelId: activeChannel,
-        messageId,
-      });
-      setActiveThread(thread.id);
-      // Load thread replies
-      const threadData = await apiGet(`/threads/${thread.id}`);
-      setThreadReplies((prev) => ({ ...prev, [thread.id]: threadData.replies || [] }));
-    } catch (err) {
-      console.error("Failed to create thread:", err);
+  const insertEmoji = (emoji: string) => {
+    const input = inputRef.current;
+    if (input) {
+      const start = input.selectionStart || 0;
+      const end = input.selectionEnd || 0;
+      const newText = messageInput.slice(0, start) + emoji + messageInput.slice(end);
+      setMessageInput(newText);
+      setTimeout(() => {
+        input.focus();
+        input.setSelectionRange(start + emoji.length, start + emoji.length);
+      }, 0);
+    } else {
+      setMessageInput((prev) => prev + emoji);
     }
+    setShowEmojiPicker(false);
   };
 
-  // Add thread reply handler
-  const handleAddThreadReply = async (threadId: string, text: string) => {
-    if (!currentUser) return;
-    try {
-      const reply = await apiPost(`/threads/${threadId}/replies`, {
-        senderId: currentUser.id,
-        text,
-      });
-      setThreadReplies((prev) => {
-        const existing = prev[threadId] || [];
-        return { ...prev, [threadId]: [...existing, reply] };
-      });
-    } catch (err) {
-      console.error("Failed to add thread reply:", err);
-    }
-  };
+  // ── File upload ──
 
-  // Scroll to bottom on new messages
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, dmMessages]);
-
-  // Parse mentions from text
-  const parseMentions = (text: string): string[] => {
-    const mentionRegex = /@(\w+)/g;
-    const matches = text.match(mentionRegex);
-    if (!matches) return [];
-    return matches.map(m => m.substring(1)); // Remove @
-  };
-
-  // Handle file upload
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
-
     const file = files[0];
     const formData = new FormData();
-    formData.append('file', file);
-
+    formData.append("file", file);
     try {
-      const res = await apiFetch('/upload', {
-        method: 'POST',
-        body: formData,
-      });
-      if (!res.ok) {
-        throw new Error('Upload failed');
-      }
+      const res = await apiFetch("/upload", { method: "POST", body: formData });
+      if (!res.ok) throw new Error("Upload failed");
       const data = await res.json();
-      const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
-      setAttachments(prev => [...prev, {
+      setAttachments((prev) => [...prev, {
         url: `${API_BASE}${data.url}`,
         name: data.name,
         type: data.mimetype || file.type,
       }]);
     } catch (err) {
-      console.error("Failed to upload file:", err);
+      console.error("Upload failed:", err);
     }
   };
 
@@ -609,106 +708,14 @@ export default function Chat() {
     if (entry.isFolder || !entry.latestVersion) return;
     const v = entry.latestVersion;
     const url = v.url.startsWith("http") ? v.url : `${API_BASE}${v.url}`;
-    setAttachments((prev) => [
-      ...prev,
-      {
-        url,
-        name: entry.name,
-        type: v.mimeType || "application/octet-stream",
-      },
-    ]);
+    setAttachments((prev) => [...prev, { url, name: entry.name, type: v.mimeType || "application/octet-stream" }]);
     setShowDrivePicker(false);
   };
 
-  // Insert emoji
-  const insertEmoji = (emoji: string) => {
-    const input = inputRef.current;
-    if (input) {
-      const start = input.selectionStart || 0;
-      const end = input.selectionEnd || 0;
-      const newText = messageInput.slice(0, start) + emoji + messageInput.slice(end);
-      setMessageInput(newText);
-      setTimeout(() => {
-        input.focus();
-        input.setSelectionRange(start + emoji.length, start + emoji.length);
-      }, 0);
-    } else {
-      setMessageInput(prev => prev + emoji);
-    }
-    setShowEmojiPicker(false);
-  };
-
-  // Typing indicator handler
-  const handleTyping = useCallback(() => {
-    if (!currentUser || (!activeChannel && !activeDm)) return;
-
-    const channelId = activeChannel || activeDm || '';
-    const socket = getSocket();
-
-    // Clear existing timeout
-    if (typingTimeoutRef.current[channelId]) {
-      clearTimeout(typingTimeoutRef.current[channelId]);
-    }
-
-    // Emit typing started
-    socket.emit('typing:start', {
-      channelId,
-      userId: currentUser.id,
-      userName: currentUser.name,
-    });
-
-    // Stop typing after 3 seconds
-    typingTimeoutRef.current[channelId] = setTimeout(() => {
-      socket.emit('typing:stop', { channelId, userId: currentUser.id });
-    }, 3000);
-  }, [activeChannel, activeDm, currentUser]);
-
-  // Handle @ mention and typing
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    setMessageInput(value);
-    handleTyping();
-
-    // Check for @ mention
-    const cursorPos = e.target.selectionStart || 0;
-    const textBeforeCursor = value.slice(0, cursorPos);
-    const lastAtIndex = textBeforeCursor.lastIndexOf('@');
-
-    if (lastAtIndex !== -1) {
-      const textAfterAt = textBeforeCursor.slice(lastAtIndex + 1);
-      if (!textAfterAt.includes(' ') && !textAfterAt.includes('\n')) {
-        setMentionQuery(textAfterAt);
-        setMentionStartPos(lastAtIndex);
-        setShowMentionPicker(true);
-        return;
-      }
-    }
-    setShowMentionPicker(false);
-  };
-
-  // Insert mention
-  const insertMention = (userName: string) => {
-    if (mentionStartPos === null) return;
-    const before = messageInput.slice(0, mentionStartPos);
-    const after = messageInput.slice(mentionStartPos + 1 + mentionQuery.length);
-    setMessageInput(before + `@${userName} ` + after);
-    setShowMentionPicker(false);
-    setMentionQuery("");
-    setMentionStartPos(null);
-    setTimeout(() => {
-      inputRef.current?.focus();
-    }, 0);
-  };
-
-  // Filter users for mention picker
-  const mentionableUsers = (Array.isArray(allUsers) ? allUsers : []).filter(u =>
-    u.id !== currentUser?.id &&
-    u.name.toLowerCase().includes(mentionQuery.toLowerCase())
-  ).slice(0, 5);
+  // ── Send message ──
 
   const sendMessage = useCallback(async () => {
     if ((!messageInput.trim() && attachments.length === 0) || !currentUser || sending) return;
-
     const mentions = parseMentions(messageInput);
     const messageText = messageInput.trim() || (attachments.length > 0 ? "📎" : "");
 
@@ -727,7 +734,6 @@ export default function Chat() {
         mentions: mentions.length > 0 ? mentions : undefined,
       };
       socket.emit("dm:send", msg);
-      // Add to local state immediately
       const localMsg: Message = {
         id: msg.id,
         text: msg.text,
@@ -745,14 +751,7 @@ export default function Chat() {
         saveDmHistory(activeDm, next);
         return next;
       });
-      // Update contact last message
-      setDmContacts((prev) =>
-        prev.map((c) =>
-          c.id === activeDm
-            ? { ...c, lastMsg: msg.text, unread: 0 }
-            : c,
-        ),
-      );
+      setDmContacts((prev) => prev.map((c) => (c.id === activeDm ? { ...c, lastMsg: msg.text, unread: 0 } : c)));
       setMessageInput("");
       setAttachments([]);
       setSending(false);
@@ -773,45 +772,43 @@ export default function Chat() {
       setMessageInput("");
       setAttachments([]);
       setReplyingTo(null);
-    } catch (err) {
-      console.error("Failed to send message:", err);
+    } catch {
     } finally {
       setSending(false);
     }
-  }, [messageInput, activeChannel, activeDm, currentUser, sending, attachments, allUsers]);
+  }, [messageInput, activeChannel, activeDm, currentUser, sending, attachments, replyingTo, saveDmHistory]);
 
-  const selectDm = useCallback((userId: string) => {
-    setActiveDm(userId);
-    setActiveChannel(null);
-    // Load history for this DM from localStorage
-    const history = loadDmHistory(userId);
-    setDmMessages(history);
-    // Reset unread counter
-    setDmContacts((prev) =>
-      prev.map((c) =>
-        c.id === userId ? { ...c, unread: 0 } : c,
-      ),
-    );
-    if (isMobile) setShowChannelList(false);
-    // Clear channel query from URL when switching to DM
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev);
-      next.delete("channel");
-      return next;
-    });
-  }, [isMobile, currentUser, setSearchParams]);
+  // ── Navigation ──
 
   const selectChannel = useCallback((channelId: string) => {
     setActiveChannel(channelId);
     setActiveDm(null);
     if (isMobile) setShowChannelList(false);
-    // Keep URL in sync so navigation from sidebar Teams works
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev);
       next.set("channel", channelId);
       return next;
     });
   }, [isMobile, setSearchParams]);
+
+  const selectDm = useCallback((userId: string) => {
+    setActiveDm(userId);
+    setActiveChannel(null);
+    
+    // Load from localStorage for instant display
+    const history = loadDmHistory(userId);
+    console.log(`Loading DM with ${userId}, found ${history.length} messages in localStorage`);
+    setDmMessages(history);
+    
+    // Mark as read
+    setDmContacts((prev) => prev.map((c) => (c.id === userId ? { ...c, unread: 0 } : c)));
+    if (isMobile) setShowChannelList(false);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete("channel");
+      return next;
+    });
+  }, [isMobile, setSearchParams, loadDmHistory]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -820,113 +817,19 @@ export default function Chat() {
         insertMention(mentionableUsers[0].name);
       } else {
         sendMessage();
-        // Stop typing when message sent
         if (currentUser && (activeChannel || activeDm)) {
           const socket = getSocket();
-          const channelId = activeChannel || activeDm || '';
-          socket.emit('typing:stop', { channelId, userId: currentUser.id });
-          if (typingTimeoutRef.current[channelId]) {
-            clearTimeout(typingTimeoutRef.current[channelId]);
-          }
+          const chId = activeChannel || activeDm || "";
+          socket.emit("typing:stop", { channelId: chId, userId: currentUser.id });
+          if (typingTimeoutRef.current[chId]) clearTimeout(typingTimeoutRef.current[chId]);
         }
       }
     } else if (e.key === "Escape") {
       setShowMentionPicker(false);
       setShowEmojiPicker(false);
-    } else if (e.key === "ArrowDown" && showMentionPicker) {
-      e.preventDefault();
-      // Could implement keyboard navigation here
     } else {
-      // User is typing
       handleTyping();
     }
-  };
-
-
-
-  const currentChannel = channels.find((c) => c.id === activeChannel);
-
-  const groupedChannels = channels.reduce<Record<string, Channel[]>>((acc, ch) => {
-    const teamName = ch.team?.name || "General";
-    if (!acc[teamName]) acc[teamName] = [];
-    acc[teamName].push(ch);
-    return acc;
-  }, {});
-
-  // Update DM contacts with real online / DND / busy status
-  const dmContactsWithStatus = dmContacts.map((contact) => {
-    const baseOnline = isUserOnline(contact.id);
-    const explicitStatus = (contact.status as string) || "";
-    const presenceStatus = (["online", "busy", "away", "offline", "dnd"] as const).includes(
-      explicitStatus as any,
-    )
-      ? (explicitStatus as any)
-      : baseOnline
-      ? "online"
-      : "offline";
-    return {
-      ...contact,
-      status: presenceStatus,
-    };
-  });
-
-  // Member lists with real-time online status
-  const safeAllUsers = Array.isArray(allUsers) ? allUsers : [];
-  const membersOnline = safeAllUsers.filter((u) => {
-    // Check both explicit status field and the onlineUserIds set
-    const status = (u.status as string) || "";
-    return (
-      status === "online" ||
-      status === "busy" ||
-      status === "away" ||
-      status === "dnd" ||
-      isUserOnline(u.id)
-    );
-  });
-  const membersOffline = safeAllUsers.filter((u) => !membersOnline.some((m) => m.id === u.id));
-  // Delete channel handler
-  const handleDeleteChannel = async () => {
-    if (!channelToDelete) return;
-
-    try {
-      await apiDelete(`/channels/${channelToDelete.id}`);
-      setChannels(prev => prev.filter(c => c.id !== channelToDelete.id));
-      if (activeChannel === channelToDelete.id) {
-        setActiveChannel(null);
-      }
-      setShowDeleteChannel(false);
-      setChannelToDelete(null);
-    } catch (err) {
-      console.error("Failed to delete channel:", err);
-    }
-  };
-
-  const getConnectionStatusText = (isOnline: boolean) => {
-    return isOnline ? "Online" : "Offline";
-  };
-
-  // Message action handlers
-  const handlePinMessage = async (msg: Message) => {
-    try {
-      await apiPatch(`/messages/${msg.id}`, { isPinned: !msg.isPinned });
-      setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, isPinned: !m.isPinned } : m));
-    } catch (err) {
-      console.error("Failed to pin message:", err);
-    }
-  };
-
-  const handleDeleteMessage = async (msg: Message) => {
-    try {
-      await apiDelete(`/messages/${msg.id}`);
-      setMessages(prev => prev.filter(m => m.id !== msg.id));
-    } catch (err) {
-      console.error("Failed to delete message:", err);
-    }
-  };
-
-  const handleReplyMessage = (msg: Message) => {
-    setReplyingTo(msg);
-    inputRef.current?.focus();
   };
 
   const handleChannelSearch = async (query: string) => {
@@ -938,14 +841,30 @@ export default function Chat() {
       const data = await apiGet<any[]>(`/messages/search?${params}`);
       setSearchResults(data);
       setShowSearchResults(true);
-    } catch (err) {
-      console.error("Search failed:", err);
-    }
+    } catch {}
   };
 
+  // ── Render ──
+
+  // Show loading state only if user is not ready
+  if (!currentUser) {
+    return (
+      <div className="h-full w-full bg-background/95 flex flex-col overflow-hidden items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+          <p className="text-sm text-muted-foreground">Loading chat...</p>
+        </div>
+      </div>
+    );
+  }
+
+  const totalChannels = channels.length;
+  const totalDms = dmContactsWithStatus.length;
+  const onlineCount = presenceOnlineCount;
+
   return (
-    <div className="h-full w-full bg-background/95 flex flex-col overflow-hidden">
-      {/* -------------------- Dialogs & Modals -------------------- */}
+    <div className="flex flex-col h-screen bg-gradient-to-br from-background via-background to-muted/20">
+      {/* Dialogs */}
       <CreateChannelDialog open={showCreateChannel} onOpenChange={setShowCreateChannel} />
       <DeleteChannelDialog
         open={showDeleteChannel}
@@ -958,699 +877,187 @@ export default function Chat() {
         onOpenChange={setShowEditChannel}
         channel={channelToEdit}
         onChannelUpdated={(updated) => {
-          setChannels(prev => prev.map(c => c.id === updated.id ? (updated as unknown as Channel) : c));
+          setChannels((prev) => prev.map((c) => (c.id === updated.id ? (updated as unknown as Channel) : c)));
         }}
       />
-      <InviteUserDialog
-        open={showInviteUser}
-        onOpenChange={setShowInviteUser}
-      />
+      <InviteUserDialog open={showInviteUser} onOpenChange={setShowInviteUser} />
 
-      <div className="flex-1 flex overflow-hidden p-3 md:p-4 gap-4">
-        {/* -------------------- Unified Sidebar (Nav + Channels) -------------------- */}
-        <aside className={cn(
-          "bg-card/40 backdrop-blur-xl border rounded-2xl flex flex-col shrink-0 transition-all duration-300 shadow-sm",
-          isMobile ? (showChannelList ? "w-full fixed inset-3 z-50" : "hidden") : "w-72"
-        )}>
-          {/* Workspace Header */}
-          <div className="p-4 border-b">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center border border-primary/20">
-                  <Hash className="w-4 h-4 text-primary" />
-                </div>
-                <h1 className="font-bold text-sm tracking-tight">Workspace</h1>
-              </div>
-              <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full" onClick={() => setShowCreateChannel(true)}>
-                <Plus className="w-4 h-4" />
-              </Button>
-            </div>
-            
-            <div className="relative">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-              <Input 
-                placeholder="Search..." 
-                className="pl-8 h-8 text-xs bg-muted/40 border-none focus-visible:ring-1 focus-visible:ring-primary/20"
-                value={channelSearchQuery}
-                onChange={(e) => setChannelSearchQuery(e.target.value)}
-              />
-            </div>
-          </div>
-
-          <ScrollArea className="flex-1 px-3 py-2">
-            <div className="space-y-6">
-              {/* Channels Section */}
-              <div className="space-y-1">
-                <div className="px-2 mb-2 flex items-center justify-between group">
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70">Channels</span>
-                </div>
-                {channels.filter(c => c.name.toLowerCase().includes(channelSearchQuery.toLowerCase())).map((ch) => {
-                  const Icon = channelIcons[ch.type] || Hash;
-                  const isActive = activeChannel === ch.id;
-                  return (
-                    <button
-                      key={ch.id}
-                      onClick={() => selectChannel(ch.id)}
-                      className={cn(
-                        "w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition-all group",
-                        isActive 
-                          ? "bg-primary text-primary-foreground shadow-md shadow-primary/20" 
-                          : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-                      )}
-                    >
-                      <Icon className={cn("w-4 h-4 shrink-0", isActive ? "opacity-100" : "opacity-50")} />
-                      <span className="flex-1 text-left truncate font-medium">{ch.name}</span>
-                      {ch._count && ch._count.messages > 0 && !isActive && (
-                        <div className="w-1.5 h-1.5 rounded-full bg-primary" />
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* Direct Messages Section */}
-              <div className="space-y-1">
-                <div className="px-2 mb-2 flex items-center justify-between group">
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70">Messages</span>
-                </div>
-                {dmContactsWithStatus.map((dm) => {
-                  const isActive = activeDm === dm.id;
-                  return (
-                    <button
-                      key={dm.id}
-                      onClick={() => selectDm(dm.id)}
-                      className={cn(
-                        "w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition-all group",
-                        isActive 
-                          ? "bg-primary text-primary-foreground shadow-md shadow-primary/20" 
-                          : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-                      )}
-                    >
-                      <div className="relative shrink-0">
-                        <Avatar className="h-6 w-6 border-2 border-background">
-                          <AvatarFallback className="text-[10px] font-bold">{dm.initials}</AvatarFallback>
-                        </Avatar>
-                        <StatusIndicator 
-                          status={dm.status as any} 
-                          className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 border-2 border-background" 
-                        />
-                      </div>
-                      <span className="flex-1 text-left truncate font-medium">{dm.name}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          </ScrollArea>
-
-          {/* User Profile Footer */}
-          <div className="p-3 mt-auto border-t bg-muted/20 rounded-b-2xl">
-            <div className="flex items-center gap-3 p-2 rounded-xl hover:bg-muted/40 transition-colors cursor-pointer group">
+      {/* Modern Header */}
+      <div className="border-b border-border/50 bg-background/95 backdrop-blur-xl supports-[backdrop-filter]:bg-background/80">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="h-20 flex items-center justify-between gap-6">
+            {/* Left: Logo & Title */}
+            <div className="flex items-center gap-4 min-w-0 flex-1">
               <div className="relative">
-                <Avatar className="h-9 w-9 border-2 border-primary/10">
-                  <AvatarFallback className="bg-primary/5 text-primary text-xs font-bold">
-                    {currentUser?.name ? getInitials(currentUser.name) : "ME"}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 rounded-full border-2 border-background" />
+                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-primary/20 via-primary/10 to-primary/5 flex items-center justify-center shadow-lg shadow-primary/5 ring-1 ring-primary/10">
+                  <MessageSquare className="w-6 h-6 text-primary" />
+                </div>
+                <div className="absolute -top-1 -right-1 w-4 h-4 bg-primary rounded-full border-2 border-background animate-pulse-soft" />
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-bold truncate leading-none mb-1">{currentUser?.name || "Guest"}</p>
-                <p className="text-[10px] text-muted-foreground truncate uppercase tracking-tighter">Connected</p>
+              <div className="min-w-0 flex-1">
+                <h1 className="text-xl font-bold text-foreground tracking-tight">Team Chat</h1>
+                <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                  แชตทีม · ช่องคุยงาน · ข้อความส่วนตัว · แนบไฟล์จาก Shared Drive
+                </p>
               </div>
-              <Settings className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+            </div>
+
+            {/* Right: Small stats */}
+            <div className="hidden sm:flex items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-background/70 px-3 py-1 text-[11px] text-muted-foreground">
+                <Hash className="w-3 h-3" />
+                <span>{totalChannels} channels</span>
+              </span>
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-background/70 px-3 py-1 text-[11px] text-muted-foreground">
+                <Users className="w-3 h-3" />
+                <span>{totalDms} direct</span>
+              </span>
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-background/70 px-3 py-1 text-[11px] text-muted-foreground">
+                <StatusIndicator status="online" className="w-2.5 h-2.5" />
+                <span>{onlineCount} online</span>
+              </span>
             </div>
           </div>
-        </aside>
-
-        {/* -------------------- Main Chat Area -------------------- */}
-        <main className="flex-1 flex flex-col bg-card/60 backdrop-blur-xl border rounded-2xl overflow-hidden shadow-sm relative">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <div className="h-12 border-b flex items-center px-4 font-semibold shadow-sm hover:bg-accent/50 cursor-pointer transition-colors shrink-0">
-                <span className="truncate flex-1">Team Connect Server</span>
-                {isMobile ? (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 -mr-2"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setShowChannelList(false);
-                    }}
-                  >
-                    <X className="w-4 h-4" />
-                  </Button>
-                ) : (
-                  <ChevronDown className="w-4 h-4 ml-2 opacity-50" />
-                )}
-              </div>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent className="w-56" align="start">
-              <DropdownMenuLabel>Server Options</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => setShowCreateChannel(true)}>
-                <Plus className="w-4 h-4 mr-2" /> Create Channel
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setShowInviteUser(true)}>
-                <Users className="w-4 h-4 mr-2" /> Invite People
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem>
-                <Settings className="w-4 h-4 mr-2" /> Server Settings
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-
-      {/* Chat Area */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <div className="flex items-center justify-between px-4 h-12 border-b shrink-0">
-          <div className="flex items-center gap-2">
-            {isMobile &&
-              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setShowChannelList(true)}><Hash className="w-4 h-4" /></Button>
-            }
-            {activeDm ? (
-              <>
-                <div className="relative">
-                  <Avatar className="h-6 w-6"><AvatarFallback className="bg-primary/10 text-primary text-[10px]">{currentDmContact?.initials}</AvatarFallback></Avatar>
-                  <StatusIndicator status={currentDmContact?.status || "offline"} className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 border-card" />
-                </div>
-                <h2 className="font-medium text-foreground">{currentDmContact?.name || "Direct Message"}</h2>
-                <Badge variant="secondary" className="text-xs">DM</Badge>
-              </>
-            ) : (
-              <>
-                <Hash className="w-4 h-4 text-muted-foreground" />
-                <h2 className="font-medium text-foreground">{currentChannel?.name || "Select a channel"}</h2>
-                {currentChannel?.team && <Badge variant="secondary" className="text-xs">{currentChannel.team.name}</Badge>}
-                {currentChannel?.description && <span className="text-xs text-muted-foreground hidden md:inline">— {currentChannel.description}</span>}
-              </>
-            )}
-          </div>
-          <div className="flex items-center gap-1">
-            <Button variant={showPinned ? "default" : "ghost"} size="icon" className="h-8 w-8 hidden md:flex" onClick={() => { setShowPinned(!showPinned); setShowMembers(false); }}><Pin className="w-4 h-4" /></Button>
-            <Button variant={showMembers ? "default" : "ghost"} size="icon" className="h-8 w-8 hidden md:flex" onClick={() => { setShowMembers(!showMembers); setShowPinned(false); }}><Users className="w-4 h-4" /></Button>
-            <Button variant={showSearchBar ? "default" : "ghost"} size="icon" className="h-8 w-8 text-muted-foreground" onClick={() => { setShowSearchBar(!showSearchBar); if (showSearchBar) { setChannelSearchQuery(""); setShowSearchResults(false); } }}><Search className="w-4 h-4" /></Button>
-          </div>
-          {/* Inline Search Bar */}
-          <AnimatePresence>
-            {showSearchBar && (
-              <motion.div
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: "auto", opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                className="border-b overflow-hidden"
-              >
-                <div className="px-4 py-2 flex items-center gap-2">
-                  <Search className="w-4 h-4 text-muted-foreground shrink-0" />
-                  <Input
-                    value={channelSearchQuery}
-                    onChange={(e) => handleChannelSearch(e.target.value)}
-                    placeholder="Search messages in this channel..."
-                    className="border-0 bg-transparent shadow-none focus-visible:ring-0 h-8"
-                    autoFocus
-                  />
-                  <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={() => { setShowSearchBar(false); setChannelSearchQuery(""); setShowSearchResults(false); }}>
-                    <X className="w-4 h-4" />
-                  </Button>
-                </div>
-                {showSearchResults && searchResults.length > 0 && (
-                  <div className="max-h-48 overflow-y-auto px-4 pb-2 space-y-1">
-                    {searchResults.map((r) => (
-                      <div key={r.id} className="p-2 rounded hover:bg-muted/50 cursor-pointer text-sm" onClick={() => { setShowSearchBar(false); setShowSearchResults(false); setChannelSearchQuery(""); }}>
-                        <span className="font-medium text-xs text-primary">{r.sender.name}</span>
-                        <span className="text-xs text-muted-foreground ml-2">{formatTime(r.createdAt)}</span>
-                        <p className="text-xs text-foreground truncate">{r.text}</p>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {showSearchResults && searchResults.length === 0 && channelSearchQuery.length >= 2 && (
-                  <div className="px-4 pb-2 text-xs text-muted-foreground">No results found</div>
-                )}
-              </motion.div>
-            )}
-          </AnimatePresence>
         </div>
+      </div>
 
-        <div className="flex-1 flex overflow-hidden">
-          {/* Messages */}
-          <div className="flex-1 flex flex-col">
-            <div className="flex-1 overflow-y-auto scrollbar-thin p-4 space-y-1 bg-card">
-              {loading ? (
-                <div className="text-sm text-muted-foreground p-4">Loading...</div>
-              ) : !currentChannel && !activeDm ? (
-                <div className="text-sm text-muted-foreground p-4">Select a channel or contact to start chatting</div>
-              ) : displayMessages.length === 0 ? (
-                <div className="text-sm text-muted-foreground p-4">{activeDm ? `Start a conversation with ${currentDmContact?.name || "this user"}` : "No messages yet. Start the conversation!"}</div>
-              ) : (
-                displayMessages.map((msg, i) => {
-                  const prev = i > 0 ? displayMessages[i - 1] : null;
-                  const showDateHeader = !prev || !isSameDay(prev.createdAt, msg.createdAt);
+      {/* Main Shell */}
+      <div className="flex-1 overflow-hidden">
+        <div className="max-w-7xl mx-auto px-2 sm:px-4 lg:px-8 py-3 sm:py-4 h-full flex gap-2 sm:gap-3">
+          {/* Sidebar */}
+          <ChatSidebar
+            channels={channels}
+            dmContacts={dmContactsWithStatus}
+            activeChannel={activeChannel}
+            activeDm={activeDm}
+            searchQuery={sidebarSearchQuery}
+            onSearchChange={setSidebarSearchQuery}
+            onSelectChannel={selectChannel}
+            onSelectDm={selectDm}
+            onCreateChannel={() => setShowCreateChannel(true)}
+            currentUser={currentUser}
+            isMobile={isMobile}
+            showChannelList={showChannelList}
+            onClose={() => setShowChannelList(false)}
+          />
 
-                  if (msg.isSystem) {
-                    return (
-                      <div key={msg.id} className="flex items-center gap-3 py-2">
-                        <Separator className="flex-1" />
-                        <span className="text-xs text-muted-foreground shrink-0">
-                          {msg.text}
-                        </span>
-                        <Separator className="flex-1" />
-                      </div>
-                    );
+          {/* Main Chat Area */}
+          <main className="flex-1 flex flex-col min-w-0">
+            <div className="flex-1 flex flex-col bg-card/60 backdrop-blur-xl border border-border/40 rounded-2xl overflow-hidden shadow-xl shadow-black/5">
+              {/* Header */}
+              <ChatHeader
+                currentChannel={currentChannel}
+                activeDm={activeDm}
+                currentDmContact={currentDmContact || null}
+                showPinned={showPinned}
+                showMembers={showMembers}
+                showSearchBar={showSearchBar}
+                searchQuery={channelSearchQuery}
+                searchResults={searchResults}
+                showSearchResults={showSearchResults}
+                onTogglePinned={() => {
+                  setShowPinned(!showPinned);
+                  setShowMembers(false);
+                }}
+                onToggleMembers={() => {
+                  setShowMembers(!showMembers);
+                  setShowPinned(false);
+                }}
+                onToggleSearch={() => {
+                  setShowSearchBar(!showSearchBar);
+                  if (showSearchBar) {
+                    setChannelSearchQuery("");
+                    setShowSearchResults(false);
                   }
+                }}
+                onSearchChange={handleChannelSearch}
+                onCloseSearch={() => {
+                  setShowSearchBar(false);
+                  setChannelSearchQuery("");
+                  setShowSearchResults(false);
+                }}
+                onSearchResultClick={() => {
+                  setShowSearchBar(false);
+                  setShowSearchResults(false);
+                  setChannelSearchQuery("");
+                }}
+                onToggleSidebar={isMobile ? () => setShowChannelList(true) : undefined}
+                isMobile={isMobile}
+                formatTime={formatTime}
+              />
 
-                  return (
-                    <div key={msg.id}>
-                      {showDateHeader && (
-                        <div className="flex items-center gap-3 my-3">
-                          <Separator className="flex-1" />
-                          <span className="text-[11px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
-                            {formatDateHeader(msg.createdAt)}
-                          </span>
-                          <Separator className="flex-1" />
-                        </div>
-                      )}
-                      <motion.div
-                        initial={{ opacity: 0, y: 8 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: Math.min(i * 0.02, 0.3), duration: 0.15 }}
-                        className="group flex gap-3 hover:bg-muted/30 -mx-2 px-2 py-1.5 rounded-lg transition-colors"
-                      >
-                        <Avatar className="h-9 w-9 mt-0.5 shrink-0">
-                          <AvatarFallback className="bg-primary/10 text-primary text-xs">
-                            {getInitials(msg.sender.name)}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-semibold text-foreground">
-                              {msg.sender.name}
-                            </span>
-                            <span className="text-xs text-muted-foreground">
-                              {formatTime(msg.createdAt)}
-                            </span>
-                            {msg.isPinned && <Pin className="w-3 h-3 text-warning" />}
-                          </div>
-                          {msg.replyTo && (
-                            <div className="flex items-center gap-1 text-xs text-primary mb-0.5 bg-primary/5 px-2 py-0.5 rounded w-fit">
-                              <Reply className="w-3 h-3" />
-                              <span className="font-medium">{msg.replyTo.sender.name}:</span>
-                              <span className="truncate max-w-[200px]">{msg.replyTo.text}</span>
-                            </div>
-                          )}
-                          {msg.text && (
-                            <p className="text-sm text-foreground whitespace-pre-line">
-                              {msg.text.split(/(@\w+)/g).map((part, idx) => {
-                                if (part.startsWith("@")) {
-                                  const userName = part.substring(1);
-                                  return (
-                                    <span
-                                      key={idx}
-                                      className="text-primary font-medium"
-                                    >
-                                      @{userName}
-                                    </span>
-                                  );
-                                }
-                                return part;
-                              })}
-                            </p>
-                          )}
-                          {msg.attachments && msg.attachments.length > 0 && (
-                            <div className="mt-2 space-y-1">
-                              {msg.attachments.map((att, idx) => (
-                                <div
-                                  key={idx}
-                                  className="flex items-center gap-2 p-2 bg-muted rounded"
-                                >
-                                  <Paperclip className="w-3 h-3 text-muted-foreground" />
-                                  <a
-                                    href={att.url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-xs text-primary hover:underline"
-                                  >
-                                    {att.name}
-                                  </a>
-                                </div>
-                              ))}
-                            </div>
-                          )}
+              {/* Content area: messages + panels */}
+              <div className="flex-1 flex overflow-hidden">
+                {/* Messages + Composer */}
+                <div className="flex-1 flex flex-col min-w-0">
+                  <MessageList
+                    messages={displayMessages}
+                    reactions={messageReactions}
+                    currentUserId={currentUser?.id}
+                    loading={loading}
+                    emptyText={
+                      activeDm
+                        ? `Start a conversation with ${currentDmContact?.name || "this user"}`
+                        : "No messages yet. Start the conversation!"
+                    }
+                    activeDm={activeDm}
+                    currentDmContactName={currentDmContact?.name}
+                    typingNames={typingNames}
+                    onReply={handleReplyMessage}
+                    onPin={handlePinMessage}
+                    onDelete={handleDeleteMessage}
+                    onReact={handleAddReaction}
+                    onThread={handleCreateThread}
+                  />
 
-                          {/* Reactions */}
-                          {messageReactions[msg.id] && messageReactions[msg.id].length > 0 && (
-                            <div className="flex flex-wrap gap-1 mt-1.5">
-                              {messageReactions[msg.id].map((reaction, idx) => {
-                                const hasUserReacted = reaction.users.some((u) => u.id === currentUser?.id);
-                                return (
-                                  <button
-                                    key={idx}
-                                    onClick={() => handleAddReaction(msg.id, reaction.emoji)}
-                                    className={cn(
-                                      "flex items-center gap-1 px-2 py-0.5 rounded-md text-xs transition-colors",
-                                      hasUserReacted
-                                        ? "bg-primary/20 text-primary border border-primary/30"
-                                        : "bg-muted hover:bg-muted/80 text-muted-foreground"
-                                    )}
-                                  >
-                                    <span>{reaction.emoji}</span>
-                                    <span className="font-medium">{reaction.count}</span>
-                                  </button>
-                                );
-                              })}
-                              <Popover>
-                                <PopoverTrigger asChild>
-                                  <button className="px-2 py-0.5 rounded-md text-xs bg-muted hover:bg-muted/80 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <Smile className="w-3 h-3 inline" />
-                                  </button>
-                                </PopoverTrigger>
-                                <PopoverContent className="w-64 p-2" align="start">
-                                  <div className="grid grid-cols-6 gap-1">
-                                    {COMMON_EMOJIS.map((emoji) => (
-                                      <button
-                                        key={emoji}
-                                        onClick={() => {
-                                          handleAddReaction(msg.id, emoji);
-                                          setShowReactionPicker(null);
-                                        }}
-                                        className="p-1.5 hover:bg-muted rounded text-lg transition-colors"
-                                      >
-                                        {emoji}
-                                      </button>
-                                    ))}
-                                  </div>
-                                </PopoverContent>
-                              </Popover>
-                            </div>
-                          )}
-
-                          {/* Thread indicator */}
-                          {(msg as any)._count?.replies > 0 && (
-                            <button
-                              onClick={() => handleCreateThread(msg.id)}
-                              className="flex items-center gap-1 mt-1 text-xs text-primary hover:underline"
-                            >
-                              <MessageSquare className="w-3 h-3" />
-                              <span>{(msg as any)._count.replies} replies</span>
-                            </button>
-                          )}
-                        </div>
-
-                        {/* Merged Message Actions */}
-                        <div className="opacity-0 group-hover:opacity-100 flex items-center gap-0.5 transition-opacity bg-card border rounded-md shadow-sm -mt-3 mr-2 p-0.5 h-fit">
-                          {/* Emoji Popover */}
-                          <Popover>
-                            <PopoverTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-foreground" title="Add Reaction">
-                                <Smile className="w-3.5 h-3.5" />
-                              </Button>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-64 p-2" align="start">
-                              <div className="grid grid-cols-6 gap-1">
-                                {COMMON_EMOJIS.map((emoji) => (
-                                  <button
-                                    key={emoji}
-                                    onClick={() => handleAddReaction(msg.id, emoji)}
-                                    className="p-1.5 hover:bg-muted rounded text-lg transition-colors"
-                                  >
-                                    {emoji}
-                                  </button>
-                                ))}
-                              </div>
-                            </PopoverContent>
-                          </Popover>
-
-                          <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-primary" title="Reply" onClick={() => handleReplyMessage(msg)}>
-                            <Reply className="w-3.5 h-3.5" />
-                          </Button>
-
-                          <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-primary" title="Thread" onClick={() => handleCreateThread(msg.id)}>
-                            <MessageSquare className="w-3.5 h-3.5" />
-                          </Button>
-
-                          <Button variant="ghost" size="icon" className={cn("h-6 w-6", msg.isPinned ? "text-warning" : "text-muted-foreground hover:text-warning")} title={msg.isPinned ? "Unpin" : "Pin"} onClick={() => handlePinMessage(msg)}>
-                            <Pin className="w-3.5 h-3.5" />
-                          </Button>
-
-                          {msg.senderId === currentUser?.id && (
-                            <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive" title="Delete" onClick={() => handleDeleteMessage(msg)}>
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </Button>
-                          )}
-                        </div>
-                      </motion.div>
-                    </div>
-                  );
-                })
-              )}
-              {/* Typing indicator */}
-              {
-                (() => {
-                  const channelId = activeChannel || activeDm || '';
-                  const typing = typingUsers[channelId];
-                  if (typing && typing.size > 0) {
-                    const names = Array.from(typing);
-                    return (
-                      <div className="px-4 py-1 text-xs text-muted-foreground italic animate-pulse">
-                        {names.length === 1 ? `${names[0]} is typing...` : `${names.length} people are typing...`}
-                      </div>
-                    );
-                  }
-                  return null;
-                })()
-              }
-              <div ref={messagesEndRef} />
-            </div >
-            <div className="p-4 border-t">
-              {/* Reply Banner */}
-              {replyingTo && (
-                <div className="mb-2 flex items-center gap-2 bg-primary/5 border-l-2 border-primary px-3 py-2 rounded-r-lg">
-                  <Reply className="w-4 h-4 text-primary shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <span className="text-xs font-medium text-primary">{replyingTo.sender.name}</span>
-                    <p className="text-xs text-muted-foreground truncate">{replyingTo.text}</p>
-                  </div>
-                  <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={() => setReplyingTo(null)}>
-                    <X className="w-3 h-3" />
-                  </Button>
-                </div>
-              )}
-              {/* Attachments preview */}
-              {attachments.length > 0 && (
-                <div className="mb-2 flex flex-wrap gap-2">
-                  {attachments.map((att, i) => (
-                    <div key={i} className="flex items-center gap-1 bg-muted px-2 py-1 rounded text-xs">
-                      <Paperclip className="w-3 h-3" />
-                      <span className="truncate max-w-[150px]">{att.name}</span>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-4 w-4"
-                        onClick={() => setAttachments(prev => prev.filter((_, idx) => idx !== i))}
-                      >
-                        <X className="w-3 h-3" />
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              <div className="relative flex items-center gap-2 bg-muted rounded-lg px-3 py-2">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 text-muted-foreground shrink-0"
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  <Plus className="w-4 h-4" />
-                </Button>
-                <div className="flex-1 relative">
-                  <Input
-                    ref={inputRef}
-                    value={messageInput}
-                    onChange={handleInputChange}
+                  <MessageComposer
+                    messageInput={messageInput}
+                    onInputChange={handleInputChange}
                     onKeyDown={handleKeyDown}
-                    placeholder={activeDm ? `Message ${currentDmContact?.name || "user"}...` : `Message #${currentChannel?.name || "channel"}...`}
-                    className="border-0 bg-transparent shadow-none focus-visible:ring-0 px-0 h-8"
+                    onSend={sendMessage}
+                    sending={sending}
                     disabled={!currentUser || (!activeChannel && !activeDm)}
+                    placeholder={
+                      activeDm
+                        ? `Message ${currentDmContact?.name || "user"}...`
+                        : `Message #${currentChannel?.name || "channel"}...`
+                    }
+                    inputRef={inputRef}
+                    attachments={attachments}
+                    onRemoveAttachment={(i) => setAttachments((prev) => prev.filter((_, idx) => idx !== i))}
+                    onFileUpload={() => fileInputRef.current?.click()}
+                    fileInputRef={fileInputRef}
+                    onFileSelect={handleFileSelect}
+                    driveTeamId={driveTeamId}
+                    onAttachFromDrive={handleAttachFromDrive}
+                    showEmojiPicker={showEmojiPicker}
+                    onToggleEmojiPicker={setShowEmojiPicker}
+                    onInsertEmoji={insertEmoji}
+                    showMentionPicker={showMentionPicker}
+                    mentionableUsers={mentionableUsers}
+                    onInsertMention={insertMention}
+                    replyingTo={replyingTo}
+                    onCancelReply={() => setReplyingTo(null)}
+                    isLoggedIn={!!currentUser}
                   />
-                  {/* Mention picker */}
-                  {showMentionPicker && mentionableUsers.length > 0 && (
-                    <div className="absolute bottom-full left-0 mb-2 w-64 bg-card border rounded-lg shadow-lg z-50 max-h-48 overflow-y-auto">
-                      {mentionableUsers.map((user) => (
-                        <button
-                          key={user.id}
-                          onClick={() => insertMention(user.name)}
-                          className="w-full flex items-center gap-2 px-3 py-2 hover:bg-muted text-left"
-                        >
-                          <Avatar className="h-6 w-6">
-                            <AvatarFallback className="bg-primary/10 text-primary text-[10px]">
-                              {user.name.split(" ").map((n: string) => n[0]).join("")}
-                            </AvatarFallback>
-                          </Avatar>
-                          <span className="text-sm">{user.name}</span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
                 </div>
-                <Popover open={showEmojiPicker} onOpenChange={setShowEmojiPicker}>
-                  <PopoverTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground shrink-0">
-                      <Smile className="w-4 h-4" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-64 p-2" align="end">
-                    <div className="grid grid-cols-6 gap-1">
-                      {COMMON_EMOJIS.map((emoji, i) => (
-                        <button
-                          key={i}
-                          onClick={() => insertEmoji(emoji)}
-                          className="p-2 hover:bg-muted rounded text-lg"
-                        >
-                          {emoji}
-                        </button>
-                      ))}
-                    </div>
-                  </PopoverContent>
-                </Popover>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  className="hidden"
-                  onChange={handleFileSelect}
+
+                {/* Panels (Pinned + Members) */}
+                <ChatPanels
+                  showPinned={showPinned}
+                  pinnedMessages={messages.filter((m) => m.isPinned)}
+                  showMembers={showMembers}
+                  membersOnline={membersOnline}
+                  membersOffline={membersOffline}
+                  isUserOnline={isUserOnline}
                 />
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 text-muted-foreground shrink-0"
-                  onClick={() => fileInputRef.current?.click()}
-                  title="Upload from computer"
-                >
-                  <Paperclip className="w-4 h-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 text-muted-foreground shrink-0"
-                  onClick={handleAttachFromDrive}
-                  disabled={!driveTeamId}
-                  title={driveTeamId ? "Attach from Shared Drive" : "Select a team channel to use Shared Drive"}
-                >
-                  <FolderIcon className="w-4 h-4" />
-                </Button>
-                <Button
-                  size="icon"
-                  className="h-8 w-8 shrink-0"
-                  onClick={sendMessage}
-                  disabled={(!messageInput.trim() && attachments.length === 0) || sending}
-                  title="ส่งข้อความไปยังช่องแชท"
-                >
-                  <Send className="w-4 h-4" />
-                </Button>
-              </div>
-              <div className="flex items-center gap-3 mt-1.5 px-1">
-                <span className="text-xs text-muted-foreground">Press <kbd className="bg-muted px-1 rounded text-[10px]">Enter</kbd> to send</span>
-                <span className="text-xs text-muted-foreground">|</span>
-                <span className="text-xs text-muted-foreground"><kbd className="bg-muted px-1 rounded text-[10px]">Shift+Enter</kbd> for new line</span>
-                {!currentUser && <span className="text-xs text-destructive ml-auto">Login required to send messages</span>}
               </div>
             </div>
-          </div >
-
-          {/* Panels with AnimatePresence */}
-          <AnimatePresence>
-            {
-              showPinned && (
-                <motion.div key="pinned" variants={slidePanel} initial="initial" animate="animate" exit="exit" className="w-64 border-l flex flex-col shrink-0">
-                  <div className="px-4 py-3 border-b"><h3 className="text-sm font-medium text-foreground">Pinned Messages</h3></div>
-                  <div className="flex-1 overflow-y-auto p-3 space-y-2">
-                    {messages.filter((m) => m.isPinned).length === 0 ? (
-                      <div className="text-xs text-muted-foreground">No pinned messages</div>
-                    ) : (
-                      messages.filter((m) => m.isPinned).map((pm, i) => (
-                        <motion.div key={pm.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }} className="p-2.5 rounded-lg border bg-muted/30">
-                          <div className="flex items-center gap-1 mb-1"><Pin className="w-3 h-3 text-warning" /><span className="text-xs font-medium text-foreground">{pm.sender.name}</span><span className="text-xs text-muted-foreground">{formatTime(pm.createdAt)}</span></div>
-                          <p className="text-xs text-foreground">{pm.text}</p>
-                        </motion.div>
-                      ))
-                    )}
-                  </div>
-                </motion.div>
-              )
-            }
-          </AnimatePresence >
-          <AnimatePresence>
-            {showMembers && (
-              <motion.div key="members" variants={slidePanel} initial="initial" animate="animate" exit="exit" className="w-64 border-l flex flex-col shrink-0">
-                <div className="px-4 py-3 border-b">
-                  <h3 className="text-sm font-medium text-foreground">Members</h3>
-                  <p className="text-[11px] text-muted-foreground mt-0.5">
-                    {membersOnline.length} online · {membersOffline.length} offline
-                  </p>
-                </div>
-                <div className="flex-1 overflow-y-auto p-3 space-y-1">
-                  <p className="text-xs font-semibold uppercase text-muted-foreground mb-2">Online</p>
-                  {membersOnline.map((m, i) => {
-                    const status =
-                      (["online", "busy", "away", "offline", "dnd"] as const).includes(
-                        (m.status as string) as any,
-                      ) && m.status
-                        ? (m.status as any)
-                        : "online";
-                    return (
-                      <motion.div
-                        key={m.id}
-                        initial={{ opacity: 0, x: 10 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: i * 0.04 }}
-                        className="flex items-center gap-2 p-2 rounded-lg hover:bg-muted/50"
-                      >
-                        <div className="relative">
-                          <Avatar className="h-7 w-7">
-                            <AvatarFallback className="bg-primary/10 text-primary text-[10px]">
-                              {m.name.split(" ").map((n: string) => n[0]).join("")}
-                            </AvatarFallback>
-                          </Avatar>
-                          <StatusIndicator
-                            status={status}
-                            className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 border-card"
-                          />
-                        </div>
-                        <span className="text-sm text-foreground">{m.name}</span>
-                      </motion.div>
-                    );
-                  })}
-                  <p className="text-xs font-semibold uppercase text-muted-foreground mb-2 mt-3">Offline</p>
-                  {membersOffline.map((m, i) => (
-                    <motion.div
-                      key={m.id}
-                      initial={{ opacity: 0, x: 10 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: 0.1 + i * 0.04 }}
-                      className="flex items-center gap-2 p-2 rounded-lg hover:bg-muted/50"
-                    >
-                      <div className="relative">
-                        <Avatar className="h-7 w-7">
-                          <AvatarFallback className="bg-primary/10 text-primary text-[10px]">
-                            {m.name.split(" ").map((n: string) => n[0]).join("")}
-                          </AvatarFallback>
-                        </Avatar>
-                        <StatusIndicator status="offline" className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 border-card" />
-                      </div>
-                      <span className="text-sm text-muted-foreground">{m.name}</span>
-                    </motion.div>
-                  ))}
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+          </main>
         </div>
       </div>
-      </main>
-      </div>
-      {/* Shared Drive picker for quick attach */}
+
+      {/* ── Shared Drive Picker Dialog ── */}
       <Dialog open={showDrivePicker} onOpenChange={setShowDrivePicker}>
         <DialogContent className="max-w-3xl h-[70vh] flex flex-col">
           <DialogHeader>
@@ -1660,6 +1067,7 @@ export default function Chat() {
             </DialogTitle>
           </DialogHeader>
           <div className="flex-1 flex flex-col gap-3 pt-1">
+            {/* Breadcrumbs */}
             <div className="flex items-center justify-between text-xs text-muted-foreground">
               <div className="flex items-center gap-1">
                 <button
@@ -1701,17 +1109,12 @@ export default function Chat() {
                 Refresh
               </button>
             </div>
+            {/* Files */}
             <ScrollArea className="flex-1 border rounded-md">
               <div className="divide-y">
-                {driveLoading && (
-                  <div className="px-4 py-4 text-xs text-muted-foreground">
-                    Loading from Shared Drive...
-                  </div>
-                )}
+                {driveLoading && <div className="px-4 py-4 text-xs text-muted-foreground">Loading...</div>}
                 {!driveLoading && driveEntries.length === 0 && (
-                  <div className="px-4 py-4 text-xs text-muted-foreground">
-                    No files in this folder yet.
-                  </div>
+                  <div className="px-4 py-4 text-xs text-muted-foreground">No files in this folder.</div>
                 )}
                 {!driveLoading &&
                   driveEntries.map((entry) => (
@@ -1733,9 +1136,7 @@ export default function Chat() {
                         />
                         <span className="truncate">{entry.name}</span>
                         {!entry.isFolder && entry.latestVersion && (
-                          <span className="text-[10px] text-muted-foreground">
-                            v{entry.latestVersion.version}
-                          </span>
+                          <span className="text-[10px] text-muted-foreground">v{entry.latestVersion.version}</span>
                         )}
                       </div>
                       {!entry.isFolder && entry.latestVersion && (

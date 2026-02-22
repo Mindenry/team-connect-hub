@@ -20,7 +20,7 @@ export default function AppLayout() {
       {/* Mobile sheet sidebar */}
       {isMobile && (
         <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
-          <SheetContent side="left" className="p-0 w-72 border-r-0">
+          <SheetContent side="left" className="p-0 w-[280px] sm:w-72 border-r-0">
             <AppSidebar onNavigate={() => setSidebarOpen(false)} />
           </SheetContent>
         </Sheet>
@@ -29,30 +29,21 @@ export default function AppLayout() {
       <div className="flex-1 flex flex-col overflow-auto">
         {/* Mobile top bar */}
         {isMobile && (
-          <div className="flex items-center gap-3 px-4 h-14 border-b bg-background sticky top-0 z-30 shrink-0">
-            <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => setSidebarOpen(true)}>
-              <Menu className="w-5 h-5" />
+          <div className="flex items-center gap-2 sm:gap-3 px-3 sm:px-4 h-12 sm:h-14 border-b bg-background sticky top-0 z-30 shrink-0">
+            <Button variant="ghost" size="icon" className="h-8 w-8 sm:h-9 sm:w-9" onClick={() => setSidebarOpen(true)}>
+              <Menu className="w-4 h-4 sm:w-5 sm:h-5" />
             </Button>
             <div className="flex-1 min-w-0">
-              <h1 className="text-sm font-bold text-foreground truncate">CollabHub</h1>
-              <p className="text-[10px] text-muted-foreground">Acme Corp</p>
+              <h1 className="text-xs sm:text-sm font-bold text-foreground truncate">CollabHub</h1>
+              <p className="text-[9px] sm:text-[10px] text-muted-foreground truncate">Acme Corp</p>
             </div>
           </div>
         )}
 
         <main className="flex-1 overflow-auto">
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={location.pathname}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: 0.2, ease: "easeOut" }}
-              className="h-full"
-            >
+          <div key={location.pathname} className="h-full">
               <Outlet />
-            </motion.div>
-          </AnimatePresence>
+            </div>
         </main>
       </div>
     </div>

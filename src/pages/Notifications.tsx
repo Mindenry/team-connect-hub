@@ -1,11 +1,10 @@
-import { useState, useEffect } from "react";
-import { motion } from "framer-motion";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Bell,
   Check,
   CheckCheck,
   Video,
-  MessageSquare,
   CheckSquare,
   Users,
   AtSign,
@@ -13,16 +12,46 @@ import {
   Settings,
   Trash2,
   BellOff,
+  Search,
+  MoreVertical,
+  ExternalLink,
+  Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Input } from "@/components/ui/input";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { auth } from "@/lib/auth";
 import { toast } from "sonner";
+import { apiGet, apiPatch, apiDelete } from "@/lib/api";
+import { getSocket } from "@/lib/websocket";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Skeleton } from "@/components/ui/skeleton";
+import { PageHero, PageShell } from "@/components/shared/PageShell";
+import { useNavigate } from "react-router-dom";
 
 interface Notification {
   id: string;
+  userId?: string;
   type: string;
   title: string;
   message: string;
@@ -30,14 +59,15 @@ interface Notification {
   createdAt: string;
   relatedId?: string;
   relatedType?: string;
+  link?: string;
 }
-
-const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
 
 const typeIcons: Record<string, React.ElementType> = {
   mention: AtSign,
   meeting: Video,
   task: CheckSquare,
+  task_assigned: CheckSquare,
+  meeting_starting: Video,
   announcement: Megaphone,
   team: Users,
   default: Bell,
@@ -47,6 +77,8 @@ const typeColors: Record<string, string> = {
   mention: "bg-primary/10 text-primary",
   meeting: "bg-success/10 text-success",
   task: "bg-warning/10 text-warning",
+  task_assigned: "bg-warning/10 text-warning",
+  meeting_starting: "bg-success/10 text-success",
   announcement: "bg-destructive/10 text-destructive",
   team: "bg-muted text-muted-foreground",
   default: "bg-muted text-muted-foreground",
@@ -54,37 +86,131 @@ const typeColors: Record<string, string> = {
 
 export default function Notifications() {
   const currentUser = auth.getUser();
+  const navigate = useNavigate();
   const [items, setItems] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [filter, setFilter] = useState<"all" | "unread" | "read">("all");
+  const [typeFilter, setTypeFilter] = useState<string>("all");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showSettings, setShowSettings] = useState(false);
+  const [notificationSettings, setNotificationSettings] = useState({
+    meetingReminders: true,
+    mentions: true,
+    taskAssignments: true,
+    channelMessages: false,
+    announcements: true,
+    soundEnabled: true,
+    desktopEnabled: true,
+  });
+  const [preferences, setPreferences] = useState<any>(null);
+  const [preferencesLoading, setPreferencesLoading] = useState(false);
+  const [grouped, setGrouped] = useState(true);
 
-  const loadNotifications = async () => {
+  // Load preferences from backend
+  useEffect(() => {
+    if (!currentUser?.id) return;
+    const loadPreferences = async () => {
+      try {
+        setPreferencesLoading(true);
+        const prefs = await apiGet<any>(`/notifications/preferences?userId=${currentUser.id}`);
+        setPreferences(prefs);
+        // Sync with local settings
+        setNotificationSettings({
+          meetingReminders: prefs.meetingStartingDelivery !== 'off',
+          mentions: prefs.mentionDelivery !== 'off',
+          taskAssignments: prefs.taskAssignedDelivery !== 'off',
+          channelMessages: prefs.messageDelivery !== 'off',
+          announcements: prefs.announcementDelivery !== 'off',
+          soundEnabled: prefs.soundEnabled ?? true,
+          desktopEnabled: prefs.desktopEnabled ?? true,
+        });
+      } catch (err) {
+        console.error('Failed to load preferences:', err);
+      } finally {
+        setPreferencesLoading(false);
+      }
+    };
+    loadPreferences();
+  }, [currentUser?.id]);
+
+  const loadNotifications = useCallback(async () => {
     if (!currentUser?.id) return;
     try {
       const [notificationsRes, countRes] = await Promise.all([
-        fetch(`${API_BASE}/notifications?userId=${currentUser.id}`).then((r) => r.json()),
-        fetch(`${API_BASE}/notifications/unread-count?userId=${currentUser.id}`).then((r) => r.json()),
+        apiGet<Notification[]>(`/notifications?userId=${currentUser.id}&grouped=${grouped}`).catch(() => []),
+        apiGet<number>(`/notifications/unread-count?userId=${currentUser.id}`).catch(() => 0),
       ]);
-      setItems(notificationsRes || []);
-      setUnreadCount(countRes || 0);
+      setItems(Array.isArray(notificationsRes) ? notificationsRes : []);
+      setUnreadCount(typeof countRes === "number" ? countRes : 0);
     } catch (err) {
       console.error("Failed to load notifications:", err);
       toast.error("Failed to load notifications");
     } finally {
       setLoading(false);
     }
-  };
+  }, [currentUser?.id, grouped]);
 
   useEffect(() => {
     loadNotifications();
     const interval = setInterval(loadNotifications, 30000); // Refresh every 30s
     return () => clearInterval(interval);
-  }, [currentUser?.id]);
+  }, [loadNotifications]);
+
+  // WebSocket for real-time notifications
+  useEffect(() => {
+    if (!currentUser?.id) return;
+    const socket = getSocket();
+
+    const playBeep = () => {
+      try {
+        const AudioCtx = (window.AudioContext || (window as any).webkitAudioContext) as any;
+        if (!AudioCtx) return;
+        const ctx = new AudioCtx();
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.type = "sine";
+        o.frequency.value = 880;
+        g.gain.value = 0.03;
+        o.connect(g);
+        g.connect(ctx.destination);
+        o.start();
+        o.stop(ctx.currentTime + 0.08);
+        setTimeout(() => ctx.close?.(), 150);
+      } catch {
+        // ignore
+      }
+    };
+
+    const handleNewNotification = (notification: Notification) => {
+      // If payload contains userId, filter; if not, fallback to refresh.
+      if (notification.userId && notification.userId !== currentUser.id) return;
+      setItems((prev) => [notification, ...prev]);
+      setUnreadCount((prev) => prev + 1);
+      if (notificationSettings.soundEnabled) playBeep();
+      if (notificationSettings.desktopEnabled && "Notification" in window) {
+        if (Notification.permission === "default") void Notification.requestPermission();
+        if (Notification.permission === "granted") {
+          try {
+            new Notification(notification.title, { body: notification.message, icon: "/favicon.ico" });
+          } catch {
+            // ignore
+          }
+        }
+      }
+    };
+
+    socket.on("notification:created", handleNewNotification);
+
+    return () => {
+      socket.off("notification:created", handleNewNotification);
+    };
+  }, [currentUser?.id, notificationSettings]);
 
   const markAllRead = async () => {
     if (!currentUser?.id) return;
     try {
-      await fetch(`${API_BASE}/notifications/read-all?userId=${currentUser.id}`, { method: "PATCH" });
+      await apiPatch(`/notifications/read-all?userId=${currentUser.id}`);
       await loadNotifications();
       toast.success("All notifications marked as read");
     } catch (err) {
@@ -96,7 +222,7 @@ export default function Notifications() {
   const markRead = async (id: string) => {
     if (!currentUser?.id) return;
     try {
-      await fetch(`${API_BASE}/notifications/${id}/read?userId=${currentUser.id}`, { method: "PATCH" });
+      await apiPatch(`/notifications/${id}/read?userId=${currentUser.id}`);
       await loadNotifications();
     } catch (err) {
       console.error("Failed to mark as read:", err);
@@ -106,12 +232,22 @@ export default function Notifications() {
   const deleteNotification = async (id: string) => {
     if (!currentUser?.id) return;
     try {
-      await fetch(`${API_BASE}/notifications/${id}?userId=${currentUser.id}`, { method: "DELETE" });
+      await apiDelete(`/notifications/${id}?userId=${currentUser.id}`);
       await loadNotifications();
       toast.success("Notification deleted");
     } catch (err) {
       console.error("Failed to delete notification:", err);
       toast.error("Failed to delete notification");
+    }
+  };
+
+  const handleNotificationClick = (notification: Notification) => {
+    if (!notification.read) {
+      markRead(notification.id);
+    }
+    if (notification.link) {
+      if (notification.link.startsWith("/")) navigate(notification.link);
+      else window.open(notification.link, "_blank");
     }
   };
 
@@ -130,148 +266,561 @@ export default function Notifications() {
     return date.toLocaleDateString();
   };
 
+  const filteredNotifications = items.filter((n) => {
+    const matchesFilter =
+      filter === "all" || (filter === "unread" && !n.read) || (filter === "read" && n.read);
+    const matchesType = typeFilter === "all" || n.type === typeFilter;
+    const matchesSearch =
+      n.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      n.message.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesFilter && matchesType && matchesSearch;
+  });
+
+  const unreadNotifications = useMemo(() => items.filter((n) => !n.read), [items]);
+  const readNotifications = useMemo(() => items.filter((n) => n.read), [items]);
+
+  // Request notification permission
+  useEffect(() => {
+    if ("Notification" in window && Notification.permission === "default") {
+      Notification.requestPermission();
+    }
+  }, []);
+
   return (
-    <div className="flex flex-col h-screen max-w-3xl mx-auto">
-      <div className="flex items-center justify-between px-6 h-14 border-b shrink-0">
-        <div className="flex items-center gap-2">
-          <h1 className="text-lg font-semibold text-foreground">Notifications</h1>
-          {unreadCount > 0 && (
-            <Badge variant="destructive" className="text-xs">{unreadCount} new</Badge>
-          )}
-        </div>
-        <div className="flex gap-2">
-          <Button variant="ghost" size="sm" onClick={markAllRead}>
-            <CheckCheck className="w-4 h-4 mr-2" />
-            Mark all read
-          </Button>
-          <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground">
-            <Settings className="w-4 h-4" />
-          </Button>
-        </div>
-      </div>
+    <PageShell>
+      <PageHero
+        title={<span className="gradient-text">Notifications</span>}
+        description="A clean inbox for mentions, tasks, meetings, and announcements."
+        meta={
+          unreadCount > 0 ? (
+            <Badge variant="destructive" className="h-5 text-[10px]">
+              {unreadCount} unread
+            </Badge>
+          ) : null
+        }
+        actions={
+          <>
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search notifications…"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="h-9 w-72 pl-9 bg-background/40"
+              />
+            </div>
+            <Button variant="outline" size="sm" onClick={markAllRead} disabled={unreadCount === 0} className="gap-2">
+              <CheckCheck className="h-4 w-4" />
+              Mark all read
+            </Button>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={() => setGrouped(!grouped)} 
+              className="gap-2"
+              title={grouped ? "Show individual notifications" : "Group related notifications"}
+            >
+              {grouped ? "Ungroup" : "Group"}
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setShowSettings(true)} className="gap-2">
+              <Settings className="h-4 w-4" />
+              Preferences
+            </Button>
+          </>
+        }
+      />
 
       {currentUser?.status === "dnd" && (
-        <div className="px-6 py-2 border-b bg-amber-50 text-amber-800 text-xs flex items-center gap-2">
-          <BellOff className="w-4 h-4" />
-          <span>
-            คุณกำลังอยู่ในโหมด <span className="font-semibold">Focus Mode / Do Not Disturb</span>{" "}
-            การแจ้งเตือนจะไม่เด้งรบกวนระหว่างที่โหมดนี้เปิดอยู่
-          </span>
+        <div className="rounded-2xl border bg-amber-50/70 dark:bg-amber-950/20 p-4 text-amber-800 dark:text-amber-200">
+          <div className="flex items-start gap-3">
+            <div className="mt-0.5 flex h-9 w-9 items-center justify-center rounded-xl bg-amber-500/10 shrink-0">
+              <BellOff className="h-4 w-4" />
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-medium">Focus Mode / Do Not Disturb</p>
+              <p className="text-xs opacity-90 mt-1">
+                Notifications won’t interrupt you while Focus mode is enabled.
+              </p>
+            </div>
+          </div>
         </div>
       )}
 
-      <div className="flex-1 overflow-y-auto">
-        <Tabs defaultValue="all" className="p-4">
-          <TabsList className="mb-4">
-            <TabsTrigger value="all">All</TabsTrigger>
-            <TabsTrigger value="mentions">Mentions</TabsTrigger>
-            <TabsTrigger value="meetings">Meetings</TabsTrigger>
-            <TabsTrigger value="tasks">Tasks</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="all" className="space-y-1">
-            {loading ? (
-              <div className="text-muted-foreground p-4">Loading...</div>
-            ) : items.length === 0 ? (
-              <div className="text-muted-foreground p-4">No notifications</div>
-            ) : (
-              items.map((n, i) => {
-                const Icon = typeIcons[n.type] || typeIcons.default;
-                return (
-                  <motion.div
-                    key={n.id}
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: i * 0.03 }}
-                    className={cn(
-                      "w-full flex items-start gap-3 p-3 rounded-lg transition-colors group",
-                      n.read ? "hover:bg-muted/50" : "bg-primary/5 hover:bg-primary/10"
-                    )}
-                  >
-                    <div className={cn("w-9 h-9 rounded-lg flex items-center justify-center shrink-0 mt-0.5", typeColors[n.type] || typeColors.default)}>
-                      <Icon className="w-4 h-4" />
-                    </div>
-                    <div className="flex-1 min-w-0" onClick={() => !n.read && markRead(n.id)}>
-                      <p className={cn("text-sm", !n.read && "font-semibold text-foreground")}>
-                        {n.title}
-                      </p>
-                      <p className="text-sm text-muted-foreground truncate">{n.message}</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">{formatTime(n.createdAt)}</p>
-                    </div>
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      {!n.read && (
-                        <div className="w-2 h-2 rounded-full bg-primary mt-2 shrink-0" />
-                      )}
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6"
-                        onClick={() => deleteNotification(n.id)}
+      <Card className="border bg-card/70 shadow-sm">
+        <CardHeader className="pb-3">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <Tabs value={filter} onValueChange={(v) => setFilter(v as any)}>
+              <TabsList className="bg-muted/40">
+                <TabsTrigger value="all">All</TabsTrigger>
+                <TabsTrigger value="unread">Unread</TabsTrigger>
+                <TabsTrigger value="read">Read</TabsTrigger>
+              </TabsList>
+            </Tabs>
+            <Select value={typeFilter} onValueChange={setTypeFilter}>
+              <SelectTrigger className="h-9 w-44 bg-background/40">
+                <SelectValue placeholder="All types" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Types</SelectItem>
+                <SelectItem value="mention">Mentions</SelectItem>
+                <SelectItem value="meeting">Meetings</SelectItem>
+                <SelectItem value="meeting_starting">Meeting starting</SelectItem>
+                <SelectItem value="task">Tasks</SelectItem>
+                <SelectItem value="task_assigned">Task assigned</SelectItem>
+                <SelectItem value="announcement">Announcements</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <div className="space-y-2">
+              {[0, 1, 2, 3].map((k) => (
+                <div key={k} className="flex items-center gap-3 rounded-xl border bg-background/40 p-3">
+                  <Skeleton className="h-10 w-10 rounded-xl" />
+                  <div className="flex-1 space-y-2">
+                    <Skeleton className="h-4 w-64" />
+                    <Skeleton className="h-3 w-80" />
+                  </div>
+                  <Skeleton className="h-8 w-8 rounded-md" />
+                </div>
+              ))}
+            </div>
+          ) : filteredNotifications.length === 0 ? (
+            <div className="rounded-xl border bg-background/40 p-6 text-center">
+              <BellOff className="h-12 w-12 mx-auto mb-3 opacity-50" />
+              <p className="text-sm text-foreground">No notifications.</p>
+              <p className="mt-1 text-xs text-muted-foreground">You’re all caught up.</p>
+            </div>
+          ) : (
+            <ScrollArea className="max-h-[70vh] pr-2">
+              <div className="space-y-2">
+                <AnimatePresence>
+                  {filteredNotifications.map((n, i) => {
+                    const Icon = typeIcons[n.type] || typeIcons.default;
+                    const isGrouped = n.type === 'grouped' && (n as any).notifications;
+                    
+                    return (
+                      <motion.div
+                        key={n.id}
+                        initial={{ opacity: 0, y: 6 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -6 }}
+                        transition={{ delay: 0.02 + i * 0.01 }}
+                        className={cn(
+                          "group flex items-start gap-3 rounded-xl border p-3 transition-colors cursor-pointer",
+                          n.read ? "bg-background/40 hover:bg-muted/30" : "bg-primary/5 hover:bg-primary/10 border-primary/20",
+                          isGrouped && "border-2 border-primary/30"
+                        )}
+                        onClick={() => handleNotificationClick(n)}
                       >
-                        <Trash2 className="w-3 h-3" />
-                      </Button>
-                    </div>
-                  </motion.div>
-                );
-              })
-            )}
-          </TabsContent>
+                        <div className={cn("mt-0.5 flex h-10 w-10 items-center justify-center rounded-xl shrink-0", typeColors[n.type] || typeColors.default)}>
+                          <Icon className="h-5 w-5" />
+                          {isGrouped && (
+                            <Badge className="absolute -top-1 -right-1 h-5 w-5 p-0 flex items-center justify-center text-[10px] bg-primary text-primary-foreground">
+                              {(n as any).count}
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className={cn("text-sm text-foreground truncate", !n.read && "font-semibold")}>
+                                {n.title}
+                                {isGrouped && (
+                                  <span className="ml-2 text-xs text-muted-foreground">
+                                    ({(n as any).count} notifications)
+                                  </span>
+                                )}
+                              </p>
+                              <p className="mt-1 text-xs text-muted-foreground line-clamp-2">{n.message}</p>
+                              {isGrouped && (n as any).notifications && (
+                                <div className="mt-2 space-y-1">
+                                  {(n as any).notifications.slice(0, 3).map((subNotif: any, idx: number) => (
+                                    <p key={idx} className="text-[11px] text-muted-foreground/80 pl-2 border-l-2 border-muted">
+                                      • {subNotif.title}
+                                    </p>
+                                  ))}
+                                  {(n as any).notifications.length > 3 && (
+                                    <p className="text-[11px] text-muted-foreground/60 pl-2">
+                                      + {(n as any).notifications.length - 3} more
+                                    </p>
+                                  )}
+                                </div>
+                              )}
+                              <div className="mt-2 flex flex-wrap items-center gap-2">
+                                <span className="text-[11px] text-muted-foreground">{formatTime(n.createdAt)}</span>
+                                <Badge variant="secondary" className="h-5 text-[10px]">{n.type.replaceAll("_", " ")}</Badge>
+                                {(n as any).priority && (
+                                  <Badge 
+                                    variant="outline" 
+                                    className={cn(
+                                      "h-5 text-[10px]",
+                                      (n as any).priority === 'urgent' && "bg-destructive/10 text-destructive border-destructive/20",
+                                      (n as any).priority === 'high' && "bg-warning/10 text-warning border-warning/20"
+                                    )}
+                                  >
+                                    {(n as any).priority}
+                                  </Badge>
+                                )}
+                                {!n.read && <Badge className="h-5 text-[10px] bg-primary/10 text-primary border border-primary/20">new</Badge>}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => e.stopPropagation()}>
+                                    <MoreVertical className="h-4 w-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  {!n.read && (
+                                    <DropdownMenuItem
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        markRead(n.id);
+                                      }}
+                                    >
+                                      <Check className="h-4 w-4 mr-2" />
+                                      Mark as read
+                                    </DropdownMenuItem>
+                                  )}
+                                  {n.link && (
+                                    <DropdownMenuItem
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (n.link.startsWith("/")) navigate(n.link);
+                                        else window.open(n.link, "_blank");
+                                      }}
+                                    >
+                                      <ExternalLink className="h-4 w-4 mr-2" />
+                                      Open
+                                    </DropdownMenuItem>
+                                  )}
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem
+                                    className="text-destructive"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      deleteNotification(n.id);
+                                    }}
+                                  >
+                                    <Trash2 className="h-4 w-4 mr-2" />
+                                    Delete
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </div>
+                          </div>
+                        </div>
+                      </motion.div>
+                    );
+                  })}
+                </AnimatePresence>
+              </div>
+            </ScrollArea>
+          )}
+        </CardContent>
+      </Card>
 
-          <TabsContent value="mentions" className="space-y-1">
-            {items.filter(n => n.type === "mention").map((n) => {
-              const Icon = typeIcons[n.type] || typeIcons.default;
-              return (
-                <div key={n.id} className="p-3 rounded-lg hover:bg-muted/50 flex items-start gap-3">
-                  <div className={cn("w-9 h-9 rounded-lg flex items-center justify-center shrink-0", typeColors[n.type] || typeColors.default)}>
-                    <Icon className="w-4 h-4" />
+      {/* Settings Dialog */}
+      <Dialog open={showSettings} onOpenChange={setShowSettings}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Notification Settings</DialogTitle>
+            <DialogDescription>
+              Configure how you receive notifications
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-3">
+              <Label className="text-base font-semibold">Delivery Mode</Label>
+              <p className="text-xs text-muted-foreground mb-3">
+                Choose how you want to receive notifications: realtime (immediate), digest (hourly/daily summary), or off
+              </p>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium">Mentions</p>
+                    <p className="text-xs text-muted-foreground">
+                      When someone @mentions you
+                    </p>
                   </div>
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-foreground">{n.title}</p>
-                    <p className="text-sm text-muted-foreground">{n.message}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">{formatTime(n.createdAt)}</p>
-                  </div>
+                  <Select
+                    value={preferences?.mentionDelivery || 'realtime'}
+                    onValueChange={(value) => {
+                      if (!currentUser?.id) return;
+                      apiPatch(`/notifications/preferences?userId=${currentUser.id}`, {
+                        mentionDelivery: value,
+                      }).then(() => {
+                        setPreferences({ ...preferences, mentionDelivery: value });
+                      });
+                    }}
+                  >
+                    <SelectTrigger className="w-36">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="realtime">Realtime</SelectItem>
+                      <SelectItem value="digest_hourly">Hourly Digest</SelectItem>
+                      <SelectItem value="digest_daily">Daily Digest</SelectItem>
+                      <SelectItem value="off">Off</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
-              );
-            })}
-          </TabsContent>
-
-          <TabsContent value="meetings" className="space-y-1">
-            {items.filter(n => n.type === "meeting").map((n) => {
-              const Icon = typeIcons[n.type] || typeIcons.default;
-              return (
-                <div key={n.id} className="p-3 rounded-lg hover:bg-muted/50 flex items-start gap-3">
-                  <div className={cn("w-9 h-9 rounded-lg flex items-center justify-center shrink-0", typeColors[n.type] || typeColors.default)}>
-                    <Icon className="w-4 h-4" />
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium">Task assignments</p>
+                    <p className="text-xs text-muted-foreground">
+                      When a task is assigned to you
+                    </p>
                   </div>
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-foreground">{n.title}</p>
-                    <p className="text-sm text-muted-foreground">{n.message}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">{formatTime(n.createdAt)}</p>
-                  </div>
+                  <Select
+                    value={preferences?.taskAssignedDelivery || 'realtime'}
+                    onValueChange={(value) => {
+                      if (!currentUser?.id) return;
+                      apiPatch(`/notifications/preferences?userId=${currentUser.id}`, {
+                        taskAssignedDelivery: value,
+                      }).then(() => {
+                        setPreferences({ ...preferences, taskAssignedDelivery: value });
+                      });
+                    }}
+                  >
+                    <SelectTrigger className="w-36">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="realtime">Realtime</SelectItem>
+                      <SelectItem value="digest_hourly">Hourly Digest</SelectItem>
+                      <SelectItem value="digest_daily">Daily Digest</SelectItem>
+                      <SelectItem value="off">Off</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
-              );
-            })}
-          </TabsContent>
-
-          <TabsContent value="tasks" className="space-y-1">
-            {items.filter(n => n.type === "task").map((n) => {
-              const Icon = typeIcons[n.type] || typeIcons.default;
-              return (
-                <div key={n.id} className="p-3 rounded-lg hover:bg-muted/50 flex items-start gap-3">
-                  <div className={cn("w-9 h-9 rounded-lg flex items-center justify-center shrink-0", typeColors[n.type] || typeColors.default)}>
-                    <Icon className="w-4 h-4" />
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium">Meeting reminders</p>
+                    <p className="text-xs text-muted-foreground">
+                      Get notified before meetings start
+                    </p>
                   </div>
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-foreground">{n.title}</p>
-                    <p className="text-sm text-muted-foreground">{n.message}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">{formatTime(n.createdAt)}</p>
-                  </div>
+                  <Select
+                    value={preferences?.meetingStartingDelivery || 'realtime'}
+                    onValueChange={(value) => {
+                      if (!currentUser?.id) return;
+                      apiPatch(`/notifications/preferences?userId=${currentUser.id}`, {
+                        meetingStartingDelivery: value,
+                      }).then(() => {
+                        setPreferences({ ...preferences, meetingStartingDelivery: value });
+                      });
+                    }}
+                  >
+                    <SelectTrigger className="w-36">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="realtime">Realtime</SelectItem>
+                      <SelectItem value="digest_hourly">Hourly Digest</SelectItem>
+                      <SelectItem value="digest_daily">Daily Digest</SelectItem>
+                      <SelectItem value="off">Off</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
-              );
-            })}
-          </TabsContent>
-        </Tabs>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium">Task updates</p>
+                    <p className="text-xs text-muted-foreground">
+                      When tasks are updated or completed
+                    </p>
+                  </div>
+                  <Select
+                    value={preferences?.taskUpdateDelivery || 'digest_hourly'}
+                    onValueChange={(value) => {
+                      if (!currentUser?.id) return;
+                      apiPatch(`/notifications/preferences?userId=${currentUser.id}`, {
+                        taskUpdateDelivery: value,
+                      }).then(() => {
+                        setPreferences({ ...preferences, taskUpdateDelivery: value });
+                      });
+                    }}
+                  >
+                    <SelectTrigger className="w-36">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="realtime">Realtime</SelectItem>
+                      <SelectItem value="digest_hourly">Hourly Digest</SelectItem>
+                      <SelectItem value="digest_daily">Daily Digest</SelectItem>
+                      <SelectItem value="off">Off</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium">Channel messages</p>
+                    <p className="text-xs text-muted-foreground">
+                      New messages in your channels
+                    </p>
+                  </div>
+                  <Select
+                    value={preferences?.messageDelivery || 'digest_hourly'}
+                    onValueChange={(value) => {
+                      if (!currentUser?.id) return;
+                      apiPatch(`/notifications/preferences?userId=${currentUser.id}`, {
+                        messageDelivery: value,
+                      }).then(() => {
+                        setPreferences({ ...preferences, messageDelivery: value });
+                      });
+                    }}
+                  >
+                    <SelectTrigger className="w-36">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="realtime">Realtime</SelectItem>
+                      <SelectItem value="digest_hourly">Hourly Digest</SelectItem>
+                      <SelectItem value="digest_daily">Daily Digest</SelectItem>
+                      <SelectItem value="off">Off</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium">Announcements</p>
+                    <p className="text-xs text-muted-foreground">
+                      Company-wide announcements
+                    </p>
+                  </div>
+                  <Select
+                    value={preferences?.announcementDelivery || 'digest_daily'}
+                    onValueChange={(value) => {
+                      if (!currentUser?.id) return;
+                      apiPatch(`/notifications/preferences?userId=${currentUser.id}`, {
+                        announcementDelivery: value,
+                      }).then(() => {
+                        setPreferences({ ...preferences, announcementDelivery: value });
+                      });
+                    }}
+                  >
+                    <SelectTrigger className="w-36">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="realtime">Realtime</SelectItem>
+                      <SelectItem value="digest_hourly">Hourly Digest</SelectItem>
+                      <SelectItem value="digest_daily">Daily Digest</SelectItem>
+                      <SelectItem value="off">Off</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+            <div className="space-y-3 pt-4 border-t">
+              <Label className="text-base font-semibold">Digest Settings</Label>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium">Daily digest time</p>
+                    <p className="text-xs text-muted-foreground">
+                      When to send daily digest summary
+                    </p>
+                  </div>
+                  <Input
+                    type="time"
+                    value={preferences?.digestTime || '18:00'}
+                    onChange={(e) => {
+                      if (!currentUser?.id) return;
+                      apiPatch(`/notifications/preferences?userId=${currentUser.id}`, {
+                        digestTime: e.target.value,
+                      }).then(() => {
+                        setPreferences({ ...preferences, digestTime: e.target.value });
+                      });
+                    }}
+                    className="w-32"
+                  />
+                </div>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium">Include read notifications</p>
+                    <p className="text-xs text-muted-foreground">
+                      Include read notifications in digest
+                    </p>
+                  </div>
+                  <Switch
+                    checked={preferences?.digestIncludeRead || false}
+                    onCheckedChange={(checked) => {
+                      if (!currentUser?.id) return;
+                      apiPatch(`/notifications/preferences?userId=${currentUser.id}`, {
+                        digestIncludeRead: checked,
+                      }).then(() => {
+                        setPreferences({ ...preferences, digestIncludeRead: checked });
+                      });
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+            <div className="space-y-3 pt-4 border-t">
+              <Label className="text-base font-semibold">Delivery Options</Label>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium">Sound notifications</p>
+                    <p className="text-xs text-muted-foreground">
+                      Play sound when receiving notifications
+                    </p>
+                  </div>
+                  <Switch
+                    checked={preferences?.soundEnabled ?? true}
+                    onCheckedChange={(checked) => {
+                      if (!currentUser?.id) return;
+                      apiPatch(`/notifications/preferences?userId=${currentUser.id}`, {
+                        soundEnabled: checked,
+                      }).then(() => {
+                        setPreferences({ ...preferences, soundEnabled: checked });
+                      });
+                    }}
+                  />
+                </div>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium">Desktop notifications</p>
+                    <p className="text-xs text-muted-foreground">
+                      Show browser desktop notifications
+                    </p>
+                  </div>
+                  <Switch
+                    checked={preferences?.desktopEnabled ?? true}
+                    onCheckedChange={(checked) => {
+                      if (!currentUser?.id) return;
+                      apiPatch(`/notifications/preferences?userId=${currentUser.id}`, {
+                        desktopEnabled: checked,
+                      }).then(() => {
+                        setPreferences({ ...preferences, desktopEnabled: checked });
+                      });
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+            <div className="pt-2">
+              <p className="text-xs text-muted-foreground mb-3">
+                Settings are saved automatically when changed. You can close this dialog anytime.
+              </p>
+              <Button
+                onClick={() => setShowSettings(false)}
+                className="w-full"
+              >
+                Close
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+      <div className="text-xs text-muted-foreground inline-flex items-center gap-2">
+        <Sparkles className="h-4 w-4 text-primary/80" />
+        Tip: Use filters to keep your inbox focused.
       </div>
-    </div>
+    </PageShell>
   );
 }

@@ -1,519 +1,375 @@
-import { useState, useEffect } from "react";
-import { motion } from "framer-motion";
-import {
-  BarChart3,
-  Video,
-  CheckSquare,
-  Users,
-  Clock,
-  TrendingUp,
-  Download,
-  Calendar,
-  AlertCircle,
-  DollarSign,
-  FileText,
-} from "lucide-react";
+import { useEffect, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { FileBarChart, TrendingUp, Users, Calendar, CheckSquare, Clock, Loader2, X, Zap, Activity, Target, BarChart3 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell } from "recharts";
+import { Progress } from "@/components/ui/progress";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { PageShell, PageHero } from "@/components/shared/PageShell";
+import { useToast } from "@/components/ui/use-toast";
 import { apiGet } from "@/lib/api";
-import { auth } from "@/lib/auth";
+import { cn } from "@/lib/utils";
 
-const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
+interface ReportData {
+  tasksCompleted?: number;
+  meetingsAttended?: number;
+  hoursWorked?: number;
+  productivityScore?: number;
+  teamMetrics?: {
+    teamName: string;
+    tasksCompleted?: number;
+    meetingsAttended?: number;
+    hoursWorked?: number;
+  }[];
+}
 
 export default function Reports() {
-  const currentUser = auth.getUser();
-  const [meetingData, setMeetingData] = useState<any[]>([]);
-  const [taskStatusData, setTaskStatusData] = useState<any[]>([]);
-  const [teamWorkload, setTeamWorkload] = useState<any[]>([]);
-  const [stats, setStats] = useState({ totalMeetings: 0, avgDuration: 0, tasksCompleted: 0, overdueTasks: 0 });
+  const { toast } = useToast();
+  const [reportData, setReportData] = useState<ReportData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [selectedTeam, setSelectedTeam] = useState<string>("");
-  const [teams, setTeams] = useState<any[]>([]);
-  const [startDate, setStartDate] = useState(
-    new Date(new Date().setDate(new Date().getDate() - 7)).toISOString().split("T")[0]
-  );
-  const [endDate, setEndDate] = useState(
-    new Date().toISOString().split("T")[0]
-  );
-  const [teamReport, setTeamReport] = useState<any>(null);
-  const [userReport, setUserReport] = useState<any>(null);
+  const [dateRange, setDateRange] = useState("month");
 
   useEffect(() => {
-    loadData();
-    loadTeams();
-  }, []);
+    loadReport();
+  }, [dateRange]);
 
-  useEffect(() => {
-    if (selectedTeam && startDate && endDate) {
-      loadTeamReport();
-    }
-    if (currentUser?.id && startDate && endDate) {
-      loadUserReport();
-    }
-  }, [selectedTeam, startDate, endDate]);
-
-  const loadTeams = async () => {
+  const loadReport = async () => {
     try {
-      const res = await apiGet<any[]>("/teams");
-      setTeams(res || []);
-    } catch (err) {
-      console.error("Failed to load teams", err);
-    }
-  };
-
-  const loadTeamReport = async () => {
-    try {
-      const res = await apiGet<any>(
-        `/reports/team-productivity?teamId=${selectedTeam}&startDate=${startDate}&endDate=${endDate}`
-      );
-      setTeamReport(res);
-    } catch (err) {
-      console.error("Failed to load team report", err);
-    }
-  };
-
-  const loadUserReport = async () => {
-    try {
-      const res = await apiGet<any>(
-        `/reports/user-activity?userId=${currentUser?.id}&startDate=${startDate}&endDate=${endDate}`
-      );
-      setUserReport(res);
-    } catch (err) {
-      console.error("Failed to load user report", err);
-    }
-  };
-
-  const loadData = async () => {
-    try {
-      const [meetings, tasks] = await Promise.all([
-        apiGet<any[]>("/meetings").catch(() => []),
-        apiGet<any[]>("/tasks").catch(() => []),
-      ]);
-
-      if (!Array.isArray(meetings) || !Array.isArray(tasks)) {
-        throw new Error("Invalid response format");
+      setLoading(true);
+      const data = await apiGet<ReportData>(`/reports?range=${dateRange}`);
+      // Handle response format: could be {success: true, data: {...}} or direct object
+      let reportData = data;
+      if (data && typeof data === 'object' && 'data' in data && !('tasksCompleted' in data)) {
+        // If response has 'data' property but not the expected fields, extract data
+        reportData = (data as any).data || data;
       }
-
-      const now = new Date();
-      const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-      const weekMeetings = meetings.filter((m: any) => new Date(m.startTime) >= weekAgo);
-
-      const days = ["Mon", "Tue", "Wed", "Thu", "Fri"];
-      const meetingByDay = days.map((day, idx) => {
-        const dayStart = new Date(weekAgo);
-        dayStart.setDate(dayStart.getDate() + idx);
-        const dayEnd = new Date(dayStart);
-        dayEnd.setDate(dayEnd.getDate() + 1);
-        const dayMeetings = weekMeetings.filter((m: any) => {
-          const mtgDate = new Date(m.startTime);
-          return mtgDate >= dayStart && mtgDate < dayEnd;
-        });
-        const totalDuration = dayMeetings.reduce((sum: number, m: any) => {
-          const start = new Date(m.startTime);
-          const end = new Date(m.endTime);
-          return sum + (end.getTime() - start.getTime()) / 60000;
-        }, 0);
-        return { day, meetings: dayMeetings.length, duration: totalDuration };
+      
+      // Check if we got empty object (which might indicate an error)
+      // If reportData is empty object {}, set to null to show empty state
+      if (reportData && typeof reportData === 'object' && Object.keys(reportData).length === 0) {
+        reportData = null;
+      }
+      
+      setReportData(reportData as ReportData);
+      
+      // If we got empty/null data, it might be due to an error (500, 429, etc.)
+      // The API gracefully returns empty objects for errors, so we don't show error toast
+      // The UI will just show empty state which is acceptable
+    } catch (error: any) {
+      console.error("Failed to load report data:", error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to load report data",
+        variant: "destructive",
       });
-
-      const taskStatusCounts = {
-        todo: tasks.filter((t: any) => t.status === "todo").length,
-        in_progress: tasks.filter((t: any) => t.status === "in_progress").length,
-        review: tasks.filter((t: any) => t.status === "review").length,
-        done: tasks.filter((t: any) => t.status === "done").length,
-      };
-
-      const allTeams = await apiGet<any[]>("/teams").catch(() => []);
-      const workload = Array.isArray(allTeams) ? await Promise.all(
-        allTeams.map(async (team: any) => {
-          const teamTasks = tasks.filter((t: any) => t.teamId === team.id);
-          const overdue = teamTasks.filter((t: any) => {
-            if (!t.dueDate) return false;
-            return new Date(t.dueDate) < now && t.status !== "done";
-          }).length;
-          return { team: team.name, tasks: teamTasks.length, overdue };
-        })
-      ) : [];
-
-      setMeetingData(meetingByDay);
-      setTaskStatusData([
-        { name: "To Do", value: taskStatusCounts.todo, color: "hsl(var(--muted-foreground))" },
-        { name: "In Progress", value: taskStatusCounts.in_progress, color: "hsl(var(--primary))" },
-        { name: "In Review", value: taskStatusCounts.review, color: "hsl(var(--warning))" },
-        { name: "Done", value: taskStatusCounts.done, color: "hsl(var(--success))" },
-      ]);
-      setTeamWorkload(workload);
-      setStats({
-        totalMeetings: weekMeetings.length,
-        avgDuration: weekMeetings.length > 0 ? Math.round(weekMeetings.reduce((sum: number, m: any) => {
-          const start = new Date(m.startTime);
-          const end = new Date(m.endTime);
-          return sum + (end.getTime() - start.getTime()) / 60000;
-        }, 0) / weekMeetings.length) : 0,
-        tasksCompleted: taskStatusCounts.done,
-        overdueTasks: tasks.filter((t: any) => {
-          if (!t.dueDate) return false;
-          return new Date(t.dueDate) < now && t.status !== "done";
-        }).length,
-      });
-    } catch (err) {
-      console.error("Failed to load reports:", err);
+      setReportData(null);
     } finally {
       setLoading(false);
     }
   };
+
+  const getDateRangeLabel = (range: string) => {
+    switch (range) {
+      case "week":
+        return "สัปดาห์ที่ผ่านมา";
+      case "month":
+        return "เดือนที่ผ่านมา";
+      case "quarter":
+        return "ไตรมาสที่ผ่านมา";
+      case "year":
+        return "ปีที่ผ่านมา";
+      default:
+        return range;
+    }
+  };
+
+  const getProductivityColor = (score: number) => {
+    if (score >= 80) return "text-green-600";
+    if (score >= 60) return "text-blue-600";
+    if (score >= 40) return "text-orange-600";
+    return "text-red-600";
+  };
+
+  const getProductivityGradient = (score: number) => {
+    if (score >= 80) return "from-green-500 to-emerald-600";
+    if (score >= 60) return "from-blue-500 to-cyan-600";
+    if (score >= 40) return "from-orange-500 to-amber-600";
+    return "from-red-500 to-rose-600";
+  };
+
   return (
-    <div className="flex flex-col h-screen">
-      <div className="flex items-center justify-between px-6 h-14 border-b shrink-0">
-        <h1 className="text-lg font-semibold text-foreground">Reports</h1>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm">
-            <Calendar className="w-4 h-4 mr-2" />
-            This Week
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={async () => {
-              try {
-                const [meetingReport, taskReport] = await Promise.all([
-                  fetch(`${API_BASE}/reports/meetings`).then((r) => r.json()),
-                  fetch(`${API_BASE}/reports/tasks`).then((r) => r.json()),
-                ]);
-
-                // Convert to CSV
-                const meetingCSV = [
-                  ["Meeting Title", "Start Time", "End Time", "Duration (min)", "Host", "Participants"],
-                  ...(meetingReport.meetings || []).map((m: any) => [
-                    m.title,
-                    m.startTime,
-                    m.endTime,
-                    m.duration,
-                    m.host,
-                    m.participants,
-                  ]),
-                ].map(row => row.join(",")).join("\n");
-
-                const blob = new Blob([meetingCSV], { type: "text/csv" });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement("a");
-                a.href = url;
-                a.download = `meeting-report-${new Date().toISOString().split("T")[0]}.csv`;
-                a.click();
-                URL.revokeObjectURL(url);
-              } catch (err) {
-                console.error("Export failed:", err);
-              }
-            }}
-          >
-            <Download className="w-4 h-4 mr-2" />
-            Export CSV
-          </Button>
-        </div>
-      </div>
-
-      <div className="flex-1 overflow-y-auto p-6 space-y-6">
-        {/* Summary Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          {[
-            { label: "Total Meetings", value: stats.totalMeetings.toString(), sub: "This week", icon: Video, trend: "" },
-            { label: "Avg Duration", value: `${stats.avgDuration}m`, sub: "Per meeting", icon: Clock, trend: "" },
-            { label: "Tasks Completed", value: stats.tasksCompleted.toString(), sub: "This week", icon: CheckSquare, trend: "" },
-            { label: "Overdue Tasks", value: stats.overdueTasks.toString(), sub: "Across teams", icon: AlertCircle, trend: "" },
-          ].map((stat, i) => (
-            <motion.div key={stat.label} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.06 }}>
-              <Card>
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <stat.icon className="w-4 h-4 text-muted-foreground" />
-                    {stat.trend && <span className="text-xs text-success font-medium">{stat.trend}</span>}
+    <TooltipProvider>
+      <div className="flex flex-col h-screen bg-gradient-to-br from-background via-background to-muted/20">
+        {/* Modern Header */}
+        <div className="border-b border-border/50 bg-background/95 backdrop-blur-xl supports-[backdrop-filter]:bg-background/80">
+          <div className="max-w-[1920px] mx-auto px-6 lg:px-8">
+            <div className="h-20 flex items-center justify-between gap-6">
+              {/* Left: Logo & Title */}
+              <div className="flex items-center gap-4 min-w-0 flex-1">
+                <div className="relative">
+                  <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-primary/20 via-primary/10 to-primary/5 flex items-center justify-center shadow-lg shadow-primary/5 ring-1 ring-primary/10">
+                    <FileBarChart className="w-6 h-6 text-primary" />
                   </div>
-                  <p className="text-2xl font-bold text-foreground">{stat.value}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">{stat.label} — {stat.sub}</p>
-                </CardContent>
-              </Card>
-            </motion.div>
-          ))}
+                  <div className="absolute -top-1 -right-1 w-4 h-4 bg-primary rounded-full border-2 border-background animate-pulse-soft" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h1 className="text-xl font-bold text-foreground tracking-tight">Reports & Analytics</h1>
+                  <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                    รายงานผลงาน · วิเคราะห์ประสิทธิภาพ · สถิติทีม · ข้อมูลเชิงลึก
+                  </p>
+                </div>
+              </div>
+
+              {/* Right: Date Range Selector */}
+              <div className="flex items-center gap-3">
+                <Select value={dateRange} onValueChange={setDateRange}>
+                  <SelectTrigger className="w-[180px] h-9 border-border/50 bg-background/50 hover:bg-background">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="week">สัปดาห์ที่ผ่านมา</SelectItem>
+                    <SelectItem value="month">เดือนที่ผ่านมา</SelectItem>
+                    <SelectItem value="quarter">ไตรมาสที่ผ่านมา</SelectItem>
+                    <SelectItem value="year">ปีที่ผ่านมา</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
         </div>
 
-        <Tabs defaultValue="meetings">
-          <TabsList>
-            <TabsTrigger value="meetings">Meeting Report</TabsTrigger>
-            <TabsTrigger value="tasks">Task Report</TabsTrigger>
-            <TabsTrigger value="team">Team Productivity</TabsTrigger>
-            <TabsTrigger value="user">My Activity</TabsTrigger>
-          </TabsList>
+        {/* Content */}
+        <div className="flex-1 overflow-hidden flex flex-col">
+          <div className="max-w-[1920px] mx-auto px-6 lg:px-8 py-6 h-full flex flex-col overflow-y-auto">
+            {loading ? (
+              <div className="h-full flex items-center justify-center">
+                <div className="flex flex-col items-center gap-3">
+                  <Loader2 className="w-8 h-8 text-primary animate-spin" />
+                  <span className="text-sm text-muted-foreground font-medium">กำลังโหลดรายงาน...</span>
+                </div>
+              </div>
+            ) : reportData ? (
+              <>
+                {/* Summary Cards */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                  <AnimatePresence mode="wait">
+                    <motion.div
+                      key={`tasks-${dateRange}`}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.3 }}
+                    >
+                      <Card className="border-border/50 bg-card/70 hover:bg-card hover:border-border/80 transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5">
+                        <CardHeader className="pb-3">
+                          <div className="flex items-center justify-between">
+                            <CardTitle className="text-sm font-medium text-muted-foreground">งานที่เสร็จแล้ว</CardTitle>
+                            <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+                              <CheckSquare className="w-5 h-5 text-primary" />
+                            </div>
+                          </div>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="text-3xl font-bold text-foreground mb-1">{reportData.tasksCompleted ?? 0}</div>
+                          <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                            <span>งาน</span>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </motion.div>
 
-          <TabsContent value="meetings" className="space-y-6 mt-4">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-sm">Meetings per Day</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {loading ? (
-                    <div className="h-[240px] flex items-center justify-center text-muted-foreground">Loading...</div>
-                  ) : (
-                    <ResponsiveContainer width="100%" height={240}>
-                      <BarChart data={meetingData}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                        <XAxis dataKey="day" tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }} />
-                        <YAxis tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }} />
-                        <Tooltip />
-                        <Bar dataKey="meetings" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  )}
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-sm">Duration (minutes)</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {loading ? (
-                    <div className="h-[240px] flex items-center justify-center text-muted-foreground">Loading...</div>
-                  ) : (
-                    <ResponsiveContainer width="100%" height={240}>
-                      <LineChart data={meetingData}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                        <XAxis dataKey="day" tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }} />
-                        <YAxis tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }} />
-                        <Tooltip />
-                        <Line type="monotone" dataKey="duration" stroke="hsl(var(--primary))" strokeWidth={2} />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-          </TabsContent>
+                    <motion.div
+                      key={`meetings-${dateRange}`}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.3, delay: 0.05 }}
+                    >
+                      <Card className="border-border/50 bg-card/70 hover:bg-card hover:border-border/80 transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5">
+                        <CardHeader className="pb-3">
+                          <div className="flex items-center justify-between">
+                            <CardTitle className="text-sm font-medium text-muted-foreground">การประชุมที่เข้าร่วม</CardTitle>
+                            <div className="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center">
+                              <Calendar className="w-5 h-5 text-blue-600" />
+                            </div>
+                          </div>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="text-3xl font-bold text-foreground mb-1">{reportData.meetingsAttended ?? 0}</div>
+                          <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                            <span>การประชุม</span>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </motion.div>
 
-          <TabsContent value="tasks" className="space-y-6 mt-4">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-sm">Task Status Distribution</CardTitle>
-                </CardHeader>
-                <CardContent className="flex items-center justify-center">
-                  {loading ? (
-                    <div className="h-[240px] flex items-center justify-center text-muted-foreground">Loading...</div>
-                  ) : (
-                    <ResponsiveContainer width="100%" height={240}>
-                      <PieChart>
-                        <Pie data={taskStatusData} cx="50%" cy="50%" innerRadius={60} outerRadius={90} dataKey="value" label={({ name, value }) => `${name}: ${value}`}>
-                          {taskStatusData.map((entry, i) => (
-                            <Cell key={i} fill={entry.color} />
-                          ))}
-                        </Pie>
-                        <Tooltip />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  )}
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-sm">Team Workload</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {loading ? (
-                    <div className="text-muted-foreground">Loading...</div>
-                  ) : teamWorkload.length === 0 ? (
-                    <div className="text-muted-foreground">No team data</div>
-                  ) : (
-                    teamWorkload.map((team) => (
-                      <div key={team.team} className="flex items-center gap-3">
-                        <span className="text-sm text-foreground w-28">{team.team}</span>
-                        <div className="flex-1 bg-muted rounded-full h-2">
-                          <div className="bg-primary h-2 rounded-full" style={{ width: `${(team.tasks / 25) * 100}%` }} />
-                        </div>
-                        <span className="text-sm text-foreground w-8 text-right">{team.tasks}</span>
-                        {team.overdue > 0 && (
-                          <Badge variant="destructive" className="text-xs">{team.overdue} overdue</Badge>
-                        )}
-                      </div>
-                    ))
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-          </TabsContent>
+                    <motion.div
+                      key={`hours-${dateRange}`}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.3, delay: 0.1 }}
+                    >
+                      <Card className="border-border/50 bg-card/70 hover:bg-card hover:border-border/80 transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5">
+                        <CardHeader className="pb-3">
+                          <div className="flex items-center justify-between">
+                            <CardTitle className="text-sm font-medium text-muted-foreground">ชั่วโมงทำงาน</CardTitle>
+                            <div className="w-10 h-10 rounded-xl bg-orange-500/10 flex items-center justify-center">
+                              <Clock className="w-5 h-5 text-orange-600" />
+                            </div>
+                          </div>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="text-3xl font-bold text-foreground mb-1">{(reportData.hoursWorked ?? 0).toFixed(1)}</div>
+                          <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                            <span>ชั่วโมง</span>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </motion.div>
 
-          <TabsContent value="team" className="space-y-6 mt-4">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-sm">Team Productivity Report</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex gap-4">
-                  <div className="flex-1">
-                    <Label>Team</Label>
-                    <Select value={selectedTeam} onValueChange={setSelectedTeam}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select a team" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {teams.map((team) => (
-                          <SelectItem key={team.id} value={team.id}>
-                            {team.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="flex-1">
-                    <Label>Start Date</Label>
-                    <Input
-                      type="date"
-                      value={startDate}
-                      onChange={(e) => setStartDate(e.target.value)}
-                    />
-                  </div>
-                  <div className="flex-1">
-                    <Label>End Date</Label>
-                    <Input
-                      type="date"
-                      value={endDate}
-                      onChange={(e) => setEndDate(e.target.value)}
-                    />
-                  </div>
+                    <motion.div
+                      key={`productivity-${dateRange}`}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.3, delay: 0.15 }}
+                    >
+                      <Card className={cn(
+                        "border-border/50 bg-card/70 hover:bg-card hover:border-border/80 transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5",
+                        "bg-gradient-to-br from-background via-background to-primary/5"
+                      )}>
+                        <CardHeader className="pb-3">
+                          <div className="flex items-center justify-between">
+                            <CardTitle className="text-sm font-medium text-muted-foreground">คะแนนประสิทธิภาพ</CardTitle>
+                            <div className={cn(
+                              "w-10 h-10 rounded-xl flex items-center justify-center",
+                              "bg-gradient-to-br",
+                              getProductivityGradient(reportData.productivityScore ?? 0)
+                            )}>
+                              <TrendingUp className="w-5 h-5 text-white" />
+                            </div>
+                          </div>
+                        </CardHeader>
+                        <CardContent>
+                          <div className={cn("text-3xl font-bold mb-2", getProductivityColor(reportData.productivityScore ?? 0))}>
+                            {Math.round(reportData.productivityScore ?? 0)}%
+                          </div>
+                          <Progress value={reportData.productivityScore ?? 0} className="h-2" />
+                          <div className="flex items-center gap-1 text-xs text-muted-foreground mt-2">
+                            <Activity className="w-3 h-3" />
+                            <span>ประสิทธิภาพ</span>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </motion.div>
+                  </AnimatePresence>
                 </div>
 
-                {teamReport && (
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-3 gap-4">
-                      <Card>
-                        <CardContent className="pt-6">
-                          <div className="text-2xl font-bold">
-                            {teamReport.summary?.tasks?.total || 0}
-                          </div>
-                          <p className="text-xs text-muted-foreground">Total Tasks</p>
-                        </CardContent>
-                      </Card>
-                      <Card>
-                        <CardContent className="pt-6">
-                          <div className="text-2xl font-bold">
-                            {teamReport.summary?.tasks?.completed || 0}
-                          </div>
-                          <p className="text-xs text-muted-foreground">Completed</p>
-                        </CardContent>
-                      </Card>
-                      <Card>
-                        <CardContent className="pt-6">
-                          <div className="text-2xl font-bold">
-                            {teamReport.summary?.meetings?.total || 0}
-                          </div>
-                          <p className="text-xs text-muted-foreground">Meetings</p>
-                        </CardContent>
-                      </Card>
-                    </div>
-
-                    {teamReport.members && teamReport.members.length > 0 && (
-                      <div>
-                        <h3 className="font-semibold mb-2">Team Members</h3>
-                        <div className="space-y-2">
-                          {teamReport.members.map((member: any) => (
-                            <Card key={member.user.id}>
-                              <CardContent className="pt-4">
-                                <div className="flex items-center justify-between">
-                                  <div>
-                                    <p className="font-medium">{member.user.name}</p>
-                                    <p className="text-sm text-muted-foreground">
-                                      {member.tasks?.completed || 0} tasks completed
-                                    </p>
-                                  </div>
-                                  <div className="text-right">
-                                    <p className="font-bold">
-                                      {member.timeTracking?.totalHours?.toFixed(1) || 0}h
-                                    </p>
-                                    <p className="text-xs text-muted-foreground">Total Time</p>
-                                  </div>
-                                </div>
-                              </CardContent>
-                            </Card>
-                          ))}
+                {/* Team Metrics */}
+                {reportData.teamMetrics && reportData.teamMetrics.length > 0 && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3, delay: 0.2 }}
+                  >
+                    <Card className="border-border/50 bg-card/70">
+                      <CardHeader>
+                        <div className="flex items-center justify-between">
+                          <CardTitle className="text-lg font-bold flex items-center gap-2">
+                            <Users className="w-5 h-5 text-primary" />
+                            สถิติทีม
+                          </CardTitle>
+                          <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20">
+                            {reportData.teamMetrics.length} ทีม
+                          </Badge>
                         </div>
-                      </div>
-                    )}
-                  </div>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-3">
+                          <AnimatePresence mode="wait">
+                            {reportData.teamMetrics.map((team, index) => (
+                              <motion.div
+                                key={team.teamName}
+                                initial={{ opacity: 0, x: -20 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                exit={{ opacity: 0, x: 20 }}
+                                transition={{ duration: 0.2, delay: index * 0.05 }}
+                              >
+                                <Card className="border-border/50 bg-muted/30 hover:bg-muted/50 transition-all duration-200">
+                                  <CardContent className="p-4">
+                                    <div className="flex items-center justify-between gap-4">
+                                      <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+                                          <Users className="w-5 h-5 text-primary" />
+                                        </div>
+                                        <div>
+                                          <h3 className="font-semibold text-foreground">{team.teamName}</h3>
+                                          <p className="text-xs text-muted-foreground mt-0.5">{getDateRangeLabel(dateRange)}</p>
+                                        </div>
+                                      </div>
+                                      <div className="flex items-center gap-6">
+                                        <Tooltip>
+                                          <TooltipTrigger asChild>
+                                            <div className="text-center">
+                                              <div className="text-xl font-bold text-foreground">{team.tasksCompleted ?? 0}</div>
+                                              <div className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
+                                                <CheckSquare className="w-3 h-3" />
+                                                งาน
+                                              </div>
+                                            </div>
+                                          </TooltipTrigger>
+                                          <TooltipContent>งานที่เสร็จแล้ว</TooltipContent>
+                                        </Tooltip>
+                                        <Tooltip>
+                                          <TooltipTrigger asChild>
+                                            <div className="text-center">
+                                              <div className="text-xl font-bold text-foreground">{team.meetingsAttended ?? 0}</div>
+                                              <div className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
+                                                <Calendar className="w-3 h-3" />
+                                                การประชุม
+                                              </div>
+                                            </div>
+                                          </TooltipTrigger>
+                                          <TooltipContent>การประชุมที่เข้าร่วม</TooltipContent>
+                                        </Tooltip>
+                                        <Tooltip>
+                                          <TooltipTrigger asChild>
+                                            <div className="text-center">
+                                              <div className="text-xl font-bold text-foreground">{(team.hoursWorked ?? 0).toFixed(1)}</div>
+                                              <div className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
+                                                <Clock className="w-3 h-3" />
+                                                ชั่วโมง
+                                              </div>
+                                            </div>
+                                          </TooltipTrigger>
+                                          <TooltipContent>ชั่วโมงทำงาน</TooltipContent>
+                                        </Tooltip>
+                                      </div>
+                                    </div>
+                                  </CardContent>
+                                </Card>
+                              </motion.div>
+                            ))}
+                          </AnimatePresence>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </motion.div>
                 )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="user" className="space-y-6 mt-4">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-sm">My Activity Report</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex gap-4">
-                  <div className="flex-1">
-                    <Label>Start Date</Label>
-                    <Input
-                      type="date"
-                      value={startDate}
-                      onChange={(e) => setStartDate(e.target.value)}
-                    />
+              </>
+            ) : (
+              <Card className="border-border/50 bg-card/70">
+                <CardContent className="flex flex-col items-center justify-center py-16">
+                  <div className="w-16 h-16 rounded-2xl bg-muted/50 flex items-center justify-center mb-4">
+                    <FileBarChart className="w-8 h-8 text-muted-foreground" />
                   </div>
-                  <div className="flex-1">
-                    <Label>End Date</Label>
-                    <Input
-                      type="date"
-                      value={endDate}
-                      onChange={(e) => setEndDate(e.target.value)}
-                    />
-                  </div>
-                </div>
-
-                {userReport && (
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-3 gap-4">
-                      <Card>
-                        <CardContent className="pt-6">
-                          <div className="text-2xl font-bold">
-                            {userReport.summary?.tasks?.completed || 0}
-                          </div>
-                          <p className="text-xs text-muted-foreground">Tasks Completed</p>
-                        </CardContent>
-                      </Card>
-                      <Card>
-                        <CardContent className="pt-6">
-                          <div className="text-2xl font-bold">
-                            {userReport.summary?.timeTracking?.totalHours?.toFixed(1) || 0}h
-                          </div>
-                          <p className="text-xs text-muted-foreground">Total Hours</p>
-                        </CardContent>
-                      </Card>
-                      <Card>
-                        <CardContent className="pt-6">
-                          <div className="text-2xl font-bold">
-                            {userReport.summary?.meetings?.attended || 0}
-                          </div>
-                          <p className="text-xs text-muted-foreground">Meetings Attended</p>
-                        </CardContent>
-                      </Card>
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
+                  <h3 className="text-lg font-semibold text-foreground mb-1">ไม่มีข้อมูลรายงาน</h3>
+                  <p className="text-sm text-muted-foreground">ยังไม่มีข้อมูลสำหรับช่วงเวลาที่เลือก</p>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        </div>
       </div>
-    </div>
+    </TooltipProvider>
   );
 }

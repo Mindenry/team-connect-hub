@@ -63,6 +63,10 @@
     /* Chat */
     --chat-hover: 220 14% 94%;
     --chat-active: 217 91% 96%;
+    --chat-bubble-own: 217 91% 96%;
+    --chat-bubble-other: 220 14% 96%;
+    --chat-composer-bg: 220 14% 94%;
+    --chat-neon: 217 91% 60%;
 
     /* Status colors */
     --online: 152 69% 39%;
@@ -75,6 +79,7 @@
     --glass-border: 0 0% 100% / 0.2;
     --gradient-start: 217 91% 50%;
     --gradient-end: 199 89% 48%;
+    --gradient-accent: 280 80% 55%;
   }
 
   .dark {
@@ -124,12 +129,15 @@
     scrollbar-width: thin;
     scrollbar-color: hsl(var(--sidebar-border)) transparent;
   }
+
   .scrollbar-thin::-webkit-scrollbar {
     width: 5px;
   }
+
   .scrollbar-thin::-webkit-scrollbar-track {
     background: transparent;
   }
+
   .scrollbar-thin::-webkit-scrollbar-thumb {
     background-color: hsl(var(--sidebar-border));
     border-radius: 3px;
@@ -156,6 +164,7 @@
   .card-hover {
     @apply transition-all duration-200;
   }
+
   .card-hover:hover {
     @apply shadow-lg -translate-y-0.5;
   }
@@ -166,5 +175,190 @@
 
   .glow-success {
     box-shadow: 0 0 12px hsl(var(--success) / 0.3);
+  }
+
+  /* ── Chat-specific utilities ── */
+  .chat-gradient-send {
+    background: linear-gradient(135deg, hsl(var(--gradient-start)), hsl(var(--gradient-end)), hsl(var(--gradient-accent)));
+    background-size: 200% 200%;
+    animation: gradient-shift 3s ease infinite;
+    color: white;
+    border: none;
+    transition: box-shadow 0.3s ease, transform 0.15s ease;
+  }
+
+  .chat-gradient-send:hover {
+    box-shadow: 0 0 18px hsl(var(--primary) / 0.4), 0 0 40px hsl(var(--primary) / 0.15);
+    transform: scale(1.05);
+  }
+
+  .chat-gradient-send:active {
+    transform: scale(0.95);
+  }
+
+  .chat-gradient-send:disabled {
+    opacity: 0.4;
+    transform: none;
+    box-shadow: none;
+  }
+
+  @keyframes gradient-shift {
+    0% {
+      background-position: 0% 50%;
+    }
+
+    50% {
+      background-position: 100% 50%;
+    }
+
+    100% {
+      background-position: 0% 50%;
+    }
+  }
+
+  .typing-dots span {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: hsl(var(--muted-foreground));
+    animation: typing-wave 1.4s infinite ease-in-out;
+  }
+
+  .typing-dots span:nth-child(2) {
+    animation-delay: 0.2s;
+  }
+
+  .typing-dots span:nth-child(3) {
+    animation-delay: 0.4s;
+  }
+
+  @keyframes typing-wave {
+
+    0%,
+    80%,
+    100% {
+      transform: translateY(0);
+      opacity: 0.4;
+    }
+
+    40% {
+      transform: translateY(-6px);
+      opacity: 1;
+    }
+  }
+
+  .sidebar-item-glow {
+    position: relative;
+    transition: all 0.2s ease;
+  }
+
+  .sidebar-item-glow::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    opacity: 0;
+    box-shadow: 0 0 12px hsl(var(--chat-neon) / 0.3);
+    transition: opacity 0.3s ease;
+    pointer-events: none;
+  }
+
+  .sidebar-item-glow:hover::before {
+    opacity: 1;
+  }
+
+  .chat-active-indicator {
+    position: relative;
+  }
+
+  .chat-active-indicator::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 4px;
+    bottom: 4px;
+    width: 3px;
+    border-radius: 0 3px 3px 0;
+    background: linear-gradient(180deg, hsl(var(--gradient-start)), hsl(var(--gradient-end)));
+  }
+
+  .scroll-to-bottom-btn {
+    animation: bounce-subtle 2s infinite;
+  }
+
+  @keyframes bounce-subtle {
+
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+
+    50% {
+      transform: translateY(-4px);
+    }
+  }
+
+  .chat-message-actions {
+    opacity: 0;
+    transform: translateY(4px);
+    transition: opacity 0.15s ease, transform 0.15s ease;
+    pointer-events: none;
+  }
+
+  .group:hover .chat-message-actions {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+  }
+
+  /* ── Responsive utilities ── */
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Touch-friendly sizes - ensure interactive elements are at least 44x44px on mobile */
+  @media (max-width: 768px) {
+    button:not(.no-touch-size),
+    a:not(.no-touch-size),
+    [role="button"]:not(.no-touch-size) {
+      min-height: 44px;
+      min-width: 44px;
+    }
+  }
+
+  /* Responsive text sizes */
+  .text-responsive {
+    font-size: clamp(0.875rem, 2vw, 1rem);
+  }
+
+  .text-responsive-lg {
+    font-size: clamp(1.125rem, 3vw, 1.5rem);
+  }
+
+  .text-responsive-xl {
+    font-size: clamp(1.5rem, 4vw, 2rem);
+  }
+
+  /* Safe area insets for mobile */
+  .safe-top {
+    padding-top: env(safe-area-inset-top);
+  }
+
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .safe-left {
+    padding-left: env(safe-area-inset-left);
+  }
+
+  .safe-right {
+    padding-right: env(safe-area-inset-right);
   }
 }

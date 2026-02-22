@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
 import {
   CheckSquare, Calendar, User, Tag, Flag, MessageSquare, Paperclip,
@@ -16,13 +16,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   AnimatedDialog as Dialog,
   AnimatedDialogContent as DialogContent,
+  AnimatedDialogDescription as DialogDescription,
   AnimatedDialogHeader as DialogHeader,
   AnimatedDialogTitle as DialogTitle,
 } from "@/components/shared/AnimatedDialog";
 import { Separator } from "@/components/ui/separator";
 import { auth } from "@/lib/auth";
-
-const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
+import { PresenceIndicator } from "@/components/tasks/PresenceIndicator";
+import { getSocket } from "@/lib/websocket";
+import { apiGet } from "@/lib/api";
 
 interface TaskDetailDialogProps {
   open: boolean;
@@ -68,51 +70,115 @@ export default function TaskDetailDialog({ open, onOpenChange, task }: TaskDetai
   const [teams, setTeams] = useState<any[]>([]);
   const [sprints, setSprints] = useState<any[]>([]);
   const [epics, setEpics] = useState<any[]>([]);
-  const currentUser = auth.getUser();
+  const [viewingUsers, setViewingUsers] = useState<Array<{ userId: string; name: string; initials?: string }>>([]);
+  
+  // Use useMemo to prevent infinite loop
+  const currentUser = useMemo(() => auth.getUser(), []);
 
   useEffect(() => {
-    if (open && task?.id) {
-      const loadTask = async () => {
-        setLoading(true);
-        try {
-          const [taskRes, usersRes, teamsRes, sprintsRes, epicsRes] = await Promise.all([
-            fetch(`${API_BASE}/tasks/${task.id}`),
-            fetch(`${API_BASE}/users`),
-            fetch(`${API_BASE}/teams`),
-            fetch(`${API_BASE}/sprints`),
-            fetch(`${API_BASE}/epics`),
-          ]);
+    // Reset all state when task changes or dialog closes
+    if (!open || !task?.id) {
+      setTaskData(null);
+      setComments([]);
+      setActivityLog([]);
+      setSubtasks([]);
+      setTimeEntries([]);
+      setAttachments([]);
+      setEditedTitle("");
+      setEditedDescription("");
+      setEditingTitle(false);
+      setEditingDescription(false);
+      setViewingUsers([]);
+      return;
+    }
 
-          if (taskRes.ok) {
-            const data = await taskRes.json();
-            setTaskData(data);
-            setComments(data.comments || []);
-            setActivityLog(data.activityLog || []);
-            setSubtasks(data.subtasks || []);
-            setTimeEntries(data.timeEntries || []);
-            setAttachments(data.attachments || []);
-            setEditedTitle(data.title || "");
-            setEditedDescription(data.description || "");
-          }
+    let cancelled = false;
 
-          const [usersData, teamsData, sprintsData, epicsData] = await Promise.all([
-            usersRes.json(),
-            teamsRes.json(),
-            sprintsRes.json(),
-            epicsRes.json(),
-          ]);
-          setUsers(usersData);
-          setTeams(teamsData);
-          setSprints(sprintsData);
-          setEpics(epicsData);
-        } catch (err) {
+    const loadTask = async () => {
+      setLoading(true);
+      // Reset state immediately when task changes
+      if (!cancelled) {
+        setTaskData(null);
+        setComments([]);
+        setActivityLog([]);
+        setSubtasks([]);
+        setTimeEntries([]);
+        setAttachments([]);
+        setEditedTitle("");
+        setEditedDescription("");
+        setEditingTitle(false);
+        setEditingDescription(false);
+      }
+      
+      try {
+        const [taskData, usersData, teamsData, sprintsData, epicsData] = await Promise.all([
+          apiGet<any>(`/tasks/${task.id}`).catch(() => null),
+          apiGet<any[]>("/users").catch(() => []),
+          apiGet<any[]>("/teams").catch(() => []),
+          apiGet<any[]>("/sprints").catch(() => []),
+          apiGet<any[]>("/epics").catch(() => []),
+        ]);
+
+        if (cancelled) return;
+
+        if (taskData) {
+          setTaskData(taskData);
+          setComments(taskData.comments || []);
+          setActivityLog(taskData.activityLog || []);
+          setSubtasks(taskData.subtasks || []);
+          setTimeEntries(taskData.timeEntries || []);
+          setAttachments(taskData.attachments || []);
+          setEditedTitle(taskData.title || "");
+          setEditedDescription(taskData.description || "");
+        }
+
+        setUsers(Array.isArray(usersData) ? usersData : []);
+        setTeams(Array.isArray(teamsData) ? teamsData : []);
+        setSprints(Array.isArray(sprintsData) ? sprintsData : []);
+        setEpics(Array.isArray(epicsData) ? epicsData : []);
+      } catch (err) {
+        if (!cancelled) {
           console.error("Failed to load task:", err);
-        } finally {
+        }
+      } finally {
+        if (!cancelled) {
           setLoading(false);
         }
-      };
-      loadTask();
+      }
+    };
+    
+    loadTask();
+
+    // Track viewing
+    const socket = getSocket();
+    const userId = currentUser?.id;
+    const userName = currentUser?.name;
+    
+    if (userId && task.id) {
+      socket.emit('task:viewing', { taskId: task.id, userId, userName: userName || 'Unknown' });
     }
+
+    const handleViewingUpdate = (data: { taskId: string; users: Array<{ userId: string; name: string }> }) => {
+      if (!cancelled && data.taskId === task.id) {
+        const mapped = data.users.map(u => ({
+          userId: u.userId,
+          name: u.name,
+          initials: u.name?.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase(),
+          isViewing: true,
+        }));
+        setViewingUsers(mapped);
+      }
+    };
+
+    socket.on('task:viewing:update', handleViewingUpdate);
+
+    return () => {
+      cancelled = true;
+      if (userId && task.id) {
+        socket.emit('task:viewing:stop', { taskId: task.id, userId });
+      }
+      socket.off('task:viewing:update', handleViewingUpdate);
+    };
   }, [open, task?.id]);
 
   const handleAddComment = async () => {
@@ -311,6 +377,15 @@ export default function TaskDetailDialog({ open, onOpenChange, task }: TaskDetai
       {open && (
         <DialogContent className="max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
           <DialogHeader className="shrink-0 pb-4 border-b">
+            <DialogDescription className="sr-only">Task details and management</DialogDescription>
+            <div className="flex items-start justify-between mb-2">
+              {viewingUsers.length > 0 && (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <span>Viewing:</span>
+                  <PresenceIndicator users={viewingUsers} maxVisible={5} />
+                </div>
+              )}
+            </div>
             <div className="flex items-start justify-between">
               {editingTitle ? (
                 <div className="flex items-center gap-2 flex-1">
@@ -366,25 +441,34 @@ export default function TaskDetailDialog({ open, onOpenChange, task }: TaskDetai
                         onChange={(e) => setEditedDescription(e.target.value)}
                         className="min-h-[120px] text-sm"
                         autoFocus
+                        onBlur={() => {
+                          // Don't auto-save on blur, let user click Save
+                        }}
                       />
                       <div className="flex gap-2">
                         <Button size="sm" onClick={handleSaveDescription}>Save</Button>
                         <Button size="sm" variant="outline" onClick={() => {
                           setEditingDescription(false);
-                          setEditedDescription(displayTask.description || "");
+                          setEditedDescription(displayTask?.description || "");
                         }}>Cancel</Button>
                       </div>
                     </div>
                   ) : (
-                    <div
-                      onClick={() => setEditingDescription(true)}
-                      className="min-h-[120px] p-4 rounded-lg bg-muted/30 cursor-pointer hover:bg-muted/50 transition-colors flex items-start gap-2 group border border-transparent hover:border-border"
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setEditingDescription(true);
+                        setEditedDescription(displayTask?.description || "");
+                      }}
+                      className="w-full min-h-[120px] p-4 rounded-lg bg-muted/30 cursor-pointer hover:bg-muted/50 transition-colors flex items-start gap-2 group border border-transparent hover:border-border text-left"
                     >
                       <p className="text-sm text-foreground flex-1 whitespace-pre-wrap">
-                        {displayTask.description || "Click to add description..."}
+                        {displayTask?.description || "Click to add description..."}
                       </p>
                       <Edit2 className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 shrink-0 mt-0.5" />
-                    </div>
+                    </button>
                   )}
                 </div>
 

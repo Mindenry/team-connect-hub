@@ -43,7 +43,34 @@ export default function Login() {
         return;
       }
 
-      const data = await res.json();
+      const response = await res.json();
+      
+      // Debug: Log response data
+      console.log('Login response:', response);
+      
+      // Handle TransformInterceptor wrapper: { success: true, data: {...}, timestamp: ... }
+      const data = response.data || response;
+      
+      // Validate response structure
+      if (!data || !data.user) {
+        console.error('Invalid response structure:', { response, data });
+        setError('Invalid response from server');
+        setLoading(false);
+        return;
+      }
+      
+      if (!data.user.id || !data.accessToken) {
+        console.error('Missing required fields:', { 
+          hasUserId: !!data.user?.id, 
+          hasAccessToken: !!data.accessToken,
+          response,
+          data 
+        });
+        setError('Invalid response format');
+        setLoading(false);
+        return;
+      }
+      
       auth.setAuth(
         {
           id: data.user.id,

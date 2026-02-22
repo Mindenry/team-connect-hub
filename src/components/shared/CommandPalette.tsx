@@ -10,7 +10,6 @@ import {
   FileText,
   Calendar,
   LayoutDashboard,
-  BarChart3,
   Bell,
   Shield,
   Settings,
@@ -40,8 +39,7 @@ const allResults: SearchResult[] = [
   { id: "p3", type: "page", title: "Chat", subtitle: "Channels & direct messages", icon: MessageSquare, url: "/chat" },
   { id: "p4", type: "page", title: "Tasks", subtitle: "Kanban board & task management", icon: CheckSquare, url: "/tasks" },
   { id: "p5", type: "page", title: "Teams", subtitle: "Team & member management", icon: Users, url: "/teams" },
-  { id: "p6", type: "page", title: "Reports", subtitle: "Meeting & task analytics", icon: BarChart3, url: "/reports" },
-  { id: "p7", type: "page", title: "Notifications", subtitle: "View all notifications", icon: Bell, url: "/notifications" },
+  { id: "p6", type: "page", title: "Notifications", subtitle: "View all notifications", icon: Bell, url: "/notifications" },
   { id: "p8", type: "page", title: "Admin", subtitle: "Users, roles & security", icon: Shield, url: "/admin" },
   { id: "p9", type: "page", title: "Settings", subtitle: "Profile, devices & privacy", icon: Settings, url: "/settings" },
   // Meetings

@@ -17,13 +17,13 @@ import {
   verticalListSortingStrategy,
   useSortable,
   arrayMove,
-  rectSortingStrategy,
 } from "@dnd-kit/sortable";
 import {
-  Plus, Filter, Search, MoreHorizontal, Calendar, CheckSquare,
+  Plus, Filter, Search, Calendar, CheckSquare,
   ArrowUp, ArrowRight, ArrowDown, LayoutGrid, List, GripVertical,
-  BarChart3, Clock, Users, Target, Zap, TrendingUp, FileText,
-  ChevronDown, ChevronUp, X, Tag, Flag, Rocket, FolderKanban,
+  BarChart3, Clock, Users, Target, Zap, FileText,
+  X, Tag, Flag, Rocket, FolderKanban, Activity, SidebarOpen, SidebarClose,
+  ChevronRight, Sparkles, Layers,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -49,10 +49,13 @@ import {
 } from "@/components/ui/select";
 import CreateTaskDialog from "@/components/dialogs/CreateTaskDialog";
 import TaskDetailDialog from "@/components/dialogs/TaskDetailDialog";
+import { PresenceIndicator } from "@/components/tasks/PresenceIndicator";
+import { TeamActivityFeed } from "@/components/tasks/TeamActivityFeed";
+import { TeamWorkloadView } from "@/components/tasks/TeamWorkloadView";
 import { getSocket } from "@/lib/websocket";
 import { apiGet, apiPatch } from "@/lib/api";
 import { auth } from "@/lib/auth";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
 
@@ -109,6 +112,13 @@ const priorityIcons: Record<string, { icon: React.ElementType; color: string; la
   low: { icon: ArrowDown, color: "text-green-600", label: "Low" },
 };
 
+const columnConfig = [
+  { id: "todo", title: "To Do", color: "from-slate-500/10 to-slate-500/5", accent: "border-slate-500/20" },
+  { id: "in_progress", title: "In Progress", color: "from-blue-500/10 to-blue-500/5", accent: "border-blue-500/20" },
+  { id: "review", title: "In Review", color: "from-amber-500/10 to-amber-500/5", accent: "border-amber-500/20" },
+  { id: "done", title: "Done", color: "from-emerald-500/10 to-emerald-500/5", accent: "border-emerald-500/20" },
+];
+
 function SortableTaskCard({
   task,
   onSelect,
@@ -137,25 +147,29 @@ function SortableTaskCard({
   const isOverdue = task.dueDate && new Date(task.dueDate) < new Date() && task.status !== "done";
 
   return (
-    <div
+    <motion.div
       ref={setNodeRef}
       style={style}
-      className={cn(
-        "touch-none",
-        isDragging && "opacity-40 z-50"
-      )}
+      initial={{ opacity: 1, y: 0 }}
+      animate={{ opacity: isDragging ? 0.5 : 1, y: 0 }}
+      exit={{ opacity: 0, scale: 0.95 }}
+      transition={{ duration: 0.1 }}
+      className={cn("touch-none", isDragging && "z-50")}
     >
       <Card
         {...attributes}
         {...listeners}
         className={cn(
-          "cursor-grab active:cursor-grabbing hover:shadow-lg transition-all group border-l-4",
-          isDragging && "shadow-xl ring-2 ring-primary/30",
-          task.priority === "urgent" && "border-l-red-500",
-          task.priority === "high" && "border-l-orange-500",
-          task.priority === "medium" && "border-l-yellow-500",
-          task.priority === "low" && "border-l-green-500",
-          isOverdue && "border-l-red-600 bg-red-50/50 dark:bg-red-950/20"
+          "group cursor-grab active:cursor-grabbing transition-all duration-200",
+          "bg-card/80 backdrop-blur-sm border border-border/50",
+          "hover:border-border hover:shadow-lg hover:shadow-black/5",
+          "hover:-translate-y-0.5",
+          isDragging && "shadow-2xl shadow-black/10 ring-2 ring-primary/20 rotate-1",
+          task.priority === "urgent" && "border-l-2 border-l-red-500/50",
+          task.priority === "high" && "border-l-2 border-l-orange-500/50",
+          task.priority === "medium" && "border-l-2 border-l-yellow-500/50",
+          task.priority === "low" && "border-l-2 border-l-green-500/50",
+          isOverdue && "bg-red-50/30 dark:bg-red-950/10 border-red-500/30"
         )}
         onClick={(e) => {
           if (!isDragging) {
@@ -163,16 +177,26 @@ function SortableTaskCard({
           }
         }}
       >
-        <CardContent className="p-3.5">
-          <div className="flex items-start justify-between mb-2 gap-2">
-            <div className="flex items-center gap-1.5 flex-1 min-w-0">
-              <GripVertical className="w-3.5 h-3.5 shrink-0 text-muted-foreground/50" />
-              <h4 className="text-sm font-semibold text-foreground leading-tight line-clamp-2">{task.title}</h4>
+        <CardContent className="p-4 space-y-3">
+          {/* Header */}
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex items-start gap-2 flex-1 min-w-0">
+              <GripVertical className="w-4 h-4 shrink-0 text-muted-foreground/40 mt-0.5 group-hover:text-muted-foreground transition-colors" />
+              <div className="flex-1 min-w-0">
+                <h4 className="text-sm font-semibold text-foreground leading-snug line-clamp-2 group-hover:text-primary transition-colors">
+                  {task.title}
+                </h4>
+                {task.description && (
+                  <p className="text-xs text-muted-foreground mt-1.5 line-clamp-2 leading-relaxed">
+                    {task.description}
+                  </p>
+                )}
+              </div>
             </div>
-            <div className="flex items-center gap-1 shrink-0">
+            <div className="flex items-center gap-1.5 shrink-0">
               {task.epic && (
                 <div
-                  className="w-2 h-2 rounded-full"
+                  className="w-2 h-2 rounded-full ring-2 ring-background"
                   style={{ backgroundColor: task.epic.color || "#6366f1" }}
                   title={task.epic.name}
                 />
@@ -181,58 +205,76 @@ function SortableTaskCard({
             </div>
           </div>
 
-          {task.description && (
-            <p className="text-xs text-muted-foreground line-clamp-2 mb-2">{task.description}</p>
-          )}
-
-          <div className="flex flex-wrap gap-1 mb-2">
-            {task.tags.slice(0, 3).map((tag) => (
-              <Badge key={tag} variant="secondary" className="text-[10px] px-1.5 py-0 font-normal">{tag}</Badge>
-            ))}
-            {task.tags.length > 3 && (
-              <Badge variant="outline" className="text-[10px] px-1.5 py-0">+{task.tags.length - 3}</Badge>
-            )}
-          </div>
-
-          {totalSubtasks > 0 && (
-            <div className="flex items-center gap-1.5 mb-2 text-xs text-muted-foreground">
-              <CheckSquare className="w-3 h-3" />
-              <span>{completedSubtasks}/{totalSubtasks}</span>
+          {/* Tags */}
+          {task.tags.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {task.tags.slice(0, 3).map((tag) => (
+                <Badge 
+                  key={tag} 
+                  variant="secondary" 
+                  className="text-[10px] px-2 py-0.5 font-normal bg-muted/50 text-muted-foreground border-0"
+                >
+                  {tag}
+                </Badge>
+              ))}
+              {task.tags.length > 3 && (
+                <Badge variant="outline" className="text-[10px] px-2 py-0.5 border-muted-foreground/20">
+                  +{task.tags.length - 3}
+                </Badge>
+              )}
             </div>
           )}
 
-          <div className="flex items-center justify-between">
+          {/* Subtasks Progress */}
+          {totalSubtasks > 0 && (
+            <div className="flex items-center gap-2">
+              <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+                <motion.div
+                  className="h-full bg-primary rounded-full"
+                  initial={{ width: 0 }}
+                  animate={{ width: `${(completedSubtasks / totalSubtasks) * 100}%` }}
+                  transition={{ duration: 0.3 }}
+                />
+              </div>
+              <span className="text-[10px] text-muted-foreground font-medium tabular-nums">
+                {completedSubtasks}/{totalSubtasks}
+              </span>
+            </div>
+          )}
+
+          {/* Footer */}
+          <div className="flex items-center justify-between pt-1 border-t border-border/50">
             <div className="flex items-center gap-2">
               {task.assignee ? (
-                <Avatar className="h-6 w-6 border border-border">
-                  <AvatarFallback className="bg-primary/10 text-primary text-[9px] font-semibold">
+                <Avatar className="h-6 w-6 border border-border/50 ring-2 ring-background">
+                  <AvatarFallback className="bg-muted text-muted-foreground text-[10px] font-semibold">
                     {task.assignee.initials || task.assignee.name?.charAt(0) || "?"}
                   </AvatarFallback>
                 </Avatar>
               ) : (
-                <div className="h-6 w-6 rounded-full border-2 border-dashed border-muted-foreground/30" />
+                <div className="h-6 w-6 rounded-full border-2 border-dashed border-muted-foreground/20 flex items-center justify-center">
+                  <Users className="w-3 h-3 text-muted-foreground/30" />
+                </div>
               )}
               {task.storyPoints && (
-                <Badge variant="outline" className="text-[9px] px-1.5 py-0 font-mono">
+                <Badge variant="outline" className="text-[9px] px-1.5 py-0 font-mono border-muted-foreground/20">
                   {task.storyPoints}SP
                 </Badge>
               )}
             </div>
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              {task.dueDate && (
-                <div className={cn(
-                  "flex items-center gap-1",
-                  isOverdue && "text-red-600 font-semibold"
-                )}>
-                  <Calendar className="w-3 h-3" />
-                  <span>{new Date(task.dueDate).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</span>
-                </div>
-              )}
-            </div>
+            {task.dueDate && (
+              <div className={cn(
+                "flex items-center gap-1 text-[10px] font-medium",
+                isOverdue ? "text-red-600 dark:text-red-400" : "text-muted-foreground"
+              )}>
+                <Calendar className="w-3 h-3" />
+                <span>{new Date(task.dueDate).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</span>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
-    </div>
+    </motion.div>
   );
 }
 
@@ -247,54 +289,84 @@ function DroppableColumn({
 }) {
   const taskIds = column.tasks.map((t) => t.id);
   const totalStoryPoints = column.tasks.reduce((sum, t) => sum + (t.storyPoints || 0), 0);
+  const colConfig = columnConfig.find(c => c.id === column.id) || columnConfig[0];
   
   const { setNodeRef, isOver } = useDroppable({
     id: column.id,
   });
 
   return (
-    <div className="w-80 flex flex-col shrink-0">
-      <div className="flex items-center justify-between mb-4 p-3 bg-muted/30 rounded-lg border">
-        <div className="flex items-center gap-2 flex-1">
-          <div className={cn("w-3 h-3 rounded-full", column.color)} />
-          <h3 className="text-sm font-bold text-foreground">{column.title}</h3>
-          <Badge variant="secondary" className="text-xs font-semibold px-1.5 py-0">
-            {column.tasks.length}
-          </Badge>
-        </div>
-        {totalStoryPoints > 0 && (
-          <Badge variant="outline" className="text-[10px] font-mono">
-            {totalStoryPoints}SP
-          </Badge>
+    <div className="w-full sm:w-80 flex flex-col shrink-0">
+      {/* Column Header */}
+      <motion.div
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className={cn(
+          "mb-4 p-4 rounded-xl border bg-gradient-to-br",
+          colConfig.color,
+          colConfig.accent,
+          "backdrop-blur-sm shadow-sm",
+          isOver && "ring-2 ring-primary/30 ring-offset-2 ring-offset-background"
         )}
+      >
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2.5">
+            <div className={cn(
+              "w-1.5 h-1.5 rounded-full",
+              column.id === "todo" && "bg-slate-500",
+              column.id === "in_progress" && "bg-blue-500",
+              column.id === "review" && "bg-amber-500",
+              column.id === "done" && "bg-emerald-500",
+            )} />
+            <h3 className="text-sm font-bold text-foreground tracking-tight">{column.title}</h3>
+            <Badge variant="secondary" className="text-[10px] font-semibold px-1.5 py-0 bg-background/50 border-0">
+              {column.tasks.length}
+            </Badge>
+          </div>
+          {totalStoryPoints > 0 && (
+            <Badge variant="outline" className="text-[9px] font-mono border-muted-foreground/20">
+              {totalStoryPoints}SP
+            </Badge>
+          )}
+        </div>
         <Button
           variant="ghost"
-          size="icon"
-          className="h-7 w-7 text-muted-foreground hover:text-foreground"
+          size="sm"
+          className="h-7 w-full text-xs text-muted-foreground hover:text-foreground hover:bg-background/50"
           onClick={onAddTask}
         >
-          <Plus className="w-4 h-4" />
+          <Plus className="w-3.5 h-3.5 mr-1.5" />
+          Add task
         </Button>
-      </div>
+      </motion.div>
+
+      {/* Column Content */}
       <div
         ref={setNodeRef}
         className={cn(
-          "flex-1 rounded-lg p-2 bg-muted/10 transition-colors",
-          isOver && "bg-primary/5 ring-2 ring-primary/20"
+          "flex-1 rounded-xl p-3 bg-muted/20 backdrop-blur-sm border border-border/30 transition-all duration-200",
+          isOver && "bg-primary/5 border-primary/30 ring-2 ring-primary/20"
         )}
       >
         <SortableContext items={taskIds} strategy={verticalListSortingStrategy}>
-          <div className="space-y-3 min-h-[200px]">
-            {column.tasks.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-32 text-center p-4 border-2 border-dashed border-muted-foreground/20 rounded-lg">
-                <FolderKanban className="w-8 h-8 text-muted-foreground/30 mb-2" />
-                <p className="text-xs text-muted-foreground">Drop tasks here</p>
-              </div>
-            ) : (
-              column.tasks.map((task, index) => (
-                <SortableTaskCard key={task.id} task={task} onSelect={onSelectTask} />
-              ))
-            )}
+          <div className="space-y-3 min-h-[400px]">
+            <AnimatePresence>
+              {column.tasks.length === 0 ? (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="flex flex-col items-center justify-center h-64 text-center p-6 border-2 border-dashed border-border/30 rounded-xl bg-background/30"
+                >
+                  <FolderKanban className="w-10 h-10 text-muted-foreground/20 mb-3" />
+                  <p className="text-xs text-muted-foreground font-medium">Drop tasks here</p>
+                </motion.div>
+              ) : (
+                column.tasks.map((task) => (
+                  <SortableTaskCard key={task.id} task={task} onSelect={onSelectTask} />
+                ))
+              )}
+            </AnimatePresence>
           </div>
         </SortableContext>
       </div>
@@ -307,17 +379,12 @@ function TaskDragOverlay({ task }: { task: Task }) {
   const priorityColor = priorityIcons[task.priority]?.color || "text-muted-foreground";
 
   return (
-    <Card className="w-80 shadow-2xl ring-2 ring-primary/20 rotate-2 cursor-grabbing border-l-4 border-l-primary">
-      <CardContent className="p-3.5">
-        <div className="flex items-start gap-1.5 mb-2">
-          <GripVertical className="w-3.5 h-3.5 text-muted-foreground shrink-0 mt-0.5" />
-          <h4 className="text-sm font-semibold text-foreground leading-tight">{task.title}</h4>
-          <PriorityIcon className={cn("w-4 h-4 shrink-0 ml-auto", priorityColor)} />
-        </div>
-        <div className="flex flex-wrap gap-1 mb-2">
-          {task.tags.slice(0, 3).map((tag) => (
-            <Badge key={tag} variant="secondary" className="text-[10px] px-1.5 py-0">{tag}</Badge>
-          ))}
+    <Card className="w-80 shadow-2xl ring-2 ring-primary/30 rotate-2 cursor-grabbing border-l-4 border-l-primary bg-card/95 backdrop-blur-md">
+      <CardContent className="p-4">
+        <div className="flex items-start gap-2 mb-2">
+          <GripVertical className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5" />
+          <h4 className="text-sm font-semibold text-foreground leading-tight flex-1">{task.title}</h4>
+          <PriorityIcon className={cn("w-4 h-4 shrink-0", priorityColor)} />
         </div>
         <div className="flex items-center justify-between">
           {task.assignee && (
@@ -359,6 +426,9 @@ export default function Tasks() {
   const [epics, setEpics] = useState<Epic[]>([]);
   const [analytics, setAnalytics] = useState<any>(null);
   const [selectedSprint, setSelectedSprint] = useState<string | null>(null);
+  const [showSidebar, setShowSidebar] = useState(true);
+  const [presenceUsers, setPresenceUsers] = useState<Array<{ userId: string; name: string; initials?: string; isViewing?: boolean; isEditing?: boolean }>>([]);
+  const [teamMembers, setTeamMembers] = useState<any[]>([]);
 
   const mapTask = (t: any): Task => {
     const mapPrio = (p: string | null | undefined): Task["priority"] => {
@@ -401,10 +471,8 @@ export default function Tasks() {
       const col = cols.find((c) => c.id === status);
       if (col) col.tasks.push(t);
     });
-    // Sort tasks by position within each column
     cols.forEach(col => {
       col.tasks.sort((a, b) => {
-        // You might want to add position field to tasks
         return 0;
       });
     });
@@ -417,7 +485,7 @@ export default function Tasks() {
       setLoading(true);
       setError(null);
       try {
-        const [tasksData, teamsData, sprintsData, epicsData] = await Promise.all([
+        const [tasksData, teamsData, sprintsData, epicsData, usersData] = await Promise.all([
           apiGet<any[]>(`/tasks?${new URLSearchParams({
             ...(filterStatus !== "all" && { status: filterStatus }),
             ...(filterPriority !== "all" && { priority: filterPriority }),
@@ -429,15 +497,24 @@ export default function Tasks() {
           apiGet<any[]>("/teams"),
           apiGet<any[]>(`/sprints${filterTeam !== "all" ? `?teamId=${filterTeam}` : ""}`),
           apiGet<any[]>(`/epics${filterTeam !== "all" ? `?teamId=${filterTeam}` : ""}`),
+          apiGet<any[]>("/users").catch(() => []),
         ]);
 
         if (!cancelled) {
-          const mappedTasks: Task[] = tasksData.map(mapTask);
+          // Ensure all responses are arrays
+          const safeTasksData = Array.isArray(tasksData) ? tasksData : [];
+          const safeTeamsData = Array.isArray(teamsData) ? teamsData : [];
+          const safeSprintsData = Array.isArray(sprintsData) ? sprintsData : [];
+          const safeEpicsData = Array.isArray(epicsData) ? epicsData : [];
+          const safeUsersData = Array.isArray(usersData) ? usersData : [];
+          
+          const mappedTasks: Task[] = safeTasksData.map(mapTask);
           const cols = updateColumnsFromTasks(mappedTasks);
           setColumns(cols);
-          setTeams(teamsData);
-          setSprints(sprintsData);
-          setEpics(epicsData);
+          setTeams(safeTeamsData);
+          setSprints(safeSprintsData);
+          setEpics(safeEpicsData);
+          setTeamMembers(safeUsersData);
         }
       } catch (e: any) {
         console.error(e);
@@ -492,20 +569,52 @@ export default function Tasks() {
     socket.on('task:updated', handleTaskUpdated);
     socket.on('task:deleted', handleTaskDeleted);
 
+    // Presence tracking
+    const currentUser = auth.getUser();
+    if (currentUser) {
+      socket.emit('presence:online', {
+        userId: currentUser.id,
+        name: currentUser.name || 'Unknown',
+      });
+    }
+
+    const handlePresenceUpdate = (users: Array<{ userId: string; name: string }>) => {
+      if (!cancelled) {
+        const mapped = users.map(u => ({
+          userId: u.userId,
+          name: u.name,
+          initials: u.name?.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase(),
+          isViewing: true,
+          isEditing: false,
+        }));
+        setPresenceUsers(mapped);
+      }
+    };
+
+    socket.on('presence:update', handlePresenceUpdate);
+    socket.emit('presence:get');
+
     return () => {
       cancelled = true;
       socket.off('task:created', handleTaskCreated);
       socket.off('task:updated', handleTaskUpdated);
       socket.off('task:deleted', handleTaskDeleted);
+      socket.off('presence:update', handlePresenceUpdate);
     };
   }, [filterStatus, filterPriority, filterTeam, filterSprint, filterEpic, searchQuery]);
 
   useEffect(() => {
     if (viewMode === "analytics") {
-      fetch(`${API_BASE}/tasks/analytics${filterTeam !== "all" ? `?teamId=${filterTeam}` : ""}`)
-        .then(r => r.json())
-        .then(data => setAnalytics(data))
-        .catch(err => console.error("Failed to load analytics:", err));
+      apiGet<any>(`/tasks/analytics${filterTeam !== "all" ? `?teamId=${filterTeam}` : ""}`)
+        .then(data => {
+          // Handle response format: {success: true, data: {...}} or direct object
+          const analyticsData = (data && typeof data === 'object' && 'data' in data) ? data.data : data;
+          setAnalytics(analyticsData || {});
+        })
+        .catch(err => {
+          console.error("Failed to load analytics:", err);
+          setAnalytics({});
+        });
     }
   }, [viewMode, filterTeam]);
 
@@ -612,7 +721,6 @@ export default function Tasks() {
 
   const allTasks = columns.flatMap((col) => col.tasks.map((t) => ({ ...t, column: col.title, status: col.id })));
   
-  // Filter tasks
   const filteredTasks = allTasks.filter((task) => {
     const matchesSearch = searchQuery === "" || 
       task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -623,7 +731,7 @@ export default function Tasks() {
   const hasActiveFilters = filterStatus !== "all" || filterPriority !== "all" || filterTeam !== "all" || filterSprint !== "all" || filterEpic !== "all";
 
   return (
-    <div className="flex flex-col h-screen bg-gradient-to-br from-background via-background to-muted/20">
+    <div className="flex flex-col h-screen bg-background">
       <CreateTaskDialog open={showCreateTask} onOpenChange={setShowCreateTask} />
       <TaskDetailDialog
         open={!!selectedTask}
@@ -727,91 +835,171 @@ export default function Tasks() {
         </DialogContent>
       </Dialog>
 
-      {/* Header */}
-      <div className="bg-card/80 backdrop-blur-sm border-b shrink-0 sticky top-0 z-40">
-        <div className="flex items-center justify-between px-6 py-4">
-          <div className="flex items-center gap-4">
-            <div>
-              <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
-                <CheckSquare className="w-6 h-6 text-primary" />
-                Tasks
-              </h1>
-              <p className="text-sm text-muted-foreground mt-0.5">
-                {filteredTasks.length} {filteredTasks.length === 1 ? "task" : "tasks"}
-                {hasActiveFilters && " (filtered)"}
-              </p>
+      {/* Modern Header */}
+      <motion.header
+        initial={{ y: -20, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        className="sticky top-0 z-50 border-b border-border/50 bg-background/80 backdrop-blur-xl supports-[backdrop-filter]:bg-background/60"
+      >
+        <div className="px-3 xs:px-4 sm:px-6 py-3 sm:py-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+            {/* Left Section */}
+            <div className="flex items-center gap-3 sm:gap-6 flex-1 min-w-0">
+              <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
+                <div className="p-1.5 sm:p-2 rounded-lg bg-primary/10 border border-primary/20 shrink-0">
+                  <Layers className="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h1 className="text-lg sm:text-xl font-bold text-foreground tracking-tight flex items-center gap-2">
+                    <span className="truncate">Tasks</span>
+                    {hasActiveFilters && (
+                      <Badge variant="secondary" className="text-[10px] px-1.5 py-0 shrink-0">
+                        Filtered
+                      </Badge>
+                    )}
+                  </h1>
+                  <div className="flex items-center gap-2 sm:gap-3 mt-0.5 flex-wrap">
+                    <p className="text-xs text-muted-foreground font-medium">
+                      {filteredTasks.length} {filteredTasks.length === 1 ? "task" : "tasks"}
+                    </p>
+                    {presenceUsers.length > 0 && (
+                      <>
+                        <span className="text-muted-foreground/30 hidden sm:inline">•</span>
+                        <div className="flex items-center gap-2">
+                          <PresenceIndicator users={presenceUsers} maxVisible={4} />
+                          <span className="text-xs text-muted-foreground hidden xs:inline">
+                            {presenceUsers.length} online
+                          </span>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
             </div>
-            {selectedSprint && (
-              <Badge variant="secondary" className="text-xs font-semibold">
-                {sprints.find(s => s.id === selectedSprint)?.name}
-              </Badge>
+
+            {/* Right Section */}
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* Sidebar Toggle */}
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-9 w-9 p-0 shrink-0"
+                onClick={() => setShowSidebar(!showSidebar)}
+              >
+                {showSidebar ? <SidebarClose className="w-4 h-4" /> : <SidebarOpen className="w-4 h-4" />}
+              </Button>
+
+              {/* View Mode Toggle */}
+              <div className="flex items-center gap-1 p-1 bg-muted/50 rounded-lg border border-border/50">
+                <Button
+                  variant={viewMode === "kanban" ? "default" : "ghost"}
+                  size="sm"
+                  className={cn(
+                    "h-8 px-2 sm:px-3 text-xs font-medium",
+                    viewMode === "kanban" && "shadow-sm"
+                  )}
+                  onClick={() => setViewMode("kanban")}
+                >
+                  <LayoutGrid className="w-3.5 h-3.5 sm:mr-1.5" />
+                  <span className="hidden sm:inline">Kanban</span>
+                </Button>
+                <Button
+                  variant={viewMode === "list" ? "default" : "ghost"}
+                  size="sm"
+                  className={cn(
+                    "h-8 px-2 sm:px-3 text-xs font-medium",
+                    viewMode === "list" && "shadow-sm"
+                  )}
+                  onClick={() => setViewMode("list")}
+                >
+                  <List className="w-3.5 h-3.5 sm:mr-1.5" />
+                  <span className="hidden sm:inline">List</span>
+                </Button>
+                <Button
+                  variant={viewMode === "analytics" ? "default" : "ghost"}
+                  size="sm"
+                  className={cn(
+                    "h-8 px-2 sm:px-3 text-xs font-medium",
+                    viewMode === "analytics" && "shadow-sm"
+                  )}
+                  onClick={() => setViewMode("analytics")}
+                >
+                  <BarChart3 className="w-3.5 h-3.5 sm:mr-1.5" />
+                  <span className="hidden md:inline">Analytics</span>
+                </Button>
+              </div>
+
+              {/* Search */}
+              <div className="relative hidden md:block">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search tasks..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-9 h-9 w-64 text-sm bg-background border-border/50 focus:border-border"
+                />
+                {searchQuery && (
+                  <button
+                    onClick={() => setSearchQuery("")}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+
+              {/* Filter Button */}
+              <Button
+                variant={hasActiveFilters ? "default" : "outline"}
+                size="sm"
+                className="h-9 shrink-0"
+                onClick={() => setShowFilter(true)}
+              >
+                <Filter className="w-4 h-4 sm:mr-2" />
+                <span className="hidden sm:inline">Filter</span>
+              </Button>
+
+              {/* Create Task Button */}
+              <Button
+                size="sm"
+                className="h-9 bg-primary hover:bg-primary/90 shadow-lg shadow-primary/20 shrink-0"
+                onClick={() => setShowCreateTask(true)}
+              >
+                <Plus className="w-4 h-4 sm:mr-2" />
+                <span className="hidden sm:inline">New Task</span>
+                <span className="sm:hidden">New</span>
+              </Button>
+            </div>
+          </div>
+          
+          {/* Mobile Search */}
+          <div className="relative md:hidden mt-2">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              placeholder="Search tasks..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9 h-9 w-full text-sm bg-background border-border/50 focus:border-border"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
             )}
           </div>
-          <div className="flex items-center gap-2">
-            <div className="flex border rounded-lg bg-background">
-              <Button 
-                variant={viewMode === "kanban" ? "default" : "ghost"} 
-                size="sm" 
-                className="h-9 rounded-r-none" 
-                onClick={() => setViewMode("kanban")}
-              >
-                <LayoutGrid className="w-4 h-4 mr-2" />
-                Kanban
-              </Button>
-              <Button 
-                variant={viewMode === "list" ? "default" : "ghost"} 
-                size="sm" 
-                className="h-9 rounded-none border-x" 
-                onClick={() => setViewMode("list")}
-              >
-                <List className="w-4 h-4 mr-2" />
-                List
-              </Button>
-              <Button 
-                variant={viewMode === "analytics" ? "default" : "ghost"} 
-                size="sm" 
-                className="h-9 rounded-l-none" 
-                onClick={() => setViewMode("analytics")}
-              >
-                <BarChart3 className="w-4 h-4 mr-2" />
-                Analytics
-              </Button>
-            </div>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input 
-                placeholder="Search tasks..." 
-                value={searchQuery} 
-                onChange={(e) => setSearchQuery(e.target.value)} 
-                className="pl-9 h-9 w-64 text-sm" 
-              />
-              {searchQuery && (
-                <button 
-                  onClick={() => setSearchQuery("")} 
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              )}
-            </div>
-            <Button 
-              size="sm" 
-              onClick={() => setShowCreateTask(true)}
-              className="bg-primary hover:bg-primary/90 shadow-lg"
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              New Task
-            </Button>
         </div>
-        </div>
-      </div>
+      </motion.header>
 
-      {/* Loading / error */}
+      {/* Loading / Error */}
       {loading && (
         <div className="flex-1 flex items-center justify-center">
-          <div className="text-center space-y-2">
-            <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
-            <p className="text-sm text-muted-foreground">Loading tasks...</p>
+          <div className="text-center space-y-3">
+            <div className="w-10 h-10 border-3 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
+            <p className="text-sm text-muted-foreground font-medium">Loading tasks...</p>
           </div>
         </div>
       )}
@@ -826,199 +1014,250 @@ export default function Tasks() {
 
       {/* Content */}
       {!loading && !error && (
-        <div className="flex-1 overflow-hidden">
-          {viewMode === "kanban" ? (
-            <div className="h-full overflow-x-auto p-6">
-              <DndContext
-                sensors={sensors}
-                collisionDetection={closestCorners}
-                onDragStart={handleDragStart}
-                onDragOver={handleDragOver}
-                onDragEnd={handleDragEnd}
+        <div className="flex-1 overflow-hidden flex">
+          {/* Sidebar */}
+          <AnimatePresence>
+            {showSidebar && (
+              <motion.aside
+                initial={{ width: 0, opacity: 0 }}
+                animate={{ width: 320, opacity: 1 }}
+                exit={{ width: 0, opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                className="shrink-0 border-r border-border/50 bg-muted/20 overflow-hidden flex flex-col"
               >
-                <div className="flex gap-4 h-full min-w-max">
-                  {columns.map((column) => (
-                    <DroppableColumn
-                      key={column.id}
-                      column={column}
-                      onAddTask={() => setShowCreateTask(true)}
-                      onSelectTask={setSelectedTask}
+                <ScrollArea className="flex-1">
+                  <div className="p-4 space-y-4">
+                    <TeamWorkloadView
+                      tasks={allTasks}
+                      teamMembers={teamMembers}
+                      className="w-full"
                     />
-                  ))}
-                </div>
-                <DragOverlay dropAnimation={null}>
-                  {activeTask ? <TaskDragOverlay task={activeTask} /> : null}
-                </DragOverlay>
-              </DndContext>
-            </div>
-          ) : viewMode === "list" ? (
-            <div className="h-full overflow-y-auto p-6">
-              <div className="border rounded-lg overflow-hidden bg-card">
-                <table className="w-full">
-                  <thead className="bg-muted/50 sticky top-0 z-10">
-                    <tr>
-                      <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-3 uppercase tracking-wider">Task</th>
-                      <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-3 uppercase tracking-wider">Status</th>
-                      <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-3 uppercase tracking-wider">Assignee</th>
-                      <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-3 uppercase tracking-wider">Priority</th>
-                      <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-3 uppercase tracking-wider">Due Date</th>
-                      <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-3 uppercase tracking-wider">Tags</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredTasks.length === 0 ? (
-                      <tr>
-                        <td colSpan={6} className="px-4 py-12 text-center">
-                          <div className="flex flex-col items-center gap-2">
-                            <CheckSquare className="w-12 h-12 text-muted-foreground/30" />
-                            <p className="text-sm font-medium text-muted-foreground">No tasks found</p>
-                            <Button size="sm" variant="outline" onClick={() => setShowCreateTask(true)} className="mt-2">
-                              <Plus className="w-4 h-4 mr-2" />
-                              Create Task
-                            </Button>
-                          </div>
-                        </td>
-                      </tr>
-                    ) : (
-                      filteredTasks.map((task) => {
-                        const PriorityIcon = priorityIcons[task.priority]?.icon || ArrowRight;
-                        const priorityColor = priorityIcons[task.priority]?.color || "text-muted-foreground";
-                        const isOverdue = task.dueDate && new Date(task.dueDate) < new Date() && task.status !== "done";
-                        return (
-                          <tr 
-                            key={task.id} 
-                            className="border-t hover:bg-muted/30 transition-colors cursor-pointer group" 
-                            onClick={() => setSelectedTask(task)}
-                          >
-                            <td className="px-4 py-3">
-                              <div className="flex items-center gap-2">
-                                <div className="flex items-center gap-1.5">
-                                  {task.epic && (
-                                    <div
-                                      className="w-2 h-2 rounded-full"
-                                      style={{ backgroundColor: task.epic.color || "#6366f1" }}
-                                      title={task.epic.name}
-                                    />
-                                  )}
-                                  <span className="text-sm font-medium text-foreground">{task.title}</span>
-                                </div>
-                                {task.storyPoints && (
-                                  <Badge variant="outline" className="text-[9px] font-mono">
-                                    {task.storyPoints}SP
-                                  </Badge>
-                                )}
-                              </div>
-                            </td>
-                            <td className="px-4 py-3">
-                              <Badge variant="secondary" className="text-xs">{task.column}</Badge>
-                            </td>
-                            <td className="px-4 py-3">
-                              {task.assignee ? (
-                                <div className="flex items-center gap-2">
-                                  <Avatar className="h-6 w-6">
-                                    <AvatarFallback className="bg-primary/10 text-primary text-[9px]">
-                                      {task.assignee.initials || task.assignee.name?.charAt(0) || "?"}
-                                    </AvatarFallback>
-                                  </Avatar>
-                                  <span className="text-sm text-muted-foreground">{task.assignee.name}</span>
-                                </div>
-                              ) : (
-                                <span className="text-sm text-muted-foreground italic">Unassigned</span>
-                              )}
-                            </td>
-                            <td className="px-4 py-3">
-                              <div className="flex items-center gap-1">
-                                <PriorityIcon className={cn("w-4 h-4", priorityColor)} />
-                                <span className="text-sm text-muted-foreground capitalize">{task.priority}</span>
-                              </div>
-                            </td>
-                            <td className="px-4 py-3">
-                              {task.dueDate ? (
-                                <div className={cn(
-                                  "text-sm flex items-center gap-1",
-                                  isOverdue ? "text-red-600 font-semibold" : "text-muted-foreground"
-                                )}>
-                                  <Calendar className="w-3 h-3" />
-                                  {new Date(task.dueDate).toLocaleDateString()}
-                                </div>
-                              ) : (
-                                <span className="text-sm text-muted-foreground italic">No due date</span>
-                              )}
-                            </td>
-                            <td className="px-4 py-3">
-                              <div className="flex gap-1 flex-wrap">
-                                {task.tags.slice(0, 3).map((tag) => (
-                                  <Badge key={tag} variant="secondary" className="text-[10px]">{tag}</Badge>
-                                ))}
-                                {task.tags.length > 3 && (
-                                  <Badge variant="outline" className="text-[10px]">+{task.tags.length - 3}</Badge>
-                                )}
+                    <TeamActivityFeed
+                      teamId={filterTeam !== "all" ? filterTeam : undefined}
+                      maxItems={10}
+                      className="w-full"
+                    />
+                  </div>
+                  <ScrollBar orientation="vertical" />
+                </ScrollArea>
+              </motion.aside>
+            )}
+          </AnimatePresence>
+
+          {/* Main Content */}
+          <div className="flex-1 overflow-hidden bg-muted/10">
+            {viewMode === "kanban" ? (
+              <div className="h-full overflow-x-auto">
+                <DndContext
+                  sensors={sensors}
+                  collisionDetection={closestCorners}
+                  onDragStart={handleDragStart}
+                  onDragOver={handleDragOver}
+                  onDragEnd={handleDragEnd}
+                >
+                  <div className="flex gap-3 sm:gap-4 h-full p-3 sm:p-4 md:p-6 min-w-max">
+                    {columns.map((column) => (
+                      <DroppableColumn
+                        key={column.id}
+                        column={column}
+                        onAddTask={() => setShowCreateTask(true)}
+                        onSelectTask={setSelectedTask}
+                      />
+                    ))}
+                  </div>
+                  <DragOverlay dropAnimation={null}>
+                    {activeTask ? <TaskDragOverlay task={activeTask} /> : null}
+                  </DragOverlay>
+                </DndContext>
+              </div>
+            ) : viewMode === "list" ? (
+              <div className="h-full overflow-y-auto p-3 sm:p-4 md:p-6">
+                <div className="max-w-7xl mx-auto">
+                  <div className="border rounded-xl overflow-hidden bg-card shadow-sm">
+                    <div className="overflow-x-auto">
+                      <table className="w-full min-w-[600px]">
+                        <thead className="bg-muted/30 border-b border-border/50 sticky top-0 z-10">
+                          <tr>
+                            <th className="text-left text-xs font-semibold text-muted-foreground px-3 sm:px-4 py-2 sm:py-3 uppercase tracking-wider">Task</th>
+                            <th className="text-left text-xs font-semibold text-muted-foreground px-3 sm:px-4 py-2 sm:py-3 uppercase tracking-wider hidden sm:table-cell">Status</th>
+                            <th className="text-left text-xs font-semibold text-muted-foreground px-3 sm:px-4 py-2 sm:py-3 uppercase tracking-wider hidden md:table-cell">Assignee</th>
+                            <th className="text-left text-xs font-semibold text-muted-foreground px-3 sm:px-4 py-2 sm:py-3 uppercase tracking-wider">Priority</th>
+                            <th className="text-left text-xs font-semibold text-muted-foreground px-3 sm:px-4 py-2 sm:py-3 uppercase tracking-wider hidden lg:table-cell">Due Date</th>
+                            <th className="text-left text-xs font-semibold text-muted-foreground px-3 sm:px-4 py-2 sm:py-3 uppercase tracking-wider hidden lg:table-cell">Tags</th>
+                          </tr>
+                        </thead>
+                      <tbody>
+                        {filteredTasks.length === 0 ? (
+                          <tr>
+                            <td colSpan={6} className="px-3 sm:px-4 py-8 sm:py-12 text-center">
+                              <div className="flex flex-col items-center gap-3">
+                                <CheckSquare className="w-12 h-12 text-muted-foreground/20" />
+                                <p className="text-sm font-medium text-muted-foreground">No tasks found</p>
+                                <Button size="sm" variant="outline" onClick={() => setShowCreateTask(true)} className="mt-2">
+                                  <Plus className="w-4 h-4 mr-2" />
+                                  Create Task
+                                </Button>
                               </div>
                             </td>
                           </tr>
-                        );
-                      })
-                    )}
-                  </tbody>
-                </table>
+                        ) : (
+                          filteredTasks.map((task) => {
+                            const PriorityIcon = priorityIcons[task.priority]?.icon || ArrowRight;
+                            const priorityColor = priorityIcons[task.priority]?.color || "text-muted-foreground";
+                            const isOverdue = task.dueDate && new Date(task.dueDate) < new Date() && task.status !== "done";
+                            return (
+                              <tr
+                                key={task.id}
+                                className="border-t border-border/30 hover:bg-muted/20 transition-colors cursor-pointer group"
+                                onClick={() => setSelectedTask(task)}
+                              >
+                                <td className="px-3 sm:px-4 py-2 sm:py-3">
+                                  <div className="flex items-center gap-2">
+                                    <div className="flex items-center gap-1.5 min-w-0">
+                                      {task.epic && (
+                                        <div
+                                          className="w-2 h-2 rounded-full shrink-0"
+                                          style={{ backgroundColor: task.epic.color || "#6366f1" }}
+                                          title={task.epic.name}
+                                        />
+                                      )}
+                                      <span className="text-xs sm:text-sm font-medium text-foreground truncate">{task.title}</span>
+                                    </div>
+                                    {task.storyPoints && (
+                                      <Badge variant="outline" className="text-[9px] font-mono shrink-0">
+                                        {task.storyPoints}SP
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center gap-2 mt-1 sm:hidden">
+                                    <Badge variant="secondary" className="text-[10px]">{task.column}</Badge>
+                                    {task.assignee && (
+                                      <div className="flex items-center gap-1">
+                                        <Avatar className="h-4 w-4">
+                                          <AvatarFallback className="bg-primary/10 text-primary text-[8px]">
+                                            {task.assignee.initials || task.assignee.name?.charAt(0) || "?"}
+                                          </AvatarFallback>
+                                        </Avatar>
+                                        <span className="text-[10px] text-muted-foreground truncate">{task.assignee.name}</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                </td>
+                                <td className="px-3 sm:px-4 py-2 sm:py-3 hidden sm:table-cell">
+                                  <Badge variant="secondary" className="text-xs">{task.column}</Badge>
+                                </td>
+                                <td className="px-3 sm:px-4 py-2 sm:py-3 hidden md:table-cell">
+                                  {task.assignee ? (
+                                    <div className="flex items-center gap-2">
+                                      <Avatar className="h-6 w-6">
+                                        <AvatarFallback className="bg-primary/10 text-primary text-[9px]">
+                                          {task.assignee.initials || task.assignee.name?.charAt(0) || "?"}
+                                        </AvatarFallback>
+                                      </Avatar>
+                                      <span className="text-sm text-muted-foreground">{task.assignee.name}</span>
+                                    </div>
+                                  ) : (
+                                    <span className="text-sm text-muted-foreground italic">Unassigned</span>
+                                  )}
+                                </td>
+                                <td className="px-3 sm:px-4 py-2 sm:py-3">
+                                  <div className="flex items-center gap-1">
+                                    <PriorityIcon className={cn("w-3.5 h-3.5 sm:w-4 sm:h-4", priorityColor)} />
+                                    <span className="text-xs sm:text-sm text-muted-foreground capitalize">{task.priority}</span>
+                                  </div>
+                                </td>
+                                <td className="px-3 sm:px-4 py-2 sm:py-3 hidden lg:table-cell">
+                                  {task.dueDate ? (
+                                    <div className={cn(
+                                      "text-xs sm:text-sm flex items-center gap-1",
+                                      isOverdue ? "text-red-600 font-semibold" : "text-muted-foreground"
+                                    )}>
+                                      <Calendar className="w-3 h-3" />
+                                      {new Date(task.dueDate).toLocaleDateString()}
+                                    </div>
+                                  ) : (
+                                    <span className="text-xs sm:text-sm text-muted-foreground italic">No due date</span>
+                                  )}
+                                </td>
+                                <td className="px-3 sm:px-4 py-2 sm:py-3 hidden lg:table-cell">
+                                  <div className="flex gap-1 flex-wrap">
+                                    {task.tags.slice(0, 3).map((tag) => (
+                                      <Badge key={tag} variant="secondary" className="text-[10px]">{tag}</Badge>
+                                    ))}
+                                    {task.tags.length > 3 && (
+                                      <Badge variant="outline" className="text-[10px]">+{task.tags.length - 3}</Badge>
+                                    )}
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })
+                        )}
+                      </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
               </div>
-            </div>
-          ) : (
-            <div className="h-full overflow-y-auto p-6">
-              {analytics ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-                  <Card>
-                    <CardContent className="p-4">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Total Tasks</p>
-                          <p className="text-2xl font-bold">{analytics.total}</p>
-                        </div>
-                        <CheckSquare className="w-8 h-8 text-primary/30" />
-                      </div>
-                    </CardContent>
-                  </Card>
-                  <Card>
-                    <CardContent className="p-4">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Time Spent</p>
-                          <p className="text-2xl font-bold">{analytics.totalTimeSpent.toFixed(1)}h</p>
-                        </div>
-                        <Clock className="w-8 h-8 text-blue-500/30" />
-                      </div>
-                    </CardContent>
-                  </Card>
-                  <Card>
-                    <CardContent className="p-4">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">By Status</p>
-                          <p className="text-2xl font-bold">{analytics.byStatus.length}</p>
-                        </div>
-                        <BarChart3 className="w-8 h-8 text-green-500/30" />
-                      </div>
-                    </CardContent>
-                  </Card>
-                  <Card>
-                    <CardContent className="p-4">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">By Priority</p>
-                          <p className="text-2xl font-bold">{analytics.byPriority.length}</p>
-                        </div>
-                        <Flag className="w-8 h-8 text-orange-500/30" />
-                      </div>
-                    </CardContent>
-                  </Card>
+            ) : (
+              <div className="h-full overflow-y-auto p-3 sm:p-4 md:p-6">
+                <div className="max-w-7xl mx-auto">
+                  {analytics ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-4 sm:mb-6">
+                      <Card>
+                        <CardContent className="p-4">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Total Tasks</p>
+                              <p className="text-2xl font-bold">{analytics.total}</p>
+                            </div>
+                            <CheckSquare className="w-8 h-8 text-primary/30" />
+                          </div>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardContent className="p-4">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Time Spent</p>
+                              <p className="text-2xl font-bold">{analytics.totalTimeSpent.toFixed(1)}h</p>
+                            </div>
+                            <Clock className="w-8 h-8 text-blue-500/30" />
+                          </div>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardContent className="p-4">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">By Status</p>
+                              <p className="text-2xl font-bold">{analytics.byStatus.length}</p>
+                            </div>
+                            <BarChart3 className="w-8 h-8 text-green-500/30" />
+                          </div>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardContent className="p-4">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">By Priority</p>
+                              <p className="text-2xl font-bold">{analytics.byPriority.length}</p>
+                            </div>
+                            <Flag className="w-8 h-8 text-orange-500/30" />
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-center h-64">
+                      <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+                    </div>
+                  )}
                 </div>
-              ) : (
-                <div className="flex items-center justify-center h-64">
-                  <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-                </div>
-              )}
-            </div>
-          )}
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

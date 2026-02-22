@@ -101,8 +101,18 @@ export const useAuth = () => {
       setUser(auth.getUser());
     };
 
+    const handleUserStatusUpdate = () => {
+      // Refresh user from localStorage when status is updated
+      setUser(auth.getUser());
+    };
+
     window.addEventListener("storage", handleStorageChange);
-    return () => window.removeEventListener("storage", handleStorageChange);
+    window.addEventListener("userStatusUpdated", handleUserStatusUpdate);
+    
+    return () => {
+      window.removeEventListener("storage", handleStorageChange);
+      window.removeEventListener("userStatusUpdated", handleUserStatusUpdate);
+    };
   }, []);
 
   return { user };

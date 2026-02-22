@@ -98,6 +98,18 @@ export default function MeetingLobby() {
       ]).then(([byId, byCode]) => {
         const meeting = byId || byCode;
         if (meeting) {
+          // Check if meeting has ended (either status is "ended" or endTime has passed)
+          const now = new Date();
+          const endTime = meeting.endTime ? new Date(meeting.endTime) : null;
+          const isPast = endTime && endTime.getTime() < now.getTime();
+          const isEnded = meeting.status === "ended" || isPast;
+          
+          if (isEnded) {
+            setError("This meeting has already ended and cannot be joined.");
+            setLoading(false);
+            return;
+          }
+          
           setMeetingData(meeting);
           setShowPasswordInput(!!meeting.password);
           if (meeting.title) {
@@ -433,6 +445,24 @@ export default function MeetingLobby() {
 
     // Join meeting via API if it's a real meeting
     if (meetingCode && meetingCode !== "quick-huddle" && meetingData) {
+      // Double-check if meeting has ended before joining
+      const now = new Date();
+      const endTime = meetingData.endTime ? new Date(meetingData.endTime) : null;
+      const isPast = endTime && endTime.getTime() < now.getTime();
+      const isEnded = meetingData.status === "ended" || isPast;
+      
+      if (isEnded) {
+        setError("This meeting has already ended and cannot be joined.");
+        setJoining(false);
+        // Re-create local preview stream
+        try {
+          await ensureLocalStream();
+        } catch {
+          // ignore
+        }
+        return;
+      }
+      
       try {
         const res = await fetch(`${API_BASE}/meetings/${meetingData.id}/participants`, {
           method: "POST",

@@ -27,6 +27,8 @@ import {
 import { auth } from "@/lib/auth";
 import { apiGet, apiPost } from "@/lib/api";
 
+const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
+
 interface CreateMeetingDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -159,12 +161,12 @@ export default function CreateMeetingDialog({ open, onOpenChange }: CreateMeetin
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       {open && (
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
+        <DialogContent className="max-w-lg max-h-[90vh] flex flex-col">
+          <DialogHeader className="shrink-0">
             <DialogTitle className="flex items-center gap-2"><Video className="w-5 h-5 text-primary" />Create Meeting</DialogTitle>
             <DialogDescription>Schedule a new meeting or start one instantly</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
+          <div className="space-y-4 overflow-y-auto flex-1 min-h-0 pr-2">
             <div className="flex gap-2">
               <Button variant={meetingType === "instant" ? "default" : "outline"} size="sm" onClick={() => setMeetingType("instant")} className="flex-1"><Video className="w-4 h-4 mr-2" />Instant</Button>
               <Button variant={meetingType === "scheduled" ? "default" : "outline"} size="sm" onClick={() => setMeetingType("scheduled")} className="flex-1"><Calendar className="w-4 h-4 mr-2" />Scheduled</Button>
@@ -377,8 +379,8 @@ export default function CreateMeetingDialog({ open, onOpenChange }: CreateMeetin
               </div>
             </div>
           </div>
-          {error && <div className="text-sm text-destructive bg-destructive/10 p-2 rounded">{error}</div>}
-          <DialogFooter>
+          {error && <div className="text-sm text-destructive bg-destructive/10 p-2 rounded shrink-0">{error}</div>}
+          <DialogFooter className="shrink-0">
             <Button variant="outline" onClick={() => { 
               onOpenChange(false); 
               setError(null); 
