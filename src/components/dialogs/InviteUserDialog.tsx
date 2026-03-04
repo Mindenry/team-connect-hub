@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { UserPlus, Mail, Copy, Link, Plus, X } from "lucide-react";
+import { UserPlus, Mail, Plus, X, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,17 +14,21 @@ import {
   AnimatedDialogTitle as DialogTitle,
 } from "@/components/shared/AnimatedDialog";
 import { apiGet, apiPost } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 
 interface InviteUserDialogProps { open: boolean; onOpenChange: (open: boolean) => void; teamId?: string; onInviteSuccess?: () => void; }
 
 export default function InviteUserDialog({ open, onOpenChange, teamId, onInviteSuccess }: InviteUserDialogProps) {
   const [emails, setEmails] = useState<string[]>([]);
   const [emailInput, setEmailInput] = useState("");
-  const [role, setRole] = useState("member");
+  const [role, setRole] = useState("employee");
   const [selectedTeamId, setSelectedTeamId] = useState(teamId || "");
+  const [teamRole, setTeamRole] = useState("member");
   const [teams, setTeams] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isSuccess, setIsSuccess] = useState(false);
+  const { user: currentUser } = useAuth();
 
   useEffect(() => {
     if (open) {
@@ -51,77 +55,116 @@ export default function InviteUserDialog({ open, onOpenChange, teamId, onInviteS
             <DialogTitle className="flex items-center gap-2"><UserPlus className="w-5 h-5 text-primary" />Invite Users</DialogTitle>
             <DialogDescription>Invite new members to your organization</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
-            <div><Label className="flex items-center gap-1"><Mail className="w-3 h-3" /> Email Addresses</Label>
-              <div className="flex gap-2 mt-1">
-                <Input value={emailInput} onChange={(e) => setEmailInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addEmail())} placeholder="user@acme.com" className="flex-1" />
-                <Button size="icon" onClick={addEmail} variant="outline"><Plus className="w-4 h-4" /></Button>
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">Only @acme.com emails allowed</p>
-            </div>
-            {emails.length > 0 && (
-              <div className="flex flex-wrap gap-1.5">
-                {emails.map((email) => (
-                  <Badge key={email} variant="secondary" className="flex items-center gap-1 pr-1">
-                    {email}<button onClick={() => removeEmail(email)} className="ml-1 hover:text-destructive"><X className="w-3 h-3" /></button>
-                  </Badge>
-                ))}
-              </div>
-            )}
-            <div className="grid grid-cols-2 gap-3">
-              <div><Label>Role</Label><Select value={role} onValueChange={setRole}><SelectTrigger className="mt-1"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="admin">Admin</SelectItem><SelectItem value="manager">Manager</SelectItem><SelectItem value="employee">Employee</SelectItem></SelectContent></Select></div>
-              <div>
-                <Label>Team (Optional)</Label>
-                <Select value={selectedTeamId || "none"} onValueChange={(v) => setSelectedTeamId(v === "none" ? "" : v)}>
-                  <SelectTrigger className="mt-1">
-                    <SelectValue placeholder="Select" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">No team</SelectItem>
-                    {teams.map((team) => (
-                      <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>
+          {!isSuccess ? (
+            <>
+              <div className="space-y-4">
+                <div><Label className="flex items-center gap-1"><Mail className="w-3 h-3" /> Email Addresses</Label>
+                  <div className="flex gap-2 mt-1">
+                    <Input value={emailInput} onChange={(e) => setEmailInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addEmail())} placeholder="user@acme.com" className="flex-1" />
+                    <Button size="icon" onClick={addEmail} variant="outline"><Plus className="w-4 h-4" /></Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">Only @acme.com emails allowed</p>
+                </div>
+                {emails.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {emails.map((email) => (
+                      <Badge key={email} variant="secondary" className="flex items-center gap-1 pr-1">
+                        {email}<button onClick={() => removeEmail(email)} className="ml-1 hover:text-destructive"><X className="w-3 h-3" /></button>
+                      </Badge>
                     ))}
-                  </SelectContent>
-                </Select>
+                  </div>
+                )}
+                <div className="grid grid-cols-2 gap-3">
+                  <div><Label>Role</Label><Select value={role} onValueChange={setRole}><SelectTrigger className="mt-1"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="admin">Admin</SelectItem><SelectItem value="manager">Manager</SelectItem><SelectItem value="employee">Employee</SelectItem></SelectContent></Select></div>
+                  <div>
+                    <Label>Join Team (Optional)</Label>
+                    <Select value={selectedTeamId || "none"} onValueChange={(v) => setSelectedTeamId(v === "none" ? "" : v)}>
+                      <SelectTrigger className="mt-1">
+                        <SelectValue placeholder="Select team" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">No team</SelectItem>
+                        {teams.map((team) => (
+                          <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                {selectedTeamId && (
+                  <div>
+                    <Label>Team Role</Label>
+                    <Select value={teamRole} onValueChange={setTeamRole}>
+                      <SelectTrigger className="mt-1">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="lead">Team Lead</SelectItem>
+                        <SelectItem value="member">Member</SelectItem>
+                        <SelectItem value="viewer">Viewer</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
               </div>
+              {error && <div className="text-sm text-destructive bg-destructive/10 p-2 rounded">{error}</div>}
+              <DialogFooter>
+                <Button variant="outline" onClick={() => { onOpenChange(false); setError(null); setEmails([]); setEmailInput(""); setIsSuccess(false); }}>Cancel</Button>
+                <Button onClick={async () => {
+                  if (emails.length === 0) {
+                    setError("Please add at least one email");
+                    return;
+                  }
+                  if (!currentUser?.organizationId || !currentUser.id) {
+                    setError("Cannot create invites: missing organization or user context");
+                    return;
+                  }
+                  setLoading(true);
+                  setError(null);
+                  try {
+                    await Promise.all(
+                      emails.map(async (email) => {
+                        await apiPost<any>("/invites", {
+                          email,
+                          organizationId: currentUser.organizationId,
+                          invitedBy: currentUser.id,
+                          role,
+                          teamId: selectedTeamId || undefined,
+                          teamRole: selectedTeamId ? teamRole : undefined,
+                        });
+                      })
+                    );
+                    setIsSuccess(true);
+                    setEmails([]);
+                    setEmailInput("");
+                    onInviteSuccess?.();
+                  } catch (err: any) {
+                    setError(err.message ?? "Failed to invite users");
+                  } finally {
+                    setLoading(false);
+                  }
+                }} disabled={emails.length === 0 || loading}>
+                  {loading ? "Inviting..." : `Send ${emails.length > 0 ? `${emails.length} Invite${emails.length > 1 ? "s" : ""}` : "Invites"}`}
+                </Button>
+              </DialogFooter>
+            </>
+          ) : (
+            <div className="space-y-6">
+              <div className="flex flex-col items-center justify-center p-6 bg-primary/5 rounded-lg border border-primary/20">
+                <CheckCircle2 className="w-16 h-16 text-primary mb-4" />
+                <h3 className="text-xl font-semibold mb-2">เชิญผู้ใช้งานสำเร็จ!</h3>
+                <p className="text-sm text-center text-muted-foreground">
+                  พนักงานสามารถเข้าสู่ระบบโดยกรอกอีเมลได้ทันที ไม่ต้องใช้ลิงก์
+                </p>
+              </div>
+              <DialogFooter className="sm:justify-between">
+                <Button variant="ghost" className="pl-0" onClick={() => setIsSuccess(false)}>
+                  Invite More
+                </Button>
+                <Button onClick={() => { onOpenChange(false); setIsSuccess(false); }}>Done</Button>
+              </DialogFooter>
             </div>
-          </div>
-          {error && <div className="text-sm text-destructive bg-destructive/10 p-2 rounded">{error}</div>}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => { onOpenChange(false); setError(null); setEmails([]); setEmailInput(""); }}>Cancel</Button>
-            <Button onClick={async () => {
-              if (emails.length === 0) {
-                setError("Please add at least one email");
-                return;
-              }
-              setLoading(true);
-              setError(null);
-              try {
-                const users = await apiGet<any[]>("/users").catch(() => []);
-                const results = await Promise.all(
-                  emails.map(async (email) => {
-                    let user = Array.isArray(users) ? users.find((u: any) => u.email === email) : null;
-                    if (!user) {
-                      const name = email.split("@")[0];
-                      user = await apiPost("/users", { email, name });
-                    }
-                    await apiPost(`/teams/${selectedTeamId}/members`, { userId: user.id, role });
-                    return user;
-                  })
-                );
-                onOpenChange(false);
-                setEmails([]);
-                setEmailInput("");
-                onInviteSuccess?.();
-              } catch (err: any) {
-                setError(err.message ?? "Failed to invite users");
-              } finally {
-                setLoading(false);
-              }
-            }} disabled={emails.length === 0 || loading}>
-              {loading ? "Inviting..." : `Send ${emails.length > 0 ? `${emails.length} Invite${emails.length > 1 ? "s" : ""}` : "Invites"}`}
-            </Button>
-          </DialogFooter>
+          )}
         </DialogContent>
       )}
     </Dialog>

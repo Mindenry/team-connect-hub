@@ -1,11 +1,13 @@
-import { memo } from "react";
+import { memo, useRef, useEffect } from "react";
 import {
   Send, Smile, Paperclip, Plus, X,
   Folder as FolderIcon, Reply,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Popover, PopoverContent, PopoverTrigger,
+} from "@/components/ui/popover";
 
 const EMOJI_LIST = [
   "😀", "😂", "🤣", "😍", "👍", "🙏", "👏", "🔥", "✨", "🙌",
@@ -34,22 +36,22 @@ interface ReplyTo {
 
 interface MessageComposerProps {
   messageInput: string;
-  onInputChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onInputChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
   onKeyDown: (e: React.KeyboardEvent) => void;
   onSend: () => void;
   sending: boolean;
   disabled: boolean;
   placeholder: string;
-  inputRef: React.RefObject<HTMLInputElement | null>;
+  inputRef: React.RefObject<HTMLTextAreaElement | null>;
   attachments: Attachment[];
-  onRemoveAttachment: (index: number) => void;
+  onRemoveAttachment: (i: number) => void;
   onFileUpload: () => void;
   fileInputRef: React.RefObject<HTMLInputElement | null>;
   onFileSelect: (e: React.ChangeEvent<HTMLInputElement>) => void;
   driveTeamId: string | null;
   onAttachFromDrive: () => void;
   showEmojiPicker: boolean;
-  onToggleEmojiPicker: (open: boolean) => void;
+  onToggleEmojiPicker: (show: boolean) => void;
   onInsertEmoji: (emoji: string) => void;
   showMentionPicker: boolean;
   mentionableUsers: MentionableUser[];
@@ -87,157 +89,192 @@ function MessageComposer({
   onCancelReply,
   isLoggedIn,
 }: MessageComposerProps) {
-  const hasContent = messageInput.trim().length > 0 || attachments.length > 0;
+  const textareaRef = inputRef as React.RefObject<HTMLTextAreaElement | null>;
+
+  // Auto-resize textarea
+  useEffect(() => {
+    const el = textareaRef?.current;
+    if (el) {
+      el.style.height = "auto";
+      el.style.height = Math.min(el.scrollHeight, 160) + "px";
+    }
+  }, [messageInput, textareaRef]);
+
+  if (!isLoggedIn) {
+    return (
+      <div className="px-5 py-4 border-t border-border/20">
+        <div className="rounded-xl bg-muted/30 px-4 py-3 text-center text-sm text-muted-foreground/60">
+          Sign in to send messages
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="px-4 md:px-6 pb-4 pt-2">
-      {/* Reply Banner */}
+    <div className="px-5 pb-4 pt-2">
+      {/* Reply indicator */}
       {replyingTo && (
-        <div className="mb-2 mx-1 flex items-center gap-2 bg-blue-500/5 border border-blue-500/15 px-3 py-2 rounded-2xl">
-          <div className="w-0.5 h-7 rounded-full bg-blue-500/50 shrink-0" />
-          <Reply className="w-3 h-3 text-blue-500/50 shrink-0" />
-          <div className="flex-1 min-w-0">
-            <span className="text-[11px] font-semibold text-blue-500/80">{replyingTo.sender.name}</span>
-            <p className="text-[11px] text-muted-foreground/50 truncate">{replyingTo.text}</p>
-          </div>
-          <button
-            onClick={onCancelReply}
-            className="w-6 h-6 rounded-lg flex items-center justify-center text-muted-foreground/40 hover:text-foreground hover:bg-muted/30 transition-all shrink-0"
-          >
+        <div className="flex items-center gap-2 mb-2 px-3 py-1.5 rounded-lg bg-primary/5 border border-primary/10">
+          <Reply className="w-3 h-3 text-primary/60 shrink-0" />
+          <span className="text-[11px] text-primary/70 font-medium shrink-0">
+            Replying to {replyingTo.sender?.name}
+          </span>
+          <span className="text-[11px] text-muted-foreground/50 truncate flex-1">
+            {replyingTo.text}
+          </span>
+          <button onClick={onCancelReply} className="text-muted-foreground/40 hover:text-muted-foreground shrink-0">
             <X className="w-3 h-3" />
           </button>
         </div>
       )}
 
-      {/* Attachment chips */}
+      {/* Attachments preview */}
       {attachments.length > 0 && (
-        <div className="mb-2 mx-1 flex flex-wrap gap-1.5">
-          {attachments.map((att, i) => (
-            <div
-              key={i}
-              className="flex items-center gap-1.5 bg-muted/20 border border-border/20 px-2.5 py-1 rounded-xl text-xs"
-            >
-              <Paperclip className="w-3 h-3 text-muted-foreground/40" />
-              <span className="truncate max-w-[120px] text-foreground/70">{att.name}</span>
-              <button
-                onClick={() => onRemoveAttachment(i)}
-                className="w-4 h-4 rounded-full flex items-center justify-center hover:bg-red-500/10 hover:text-red-500 transition-colors"
-              >
-                <X className="w-2.5 h-2.5" />
-              </button>
-            </div>
-          ))}
+        <div className="flex flex-wrap gap-2 mb-2">
+          {attachments.map((att, i) => {
+            const isImage = att.type?.startsWith("image/") || /\.(jpe?g|png|gif|webp|bmp|svg)$/i.test(att.name || "");
+            if (isImage) {
+              return (
+                <div key={i} className="relative group/att">
+                  <img
+                    src={att.url}
+                    alt={att.name}
+                    className="h-16 w-16 rounded-lg object-cover border border-border/40"
+                  />
+                  <button
+                    onClick={() => onRemoveAttachment(i)}
+                    className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center opacity-0 group-hover/att:opacity-100 transition-opacity shadow-sm"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              );
+            }
+            return (
+              <div key={i} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-muted/40 border border-border/30 text-xs">
+                <Paperclip className="w-3 h-3 text-muted-foreground/60" />
+                <span className="truncate max-w-[120px]">{att.name}</span>
+                <button onClick={() => onRemoveAttachment(i)} className="text-muted-foreground/40 hover:text-red-500 transition-colors">
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            );
+          })}
         </div>
       )}
 
-      {/* ── Composer pill ── */}
-      <div className="relative flex items-center gap-1 bg-muted/20 border border-border/25 rounded-full px-1.5 py-1 focus-within:border-blue-500/30 focus-within:bg-muted/30 transition-all shadow-sm focus-within:shadow-md focus-within:shadow-blue-500/5">
-        {/* + button */}
-        <button
-          onClick={onFileUpload}
-          className="w-9 h-9 rounded-full flex items-center justify-center text-muted-foreground/40 hover:text-foreground hover:bg-muted/40 transition-all active:scale-90 shrink-0"
-          title="Upload file"
-        >
-          <Plus className="w-5 h-5" />
-        </button>
+      {/* Main composer container */}
+      <div className={cn(
+        "relative rounded-xl border bg-background transition-all duration-200",
+        disabled
+          ? "opacity-50 cursor-not-allowed border-border/20"
+          : "border-border/40 focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-primary/10 focus-within:shadow-lg focus-within:shadow-primary/5"
+      )}>
+        {/* Mention picker */}
+        {showMentionPicker && mentionableUsers.length > 0 && (
+          <div className="absolute bottom-full left-0 mb-1 w-56 bg-background border border-border/60 rounded-lg shadow-xl overflow-hidden z-20 animate-in slide-in-from-bottom-2 fade-in-0 duration-150">
+            {mentionableUsers.map((u) => (
+              <button
+                key={u.id}
+                onClick={() => onInsertMention(u.name)}
+                className="w-full flex items-center gap-2 px-3 py-2 text-xs hover:bg-primary/5 transition-colors"
+              >
+                <Avatar className="w-5 h-5">
+                  <AvatarFallback className="text-[8px] font-bold bg-primary/10 text-primary">
+                    {u.name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
+                <span className="font-medium">{u.name}</span>
+              </button>
+            ))}
+          </div>
+        )}
 
-        {/* Input */}
-        <div className="flex-1 relative">
-          <input
-            ref={inputRef}
+        {/* Textarea + actions row */}
+        <div className="flex items-end gap-1 px-3 py-2">
+          {/* Left actions */}
+          <div className="flex items-center gap-0.5 pb-0.5 shrink-0">
+            <button
+              onClick={onFileUpload}
+              disabled={disabled}
+              className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground/50 hover:text-muted-foreground hover:bg-muted/50 transition-colors disabled:opacity-30"
+            >
+              <Paperclip className="w-4 h-4" />
+            </button>
+
+            {driveTeamId && (
+              <button
+                onClick={onAttachFromDrive}
+                disabled={disabled}
+                className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground/50 hover:text-muted-foreground hover:bg-muted/50 transition-colors disabled:opacity-30"
+              >
+                <FolderIcon className="w-4 h-4" />
+              </button>
+            )}
+
+            <Popover open={showEmojiPicker} onOpenChange={onToggleEmojiPicker}>
+              <PopoverTrigger asChild>
+                <button
+                  disabled={disabled}
+                  className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground/50 hover:text-muted-foreground hover:bg-muted/50 transition-colors disabled:opacity-30"
+                >
+                  <Smile className="w-4 h-4" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent side="top" align="start" className="w-auto p-2">
+                <div className="grid grid-cols-10 gap-0.5">
+                  {EMOJI_LIST.map((emoji) => (
+                    <button
+                      key={emoji}
+                      onClick={() => onInsertEmoji(emoji)}
+                      className="w-8 h-8 rounded-md hover:bg-muted flex items-center justify-center text-base transition-colors"
+                    >
+                      {emoji}
+                    </button>
+                  ))}
+                </div>
+              </PopoverContent>
+            </Popover>
+          </div>
+
+          {/* Textarea */}
+          <textarea
+            ref={textareaRef}
             value={messageInput}
-            onChange={onInputChange}
+            onChange={onInputChange as any}
             onKeyDown={onKeyDown}
             placeholder={placeholder}
             disabled={disabled}
-            className="w-full h-10 bg-transparent text-[13.5px] px-2 outline-none placeholder:text-muted-foreground/30 disabled:opacity-40"
+            rows={1}
+            className={cn(
+              "flex-1 resize-none bg-transparent text-[13.5px] placeholder:text-muted-foreground/40 leading-relaxed focus:outline-none py-0.5 min-h-[24px] max-h-[160px]",
+              disabled && "cursor-not-allowed"
+            )}
           />
 
-          {/* Mention popup */}
-          {showMentionPicker && mentionableUsers.length > 0 && (
-            <div className="absolute bottom-full left-0 mb-2 w-56 bg-card/98 backdrop-blur-2xl border border-border/30 rounded-2xl shadow-xl shadow-black/10 z-50 max-h-44 overflow-y-auto">
-              {mentionableUsers.map((user) => (
-                <button
-                  key={user.id}
-                  onClick={() => onInsertMention(user.name)}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-muted/30 text-left transition-colors first:rounded-t-2xl last:rounded-b-2xl"
-                >
-                  <Avatar className="h-6 w-6">
-                    <AvatarFallback className="bg-blue-500/10 text-blue-500 text-[9px] font-bold">
-                      {user.name.split(" ").map((n: string) => n[0]).join("")}
-                    </AvatarFallback>
-                  </Avatar>
-                  <span className="text-xs font-medium">{user.name}</span>
-                </button>
-              ))}
-            </div>
-          )}
+          {/* Send button */}
+          <button
+            onClick={onSend}
+            disabled={disabled || sending || (!messageInput.trim() && attachments.length === 0)}
+            className={cn(
+              "w-8 h-8 rounded-lg flex items-center justify-center shrink-0 mb-0.5 transition-all duration-200",
+              messageInput.trim() || attachments.length > 0
+                ? "bg-primary text-primary-foreground shadow-sm hover:bg-primary/90"
+                : "text-muted-foreground/30"
+            )}
+          >
+            <Send className="w-4 h-4" />
+          </button>
         </div>
 
-        {/* Emoji picker */}
-        <Popover open={showEmojiPicker} onOpenChange={onToggleEmojiPicker}>
-          <PopoverTrigger asChild>
-            <button className="w-9 h-9 rounded-full flex items-center justify-center text-muted-foreground/40 hover:text-foreground hover:bg-muted/40 transition-all shrink-0">
-              <Smile className="w-[18px] h-[18px]" />
-            </button>
-          </PopoverTrigger>
-          <PopoverContent className="w-64 p-2 rounded-2xl border-border/30 shadow-xl" align="end">
-            <div className="grid grid-cols-6 gap-0.5">
-              {EMOJI_LIST.map((emoji, i) => (
-                <button
-                  key={i}
-                  onClick={() => onInsertEmoji(emoji)}
-                  className="p-1.5 hover:bg-muted rounded-lg text-lg transition-all hover:scale-125 active:scale-90"
-                >
-                  {emoji}
-                </button>
-              ))}
-            </div>
-          </PopoverContent>
-        </Popover>
-
         {/* Hidden file input */}
-        <input ref={fileInputRef} type="file" className="hidden" onChange={onFileSelect} />
-
-        {/* Attach */}
-        <button
-          onClick={onFileUpload}
-          className="w-9 h-9 rounded-full flex items-center justify-center text-muted-foreground/40 hover:text-foreground hover:bg-muted/40 transition-all shrink-0"
-          title="Attach file"
-        >
-          <Paperclip className="w-[18px] h-[18px]" />
-        </button>
-
-        {/* Drive */}
-        <button
-          onClick={onAttachFromDrive}
-          disabled={!driveTeamId}
-          className="w-9 h-9 rounded-full flex items-center justify-center text-muted-foreground/40 hover:text-foreground hover:bg-muted/40 transition-all shrink-0 disabled:opacity-20"
-          title={driveTeamId ? "Shared Drive" : "Select a team channel first"}
-        >
-          <FolderIcon className="w-[18px] h-[18px]" />
-        </button>
-
-        {/* ── Send button ── */}
-        <button
-          onClick={onSend}
-          disabled={!hasContent || sending || disabled}
-          className={cn(
-            "w-10 h-10 rounded-full flex items-center justify-center shrink-0 transition-all duration-200",
-            hasContent && !sending && !disabled
-              ? "bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-md shadow-blue-500/25 hover:shadow-lg hover:shadow-blue-500/30 active:scale-90"
-              : "bg-muted/20 text-muted-foreground/20 cursor-not-allowed"
-          )}
-          title="Send"
-        >
-          <Send className="w-[18px] h-[18px]" />
-        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          onChange={onFileSelect}
+          className="hidden"
+        />
       </div>
-
-      {/* Hints */}
-      {!isLoggedIn && (
-        <p className="text-[10px] text-red-500/60 text-center mt-1.5">Login required to send messages</p>
-      )}
     </div>
   );
 }

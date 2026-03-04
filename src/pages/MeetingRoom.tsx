@@ -1,6 +1,18 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import {
+  LiveKitRoom,
+  RoomAudioRenderer,
+  VideoTrack,
+  useLocalParticipant,
+  useParticipants,
+  useTracks,
+  useRoomContext
+} from "@livekit/components-react";
+import { RoomEvent, Track } from "livekit-client";
+
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
+import { apiGet } from "@/lib/api";
 import {
   Mic, MicOff, Video as VideoIcon, VideoOff, Monitor, MonitorOff, Users,
   MessageSquare, Hand, Settings, Send, X, Loader2, ChevronUp, Volume2,
@@ -37,7 +49,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
+const RAW_API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
+const API_BASE = `${RAW_API_BASE}/api`;
+
+/** Synchronous helper – returns an Authorization header if a token exists in localStorage. */
+const getAuthHeaders = (): HeadersInit => {
+  const token = localStorage.getItem("collabhub_token");
+  return token ? { Authorization: `Bearer ${token}` } : {};
+};
 
 const isImageMime = (m?: string) => !!m && m.startsWith("image/");
 
@@ -93,8 +112,8 @@ const ICE_SERVERS: RTCConfiguration = {
   ],
 };
 
-export default function MeetingRoom() {
-  const { id: meetingId } = useParams();
+function MeetingRoomUI({ meetingId: propMeetingId, meetingTitle: propMeetingTitle }: any) {
+  const meetingId = propMeetingId;
   const navigate = useNavigate();
   const location = useLocation();
   const currentUser = auth.getUser();
@@ -176,6 +195,20 @@ export default function MeetingRoom() {
   const remoteAudioRefs = useRef<Map<string, HTMLAudioElement>>(new Map());
 
   const userName = currentUser?.name || "Guest";
+
+  const room = useRoomContext();
+  const livekitParticipants = useParticipants();
+  const { localParticipant: lkLocal } = useLocalParticipant();
+  const screenTracks = useTracks([Track.Source.ScreenShare]);
+  
+  // Sync state upward to localParticipant
+  useEffect(() => {
+    if (lkLocal) {
+      lkLocal.setMicrophoneEnabled(!isMuted);
+      lkLocal.setCameraEnabled(isCameraOn);
+    }
+  }, [lkLocal, isMuted, isCameraOn]);
+
   const meetingCode = meetingId || "quick-huddle";
 
   const formatTime = (s: number) => {
@@ -184,149 +217,22 @@ export default function MeetingRoom() {
     return `${m.toString().padStart(2, "0")}:${sec.toString().padStart(2, "0")}`;
   };
 
-  const createPeerConnection = useCallback((remotePeerId: string, isInitiator: boolean) => {
-    const socket = socketRef.current;
-    const pc = new RTCPeerConnection(ICE_SERVERS);
-
-    const peerData: PeerData = {
-      connection: pc,
-      remoteStream: null,
-      cameraStream: null,
-      screenStream: null,
-      cameraSender: undefined,
-      screenSender: undefined,
-      makingOffer: false,
-      ignoreOffer: false,
-      isSettingRemoteAnswerPending: false,
-      iceCandidatesQueue: [],
-    };
-    peersRef.current.set(remotePeerId, peerData);
-
-    pc.onnegotiationneeded = async () => {
-      try {
-        peerData.makingOffer = true;
-        console.log("🔄 Negotiation needed (Perfect Negotiation) with:", remotePeerId);
-        await pc.setLocalDescription();
-        socket.emit("webrtc:offer", {
-          to: remotePeerId,
-          name: userName,
-          offer: pc.localDescription,
-        });
-      } catch (err) {
-        console.error("Error during negotiation:", err);
-      } finally {
-        peerData.makingOffer = false;
-      }
-    };
-
-    pc.onicecandidate = (event) => {
-      if (event.candidate) {
-        socket.emit("webrtc:ice-candidate", {
-          to: remotePeerId,
-          candidate: event.candidate,
-        });
-      }
-    };
-
-    if (localStreamRef.current) {
-      localStreamRef.current.getTracks().forEach(track => {
-        const sender = pc.addTrack(track, localStreamRef.current!);
-        if (track.kind === "video") {
-          peerData.cameraSender = sender;
-        }
-      });
-    }
-    
-    // If screen sharing is active, add screen track as well
-    if (screenStreamRef.current) {
-      const screenTrack = screenStreamRef.current.getVideoTracks()[0];
-      if (screenTrack) {
-        const sender = pc.addTrack(screenTrack, screenStreamRef.current);
-        peerData.screenSender = sender;
-      }
-    }
-
-    pc.ontrack = (event) => {
-      const remoteStream = event.streams[0];
-      if (!remoteStream) return;
-
-      console.log("🎥 Remote track received:", remotePeerId, event.track.kind, remoteStream.id);
-      
-      const peerData = peersRef.current.get(remotePeerId);
-      if (!peerData) return;
-
-      // Deterministic stream mapping
-      if (event.track.kind === "video") {
-        if (!peerData.cameraStream || peerData.cameraStream.id === remoteStream.id) {
-          peerData.cameraStream = remoteStream;
-          peerData.remoteStream = remoteStream;
-        } else {
-          peerData.screenStream = remoteStream;
-        }
-      } else if (event.track.kind === "audio") {
-        // Audio usually goes with the main stream
-        if (!peerData.cameraStream) {
-          peerData.remoteStream = remoteStream;
-        }
-      }
-
-      requestAnimationFrame(() => {
-        // Sync Camera
-        const videoEl = remoteVideoRefs.current.get(remotePeerId);
-        if (videoEl && peerData.cameraStream && peerData.cameraStream.getVideoTracks().length > 0) {
-          if (videoEl.srcObject !== peerData.cameraStream) {
-            videoEl.srcObject = peerData.cameraStream;
-            videoEl.play().catch(() => {});
-          }
-        }
-
-        // Sync Screen (if separate tile exists)
-        const screenVideoEl = remoteVideoRefs.current.get(`${remotePeerId}-screen`);
-        if (screenVideoEl && peerData.screenStream && peerData.screenStream.getVideoTracks().length > 0) {
-          if (screenVideoEl.srcObject !== peerData.screenStream) {
-            screenVideoEl.srcObject = peerData.screenStream;
-            screenVideoEl.play().catch(() => {});
-          }
-        }
-
-        // Audio
-        const audioEl = remoteAudioRefs.current.get(remotePeerId);
-        const audioStream = peerData.cameraStream || peerData.screenStream || peerData.remoteStream;
-        if (audioEl && audioStream && audioStream.getAudioTracks().length > 0) {
-          if (audioEl.srcObject !== audioStream) {
-            audioEl.srcObject = audioStream;
-            audioEl.play().catch(() => {});
-          }
-        }
-      });
-    };
-
-    if (isInitiator) {
-      pc.createOffer()
-        .then(offer => pc.setLocalDescription(offer))
-        .then(() => {
-          socket.emit("webrtc:offer", {
-            to: remotePeerId,
-            name: userName,
-            offer: pc.localDescription,
-          });
-        })
-        .catch(console.error);
-    }
-
-    return pc;
-  }, [userName]);
-
   const loadDbParticipants = useCallback(async () => {
     if (!meetingId || meetingId === "quick-huddle") return;
     try {
       const res = await fetch(`${API_BASE}/meetings/${meetingId}/participants?includeWaitingRoom=true`);
       if (res.ok) {
-        const data = await res.json();
-        setDbParticipants(data);
-        
-        // Also update waiting room participants specifically
-        setWaitingRoomParticipants(data.filter((p: any) => p.waitingRoom));
+        const text = await res.text();
+        if (!text) return;
+        try {
+          const data = JSON.parse(text);
+          setDbParticipants(data);
+          
+          // Also update waiting room participants specifically
+          setWaitingRoomParticipants(data.filter((p: any) => p.waitingRoom));
+        } catch (e) {
+          console.error("Invalid JSON response from DB participants:", text.slice(0, 100));
+        }
       } else if (res.status === 404) {
         console.warn("Meeting not found, skipping participant load");
       } else {
@@ -344,8 +250,14 @@ export default function MeetingRoom() {
     try {
       const res = await fetch(`${API_BASE}/meetings/${meetingId}/participants/waiting-room`);
       if (res.ok) {
-        const data = await res.json();
-        setWaitingRoomParticipants(data);
+        const text = await res.text();
+        if (!text) return;
+        try {
+          const data = JSON.parse(text);
+          setWaitingRoomParticipants(data);
+        } catch (e) {
+          console.error("Invalid JSON response from waiting room:", text.slice(0, 100));
+        }
       } else if (res.status === 404) {
         console.warn("Meeting not found, skipping waiting room load");
       } else {
@@ -437,24 +349,31 @@ export default function MeetingRoom() {
 
       if (meetingId && meetingId !== "quick-huddle") {
         try {
-          const res = await fetch(`${API_BASE}/meetings/${meetingId}`);
-      if (res.ok) {
-        const meeting = await res.json();
-        setMeetingTitle(meeting.title || "Zoom Meeting");
-        setIsHost(meeting.hostId === currentUser?.id);
+          const res = await fetch(`${API_BASE}/meetings/${meetingId}`, { headers: getAuthHeaders() });
+          if (res.ok) {
+            const text = await res.text();
+            if (text) {
+              try {
+                const meeting = JSON.parse(text);
+                setMeetingTitle(meeting.title || "Zoom Meeting");
+                setIsHost(meeting.hostId === currentUser?.id);
 
-        // Load waiting room participants + start polling if host
-        if (meeting.hostId === currentUser?.id && meeting.waitingRoom) {
-          loadWaitingRoom();
-          // Poll waiting room every 5 seconds
-          if (waitingRoomIntervalRef.current) {
-            clearInterval(waitingRoomIntervalRef.current);
+                // Load waiting room participants + start polling if host
+                if (meeting.hostId === currentUser?.id && meeting.waitingRoom) {
+                  loadWaitingRoom();
+                  // Poll waiting room every 5 seconds
+                  if (waitingRoomIntervalRef.current) {
+                    clearInterval(waitingRoomIntervalRef.current);
+                  }
+                  waitingRoomIntervalRef.current = window.setInterval(loadWaitingRoom, 5000);
+                }
+              } catch (e) {
+                console.error("Invalid JSON response from meeting details:", text.slice(0, 100));
+              }
+            }
           }
-          waitingRoomIntervalRef.current = window.setInterval(loadWaitingRoom, 5000);
-        }
+        } catch { }
       }
-    } catch { }
-  }
 
       await enumerateDevices();
 
@@ -624,9 +543,19 @@ export default function MeetingRoom() {
     const loadChatHistory = async () => {
       if (!meetingId || meetingId === "quick-huddle") return;
       try {
-        const meetingRes = await fetch(`${API_BASE}/meetings/${meetingId}`);
+        const meetingRes = await fetch(`${API_BASE}/meetings/${meetingId}`, { headers: getAuthHeaders() });
         if (!meetingRes.ok) return;
-        const meeting = await meetingRes.json();
+        const text = await meetingRes.text();
+        if (!text) return;
+        
+        let meeting;
+        try {
+          meeting = JSON.parse(text);
+        } catch (e) {
+          console.error("Invalid JSON response from meeting list:", text.slice(0, 100));
+          return;
+        }
+        
         setMeetingData(meeting);
         setIsLocked(!!meeting.isLocked);
         setIsHost(meeting.hostId === currentUser?.id);
@@ -634,16 +563,31 @@ export default function MeetingRoom() {
         if (!meeting.teamId) return;
 
         const channelName = `meeting-${meeting.meetingCode || meeting.id.slice(0, 8)}`;
-        const channelsRes = await fetch(`${API_BASE}/channels?teamId=${meeting.teamId}`);
+        const channelsRes = await fetch(`${API_BASE}/channels?teamId=${meeting.teamId}`, { headers: getAuthHeaders() });
         if (!channelsRes.ok) return;
-        const channels = await channelsRes.json();
+        
+        const channelsText = await channelsRes.text();
+        if (!channelsText) return;
+        
+        let channels;
+        try {
+          channels = JSON.parse(channelsText);
+        } catch(e) { return; }
+        
         const channel = channels.find((c: any) => c.name === channelName);
         if (!channel?.id) return;
 
         setMeetingChannelId(channel.id);
-        const messagesRes = await fetch(`${API_BASE}/channels/${channel.id}/messages?limit=50`);
+        const messagesRes = await fetch(`${API_BASE}/channels/${channel.id}/messages?limit=50`, { headers: getAuthHeaders() });
         if (!messagesRes.ok) return;
-        const msgs = await messagesRes.json();
+        
+        const msgsText = await messagesRes.text();
+        if (!msgsText) return;
+        
+        let msgs;
+        try {
+          msgs = JSON.parse(msgsText);
+        } catch(e) { return; }
 
         const mapped: ChatMessage[] = (msgs || []).map((m: any) => ({
           id: m.id,
@@ -666,49 +610,6 @@ export default function MeetingRoom() {
     };
 
     loadChatHistory();
-
-    const handleParticipants = (list: Participant[]) => {
-      const others = list.filter(p => p.peerId !== peerId.current);
-      // Only update if participants actually changed
-      setParticipants(prev => {
-        const prevIds = new Set(prev.map(p => p.peerId));
-        const newIds = new Set(others.map(p => p.peerId));
-        if (prevIds.size !== newIds.size || 
-            ![...prevIds].every(id => newIds.has(id)) ||
-            ![...newIds].every(id => prevIds.has(id))) {
-          return others;
-        }
-        return prev;
-      });
-      others.forEach(p => {
-        if (!peersRef.current.has(p.peerId)) {
-          const shouldInitiate = peerId.current > p.peerId;
-          createPeerConnection(p.peerId, shouldInitiate);
-        }
-      });
-    };
-
-    const handleJoined = (data: Participant) => {
-      if (data.peerId === peerId.current) return;
-      setParticipants(prev => {
-        if (prev.some(p => p.peerId === data.peerId)) return prev;
-        return [...prev, data];
-      });
-      if (!peersRef.current.has(data.peerId)) {
-        const shouldInitiate = peerId.current > data.peerId;
-        createPeerConnection(data.peerId, shouldInitiate);
-      }
-    };
-
-    const handleLeft = (data: { peerId: string }) => {
-      setParticipants(prev => prev.filter(p => p.peerId !== data.peerId));
-      const peer = peersRef.current.get(data.peerId);
-      if (peer) {
-        peer.connection.close();
-        peersRef.current.delete(data.peerId);
-      }
-      remoteVideoRefs.current.delete(data.peerId);
-    };
 
     const handleUpdate = (data: { peerId: string; name: string; state: ParticipantState }) => {
       setParticipants(prev => {
@@ -737,76 +638,34 @@ export default function MeetingRoom() {
       setChatMessages(prev => prev.some(m => m.id === msg.id) ? prev : [...prev, msg]);
     };
 
-    const handleOffer = async (data: { from: string; name: string; offer: RTCSessionDescriptionInit }) => {
-      if (data.from === peerId.current) return;
-      let peerData = peersRef.current.get(data.from);
-      if (!peerData) {
-        createPeerConnection(data.from, false);
-        peerData = peersRef.current.get(data.from);
-      }
-      if (!peerData) return;
-
-      const pc = peerData.connection;
-      try {
-        const offerCollision = data.offer.type === "offer" && (peerData.makingOffer || pc.signalingState !== "stable");
-        peerData.ignoreOffer = peerId.current < data.from && offerCollision;
-
-        if (peerData.ignoreOffer) {
-          console.log("⚠️ Ignoring offer to handle collision (impolite peer)");
-          return;
-        }
-
-        await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
-        if (data.offer.type === "offer") {
-          await pc.setLocalDescription();
-          socket.emit("webrtc:answer", { to: data.from, answer: pc.localDescription });
-        }
-
-        // Process queued ICE candidates
-        while (peerData.iceCandidatesQueue.length) {
-          const candidate = peerData.iceCandidatesQueue.shift();
-          if (candidate) await pc.addIceCandidate(new RTCIceCandidate(candidate));
-        }
-      } catch (e) {
-        console.error("Error handling offer:", e);
-      }
+    // Handle initial participant list from server
+    const handleParticipants = (list: Array<{ peerId: string; name: string; avatar?: string; state: ParticipantState }>) => {
+      setParticipants(list.map(p => ({
+        peerId: p.peerId,
+        name: p.name,
+        state: p.state,
+      })));
     };
 
-    const handleAnswer = async (data: { from: string; answer: RTCSessionDescriptionInit }) => {
-      const peerData = peersRef.current.get(data.from);
-      if (peerData) {
-        try {
-          await peerData.connection.setRemoteDescription(new RTCSessionDescription(data.answer));
-        } catch (e) {
-          console.error("Error setting answer:", e);
-        }
-      }
+    // Handle new participant joining
+    const handleJoined = (data: { peerId: string; name: string; avatar?: string; state: ParticipantState }) => {
+      setParticipants(prev => {
+        if (prev.some(p => p.peerId === data.peerId)) return prev;
+        return [...prev, { peerId: data.peerId, name: data.name, state: data.state }];
+      });
     };
 
-    const handleIceCandidate = async (data: { from: string; candidate: RTCIceCandidateInit }) => {
-      const peerData = peersRef.current.get(data.from);
-      if (!peerData) return;
-
-      try {
-        if (peerData.connection.remoteDescription) {
-          await peerData.connection.addIceCandidate(new RTCIceCandidate(data.candidate));
-        } else {
-          peerData.iceCandidatesQueue.push(data.candidate);
-        }
-      } catch (e) {
-        console.error("Error adding ICE candidate:", e);
-      }
+    // Handle participant leaving
+    const handleLeft = (data: { peerId: string }) => {
+      setParticipants(prev => prev.filter(p => p.peerId !== data.peerId));
     };
 
-    socket.on("meeting:participants", handleParticipants);
-    socket.on("meeting:participant:joined", handleJoined);
-    socket.on("meeting:participant:left", handleLeft);
     socket.on("meeting:participant:update", handleUpdate);
     socket.on("meeting:participant:speaking", handleSpeaking);
     socket.on("meeting:chat:message", handleChat);
-    socket.on("webrtc:offer", handleOffer);
-    socket.on("webrtc:answer", handleAnswer);
-    socket.on("webrtc:ice-candidate", handleIceCandidate);
+    socket.on("meeting:participants", handleParticipants);
+    socket.on("meeting:participant:joined", handleJoined);
+    socket.on("meeting:participant:left", handleLeft);
 
     return () => {
       // Record leave time in database if it's a real meeting (not quick-huddle)
@@ -819,17 +678,14 @@ export default function MeetingRoom() {
       }
       
       socket.emit("meeting:leave", { meetingId: meetingCode, peerId: peerId.current });
-      socket.off("meeting:participants", handleParticipants);
-      socket.off("meeting:participant:joined", handleJoined);
-      socket.off("meeting:participant:left", handleLeft);
       socket.off("meeting:participant:update", handleUpdate);
       socket.off("meeting:participant:speaking", handleSpeaking);
       socket.off("meeting:chat:message", handleChat);
-      socket.off("webrtc:offer", handleOffer);
-      socket.off("webrtc:answer", handleAnswer);
-      socket.off("webrtc:ice-candidate", handleIceCandidate);
+      socket.off("meeting:participants", handleParticipants);
+      socket.off("meeting:participant:joined", handleJoined);
+      socket.off("meeting:participant:left", handleLeft);
     };
-  }, [loading, meetingCode, createPeerConnection]);
+  }, [loading, meetingCode]);
 
   useEffect(() => {
     if (loading) return;
@@ -1255,7 +1111,7 @@ export default function MeetingRoom() {
       try {
         await fetch(`${API_BASE}/meetings/${meetingId}/end`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...getAuthHeaders() },
           body: JSON.stringify({}),
         });
       } catch (e) {
@@ -1266,7 +1122,7 @@ export default function MeetingRoom() {
       socketRef.current.emit("meeting:leave", { meetingId: meetingCode, peerId: peerId.current });
       peersRef.current.forEach((p) => p.connection.close());
       localStreamRef.current?.getTracks().forEach((t) => t.stop());
-      navigate(`/meeting-summary/${meetingId}`);
+      navigate("/meetings");
     } finally {
       setEndingMeeting(false);
     }
@@ -1318,6 +1174,7 @@ export default function MeetingRoom() {
     try {
       const res = await fetch(`${API_BASE}/meetings/${meetingId}/${action}`, {
         method: "POST",
+        headers: getAuthHeaders(),
       });
       if (res.ok) {
         setIsLocked(!isLocked);
@@ -2228,5 +2085,54 @@ export default function MeetingRoom() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+export default function MeetingRoom() {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const user = auth.getUser();
+  const [token, setToken] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [title, setTitle] = useState("Meeting");
+
+  useEffect(() => {
+    async function getToken() {
+      try {
+        const res = await apiGet<any>(`/meetings/${id || "quick-huddle"}/livekit-token`);
+        const fetchedToken = res?.data?.token || res?.token;
+        if (fetchedToken) {
+          setToken(fetchedToken);
+        } else {
+          setError("Could not fetch token.");
+        }
+      } catch (e: any) {
+        setError(e?.message || "Unknown error");
+      } finally {
+        setLoading(false);
+      }
+    }
+    getToken();
+  }, [id]);
+
+  if (loading) return <div className="h-screen bg-[#0a0a0a] flex items-center justify-center text-white">Loading meeting info...</div>;
+  if (error || !token) return <div className="h-screen bg-[#0a0a0a] flex flex-col items-center justify-center text-white"><p className="text-red-500 mb-4">{error || "Could not connect."}</p><Button onClick={() => navigate("/")}>Go Back</Button></div>;
+
+  return (
+    <LiveKitRoom
+      video={false}
+      audio={false}
+      token={token}
+      serverUrl={
+        import.meta.env.VITE_LIVEKIT_URL === "ws://localhost:7880" && !window.location.hostname.includes("localhost") && !window.location.hostname.includes("127.0.0.1")
+          ? `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}`
+          : (import.meta.env.VITE_LIVEKIT_URL || "ws://localhost:7880")
+      }
+      connect={true}
+    >
+      <MeetingRoomUI meetingId={id} meetingTitle={title} />
+      <RoomAudioRenderer />
+    </LiveKitRoom>
   );
 }

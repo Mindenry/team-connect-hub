@@ -14,6 +14,8 @@ export interface AuthUser {
   status?: string;   // online, busy, away, offline, dnd, etc.
   activity?: string; // e.g. "Available", "In a meeting", "Focusing"
   role?: string;
+  organizationId?: string;
+  avatar?: string;   // Avatar image URL
 }
 
 export const auth = {
@@ -97,21 +99,80 @@ export const useAuth = () => {
   const [user, setUser] = useState<AuthUser | null>(auth.getUser());
 
   useEffect(() => {
+    // Fetch fresh user profile from API/database on mount
+    const fetchUserProfile = async () => {
+      const cachedUser = auth.getUser();
+      if (!cachedUser?.id) return;
+
+      try {
+        const headers = await auth.getAuthHeaders();
+        if (!headers || !('Authorization' in headers)) return;
+
+        const res = await fetch(`${API_BASE}/api/users/${cachedUser.id}`, {
+          headers,
+        });
+
+        if (!res.ok) return;
+
+        // Check content-type before parsing to avoid HTML error pages
+        const contentType = res.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) return;
+
+        const responseData = await res.json();
+        // Handle TransformInterceptor wrapper
+        const profileData = responseData?.data || responseData;
+
+        if (profileData && profileData.id) {
+          // Resolve relative avatar URL to full URL
+          let avatarUrl = profileData.avatar || undefined;
+          if (avatarUrl && avatarUrl.startsWith("/")) {
+            avatarUrl = `${API_BASE}${avatarUrl}`;
+          }
+
+          const updatedUser: AuthUser = {
+            ...cachedUser,
+            name: profileData.name || cachedUser.name,
+            avatar: avatarUrl,
+            status: profileData.status || cachedUser.status,
+            role: profileData.role || cachedUser.role,
+            organizationId: profileData.organizationId || cachedUser.organizationId,
+          };
+
+          // Update localStorage cache and state
+          auth.setUser(updatedUser);
+          setUser(updatedUser);
+        }
+      } catch {
+        // Silently fail — use cached data
+      }
+    };
+
+    fetchUserProfile();
+  }, []);
+
+  useEffect(() => {
     const handleStorageChange = () => {
       setUser(auth.getUser());
     };
 
     const handleUserStatusUpdate = () => {
-      // Refresh user from localStorage when status is updated
-      setUser(auth.getUser());
+      const updatedUser = auth.getUser();
+      setUser(updatedUser);
+    };
+
+    const handleCustomStorage = () => {
+      const updatedUser = auth.getUser();
+      setUser(updatedUser);
     };
 
     window.addEventListener("storage", handleStorageChange);
     window.addEventListener("userStatusUpdated", handleUserStatusUpdate);
+    window.addEventListener("authUpdated", handleCustomStorage);
     
     return () => {
       window.removeEventListener("storage", handleStorageChange);
       window.removeEventListener("userStatusUpdated", handleUserStatusUpdate);
+      window.removeEventListener("authUpdated", handleCustomStorage);
     };
   }, []);
 

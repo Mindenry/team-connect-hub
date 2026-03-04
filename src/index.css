@@ -324,6 +324,7 @@
 
   /* Touch-friendly sizes - ensure interactive elements are at least 44x44px on mobile */
   @media (max-width: 768px) {
+
     button:not(.no-touch-size),
     a:not(.no-touch-size),
     [role="button"]:not(.no-touch-size) {

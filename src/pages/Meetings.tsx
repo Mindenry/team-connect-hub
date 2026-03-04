@@ -21,17 +21,24 @@ import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import CreateMeetingDialog from "@/components/dialogs/CreateMeetingDialog";
+import JoinMeetingByCodeDialog from "@/components/dialogs/JoinMeetingByCodeDialog";
 import { getSocket } from "@/lib/websocket";
 import { auth } from "@/lib/auth";
 import { apiGet, apiPost } from "@/lib/api";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+
+interface MeetingHost {
+  name: string;
+  initials: string;
+  avatar?: string | null;
+}
 
 interface Meeting {
   id: string;
@@ -41,7 +48,7 @@ interface Meeting {
   duration: string;
   team: string;
   teamId?: string;
-  host: { name: string; initials: string };
+  host: MeetingHost;
   participants: number;
   status: "upcoming" | "ended";
   hasWaitingRoom: boolean;
@@ -71,6 +78,16 @@ function mapMeeting(m: any): Meeting {
   // Check if meeting has ended (either status is "ended" or endTime has passed)
   const isPast = end.getTime() < now.getTime();
   const status = m.status === "ended" || isPast ? "ended" : "upcoming";
+
+  const hostName: string = m.host?.name ?? "Host";
+  const hostAvatar: string | null | undefined = m.host?.avatar ?? null;
+  const hostInitials =
+    hostName
+      .split(" ")
+      .map((p: string) => p[0])
+      .join("")
+      .toUpperCase() || "H";
+
   return {
     id: m.id,
     title: m.title,
@@ -80,8 +97,9 @@ function mapMeeting(m: any): Meeting {
     team: m.team?.name ?? "Personal",
     teamId: m.teamId ?? undefined,
     host: {
-      name: m.host?.name ?? "Host",
-      initials: m.host?.name?.split(" ").map((p: string) => p[0]).join("").toUpperCase() ?? "H",
+      name: hostName,
+      initials: hostInitials,
+      avatar: hostAvatar,
     },
     participants: m.participants?.length ?? 0,
     status,
@@ -187,6 +205,7 @@ function MeetingCardGrid({
             <div className="flex items-center justify-between pt-3 border-t border-border/40">
               <div className="flex items-center gap-2">
                 <Avatar className="h-6 w-6 border border-border/50">
+                  <AvatarImage src={(meeting.host as any).avatar} alt={meeting.host.name || "Avatar"} />
                   <AvatarFallback className="text-[10px] font-semibold bg-muted">
                     {meeting.host.initials}
                   </AvatarFallback>
@@ -197,16 +216,13 @@ function MeetingCardGrid({
               </div>
               {isEnded ? (
                 <div className="flex gap-1">
-                <Link to={`/meeting-summary/${meeting.id}`} onClick={(e) => e.stopPropagation()}>
                   <Button
                     size="sm"
                     variant="ghost"
-                    className="h-8 px-3 text-xs font-medium text-muted-foreground hover:text-foreground"
+                    className="h-8 px-3 text-xs font-medium text-muted-foreground cursor-default"
                   >
-                    View
-                    <ArrowRight className="w-3.5 h-3.5 ml-1" />
+                    Ended
                   </Button>
-                </Link>
                 </div>
               ) : (
                 <Button
@@ -319,6 +335,7 @@ function MeetingCardList({
             <div className="flex items-center gap-3 shrink-0">
               <div className="flex items-center gap-2">
                 <Avatar className="h-6 w-6 border border-border/50">
+                  <AvatarImage src={(meeting.host as any).avatar} alt={meeting.host.name || "Avatar"} />
                   <AvatarFallback className="text-[10px] font-semibold bg-muted">
                     {meeting.host.initials}
                   </AvatarFallback>
@@ -327,12 +344,9 @@ function MeetingCardList({
               </div>
               {isEnded ? (
                 <div className="flex gap-1">
-                <Link to={`/meeting-summary/${meeting.id}`} onClick={(e) => e.stopPropagation()}>
-                  <Button size="sm" variant="ghost" className="h-8 px-3 text-xs">
-                    View
-                    <ArrowRight className="w-3.5 h-3.5 ml-1" />
+                  <Button size="sm" variant="ghost" className="h-8 px-3 text-xs cursor-default">
+                    Ended
                   </Button>
-                </Link>
                 </div>
               ) : (
                 <Button
@@ -395,6 +409,7 @@ function ActiveRoomCard({ room, index }: { room: ActiveRoom; index: number }) {
                 <div className="flex -space-x-2">
                   {room.participants.slice(0, 4).map((p, i) => (
                     <Avatar key={p.peerId || i} className="h-5 w-5 border-2 border-background">
+                      <AvatarImage src={(p as any).avatar} alt={p.name || "Avatar"} />
                       <AvatarFallback className="text-[8px] font-semibold bg-muted">
                         {p.name.charAt(0).toUpperCase()}
                       </AvatarFallback>
@@ -431,6 +446,7 @@ export default function Meetings() {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
   const [showCreateMeeting, setShowCreateMeeting] = useState(false);
+  const [showJoinByCode, setShowJoinByCode] = useState(false);
   const [showFilter, setShowFilter] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [filterTeam, setFilterTeam] = useState<string>("all");
@@ -486,7 +502,7 @@ export default function Meetings() {
     socket.emit("rooms:get-active");
     const onActiveRooms = (rooms: ActiveRoom[]) => setActiveRooms(rooms || []);
     socket.on("rooms:active", onActiveRooms);
-    return () => socket.off("rooms:active", onActiveRooms);
+    return () => { socket.off("rooms:active", onActiveRooms); };
   }, []);
 
   const activeRoomIds = useMemo(() => new Set(activeRooms.map((r) => r.roomId)), [activeRooms]);
@@ -516,6 +532,24 @@ export default function Meetings() {
     return [...live, ...upcoming, ...past];
   }, [tabFilter, live, upcoming, past]);
 
+  const stats = useMemo(() => {
+    const today = new Date();
+    const isSameDay = (d: Date) =>
+      d.getFullYear() === today.getFullYear() &&
+      d.getMonth() === today.getMonth() &&
+      d.getDate() === today.getDate();
+
+    const todayCount = filteredMeetings.filter((m) => isSameDay(m.startTime)).length;
+
+    return {
+      total: filteredMeetings.length,
+      live: live.length,
+      upcoming: upcoming.length,
+      past: past.length,
+      today: todayCount,
+    };
+  }, [filteredMeetings, live, upcoming, past]);
+
   const hasActiveFilters = filterStatus !== "all" || filterTeam !== "all";
 
   const MeetingCard = viewMode === "grid" ? MeetingCardGrid : MeetingCardList;
@@ -524,6 +558,7 @@ export default function Meetings() {
     <TooltipProvider>
       <div className="flex flex-col h-screen bg-gradient-to-br from-background via-background to-muted/20">
         <CreateMeetingDialog open={showCreateMeeting} onOpenChange={setShowCreateMeeting} />
+        <JoinMeetingByCodeDialog open={showJoinByCode} onOpenChange={setShowJoinByCode} />
 
         {/* Filter Dialog */}
         <Dialog open={showFilter} onOpenChange={setShowFilter}>
@@ -571,50 +606,117 @@ export default function Meetings() {
           </DialogContent>
         </Dialog>
 
-        {/* Header - SharedDrive style */}
+        {/* Header */}
         <div className="border-b border-border/50 bg-background/95 backdrop-blur-xl supports-[backdrop-filter]:bg-background/80">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="h-16 sm:h-20 flex items-center justify-between gap-3 sm:gap-6">
-              <div className="flex items-center gap-3 sm:gap-4 min-w-0 flex-1">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-5 space-y-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center gap-3 sm:gap-4 min-w-0">
                 <div className="relative shrink-0">
-                  <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-gradient-to-br from-primary/20 via-primary/10 to-primary/5 flex items-center justify-center shadow-lg shadow-primary/5 ring-1 ring-primary/10">
+                  <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-gradient-to-br from-primary/25 via-primary/10 to-primary/5 flex items-center justify-center shadow-lg shadow-primary/10 ring-1 ring-primary/20">
                     <Video className="w-5 h-5 sm:w-6 sm:h-6 text-primary" />
                   </div>
                   {activeRooms.length > 0 && (
-                    <div className="absolute -top-0.5 -right-0.5 w-3 h-3 sm:w-4 sm:h-4 bg-emerald-500 rounded-full border-2 border-background animate-pulse" />
+                    <div className="absolute -top-0.5 -right-0.5 w-3 h-3 sm:w-3.5 sm:h-3.5 bg-emerald-500 rounded-full border-2 border-background animate-pulse" />
                   )}
                 </div>
-                <div className="min-w-0 flex-1">
-                  <h1 className="text-lg sm:text-xl font-bold text-foreground tracking-tight">Meetings</h1>
-                  <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5 truncate">
-                    จัดการการประชุม · เข้าร่วม · วางแผน · ทำงานร่วมกัน
+                <div className="min-w-0">
+                  <h1 className="text-xl sm:text-2xl font-semibold sm:font-bold text-foreground tracking-tight">
+                    Meetings
+                  </h1>
+                  <p className="text-[11px] sm:text-xs text-muted-foreground mt-0.5 truncate">
+                    ศูนย์กลางสำหรับดูภาพรวมการประชุมวันนี้ · สร้าง · เข้าร่วม · ทำงานร่วมกันแบบเรียลไทม์
                   </p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+              <div className="flex items-center gap-1.5 sm:gap-2 self-stretch sm:self-auto justify-end">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 sm:h-9 px-2.5 text-[11px] sm:text-xs text-muted-foreground hover:text-foreground"
+                  onClick={() => setShowJoinByCode(true)}
+                >
+                  <Grid3x3 className="w-3.5 h-3.5 mr-1" />
+                  Join by code
+                </Button>
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button
                       variant="outline"
                       size="sm"
-                      className="h-8 gap-1 px-2.5 text-xs border-border/60 bg-background/50 hover:bg-background"
+                      className="h-8 sm:h-9 gap-1.5 px-2.5 text-[11px] sm:text-xs border-border/60 bg-background/50 hover:bg-background"
                       onClick={() => navigate("/meeting-lobby/quick-huddle")}
                     >
-                      <Zap className="w-3 h-3 text-amber-600 dark:text-amber-400 shrink-0" />
-                      <span className="hidden lg:inline">Quick Huddle</span>
+                      <Zap className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                      <span className="hidden sm:inline">Quick Huddle</span>
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>เริ่มประชุมด่วนทันที</TooltipContent>
                 </Tooltip>
                 <Button
                   size="sm"
-                  className="h-8 gap-1 px-2.5 text-xs font-medium shrink-0"
+                  className="h-8 sm:h-9 gap-1.5 px-2.5 text-[11px] sm:text-xs font-medium shrink-0"
                   onClick={() => setShowCreateMeeting(true)}
                 >
-                  <Plus className="w-3 h-3 shrink-0" />
-                  <span className="hidden lg:inline">New Meeting</span>
+                  <Plus className="w-3.5 h-3.5 shrink-0" />
+                  <span className="hidden sm:inline">New Meeting</span>
                 </Button>
+              </div>
+            </div>
+
+            {/* Overview stats */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-2.5 sm:gap-3">
+              <div className="rounded-xl border border-border/60 bg-card/60 px-3 py-2.5 flex flex-col justify-between">
+                <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+                  ทั้งหมด
+                </span>
+                <div className="flex items-baseline gap-1 mt-1.5">
+                  <span className="text-lg sm:text-xl font-semibold tabular-nums">{stats.total}</span>
+                  <span className="text-[10px] text-muted-foreground">meetings</span>
+                </div>
+              </div>
+              <div
+                className={cn(
+                  "rounded-xl border px-3 py-2.5 flex flex-col justify-between",
+                  stats.live > 0
+                    ? "border-emerald-500/60 bg-emerald-500/5"
+                    : "border-border/60 bg-card/60"
+                )}
+              >
+                <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+                  Live ตอนนี้
+                </span>
+                <div className="flex items-baseline gap-1 mt-1.5">
+                  <span className="text-lg sm:text-xl font-semibold tabular-nums">{stats.live}</span>
+                  <span className="text-[10px] text-muted-foreground">rooms</span>
+                </div>
+              </div>
+              <div className="rounded-xl border border-border/60 bg-card/60 px-3 py-2.5 flex flex-col justify-between">
+                <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+                  วันนี้
+                </span>
+                <div className="flex items-baseline gap-1 mt-1.5">
+                  <span className="text-lg sm:text-xl font-semibold tabular-nums">{stats.today}</span>
+                  <span className="text-[10px] text-muted-foreground">meetings</span>
+                </div>
+              </div>
+              <div className="rounded-xl border border-border/60 bg-card/60 px-3 py-2.5 flex flex-col justify-between">
+                <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+                  กำลังจะถึง
+                </span>
+                <div className="flex items-baseline gap-1 mt-1.5">
+                  <span className="text-lg sm:text-xl font-semibold tabular-nums">{stats.upcoming}</span>
+                  <span className="text-[10px] text-muted-foreground">upcoming</span>
+                </div>
+              </div>
+              <div className="hidden lg:flex rounded-xl border border-border/60 bg-card/60 px-3 py-2.5 flex-col justify-between">
+                <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+                  ที่ผ่านมาแล้ว
+                </span>
+                <div className="flex items-baseline gap-1 mt-1.5">
+                  <span className="text-lg sm:text-xl font-semibold tabular-nums">{stats.past}</span>
+                  <span className="text-[10px] text-muted-foreground">ended</span>
+                </div>
               </div>
             </div>
           </div>

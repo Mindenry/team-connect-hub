@@ -42,6 +42,11 @@ class NotificationsSocket {
       this.emit("unread-count", data.count);
     });
 
+    this.socket.on("auth_error", (error: any) => {
+      console.warn("Notifications socket auth_error, disconnecting to stop spam:", error);
+      this.disconnect();
+    });
+
     this.socket.on("connect_error", (error) => {
       console.error("Notifications socket connection error:", error);
     });

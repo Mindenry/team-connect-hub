@@ -1,12 +1,13 @@
 import { useState, useEffect } from "react";
 import { AnimatePresence } from "framer-motion";
 import {
-  CheckSquare, Calendar, User, Tag, Flag, Link as LinkIcon, Target, Zap, X,
+  CheckSquare, Calendar, User, Tag, Flag, Link as LinkIcon, Target, Zap, X, Package, Layers, AlertCircle, FileText, Clock, Plus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   AnimatedDialog as Dialog,
@@ -19,72 +20,225 @@ import {
 import { apiGet, apiPost } from "@/lib/api";
 import { auth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
+import CreateProjectDialog from "./CreateProjectDialog";
+import CreateEpicDialog from "./CreateEpicDialog";
+import CreateComponentDialog from "./CreateComponentDialog";
+import CreateVersionDialog from "./CreateVersionDialog";
 
-interface CreateTaskDialogProps { open: boolean; onOpenChange: (open: boolean) => void; }
+interface CreateTaskDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  initialTitle?: string;
+  initialDescription?: string;
+  initialTeamId?: string;
+  initialMeetingId?: string;
+  defaultTags?: string[];
+  onCreated?: (task: any) => void;
+}
 
-const tagOptions = ["frontend", "backend", "design", "bug", "feature", "docs", "testing", "devops", "ux", "mobile"];
+const tagOptions = ["frontend", "backend", "design", "bug", "feature", "docs", "testing", "devops", "ux", "mobile", "from-chat", "from-meeting"];
 
-export default function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialogProps) {
+export default function CreateTaskDialog({
+  open,
+  onOpenChange,
+  initialTitle,
+  initialDescription,
+  initialTeamId,
+  initialMeetingId,
+  defaultTags,
+  onCreated,
+}: CreateTaskDialogProps) {
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [title, setTitle] = useState("");
   const [taskDescription, setTaskDescription] = useState("");
   const [assigneeId, setAssigneeId] = useState("");
+  const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
   const [priority, setPriority] = useState("medium");
   const [dueDate, setDueDate] = useState("");
+  const [isRecurring, setIsRecurring] = useState(false);
+  const [recurringPattern, setRecurringPattern] = useState("weekly");
+  const [recurringInterval, setRecurringInterval] = useState("1");
+  const [recurringEndDate, setRecurringEndDate] = useState("");
+  const [templateId, setTemplateId] = useState("");
   const [teamId, setTeamId] = useState("");
   const [meetingId, setMeetingId] = useState("");
   const [sprintId, setSprintId] = useState("");
   const [epicId, setEpicId] = useState("");
+  const [projectId, setProjectId] = useState("");
+  const [issueType, setIssueType] = useState("task");
+  const [componentId, setComponentId] = useState("");
+  const [versionId, setVersionId] = useState("");
   const [storyPoints, setStoryPoints] = useState("");
+  const [estimate, setEstimate] = useState("");
   const [users, setUsers] = useState<any[]>([]);
   const [teams, setTeams] = useState<any[]>([]);
   const [meetings, setMeetings] = useState<any[]>([]);
   const [sprints, setSprints] = useState<any[]>([]);
   const [epics, setEpics] = useState<any[]>([]);
+  const [projects, setProjects] = useState<any[]>([]);
+  const [components, setComponents] = useState<any[]>([]);
+  const [versions, setVersions] = useState<any[]>([]);
+  const [templates, setTemplates] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  // Quick create dialogs
+  const [showCreateProject, setShowCreateProject] = useState(false);
+  const [showCreateEpic, setShowCreateEpic] = useState(false);
+  const [showCreateComponent, setShowCreateComponent] = useState(false);
+  const [showCreateVersion, setShowCreateVersion] = useState(false);
 
   const toggleTag = (tag: string) => setSelectedTags((prev) => prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]);
+
+  const toggleAssignee = (userId: string) => {
+    setAssigneeIds((prev) =>
+      prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId]
+    );
+  };
 
   const resetForm = () => {
     setTitle("");
     setTaskDescription("");
     setAssigneeId("");
+    setAssigneeIds([]);
     setDueDate("");
+    setIsRecurring(false);
+    setRecurringPattern("weekly");
+    setRecurringInterval("1");
+    setRecurringEndDate("");
+    setTemplateId("");
     setTeamId("");
     setMeetingId("");
     setSprintId("");
     setEpicId("");
+    setProjectId("");
+    setIssueType("task");
+    setComponentId("");
+    setVersionId("");
     setStoryPoints("");
+    setEstimate("");
     setSelectedTags([]);
     setError(null);
   };
 
-  useEffect(() => {
-    if (open) {
-      Promise.all([
+  const loadData = async (teamIdForLoad?: string) => {
+    try {
+      const effectiveTeamId = teamIdForLoad ?? teamId;
+      const teamFilter = effectiveTeamId && effectiveTeamId !== "none" ? `?teamId=${effectiveTeamId}` : "";
+      const [
+        usersData,
+        teamsData,
+        meetingsData,
+        sprintsData,
+        epicsData,
+        projectsData,
+        componentsData,
+        versionsData,
+        templatesData,
+      ] = await Promise.all([
         apiGet<any[]>("/users").catch(() => []),
         apiGet<any[]>("/teams").catch(() => []),
         apiGet<any[]>("/meetings").catch(() => []),
-        apiGet<any[]>("/sprints").catch(() => []),
-        apiGet<any[]>("/epics").catch(() => []),
-      ]).then(([usersData, teamsData, meetingsData, sprintsData, epicsData]) => {
-        setUsers(Array.isArray(usersData) ? usersData : []);
-        setTeams(Array.isArray(teamsData) ? teamsData : []);
-        setMeetings(Array.isArray(meetingsData) ? meetingsData : []);
-        setSprints(Array.isArray(sprintsData) ? sprintsData : []);
-        setEpics(Array.isArray(epicsData) ? epicsData : []);
-      }).catch(() => {
-        setUsers([]);
-        setTeams([]);
-        setMeetings([]);
-        setSprints([]);
-        setEpics([]);
-      });
+        apiGet<any[]>(`/sprints${teamFilter}`).catch(() => []),
+        apiGet<any[]>(`/epics${teamFilter}`).catch(() => []),
+        apiGet<any[]>(`/projects${teamFilter}`).catch(() => []),
+        apiGet<any[]>(`/components${teamFilter}`).catch(() => []),
+        apiGet<any[]>(`/versions${teamFilter}`).catch(() => []),
+        apiGet<any[]>(`/tasks/templates${teamFilter}`).catch(() => []),
+      ]);
+
+      setUsers(
+        Array.isArray(usersData)
+          ? usersData.filter(
+              (u: any) =>
+                u?.role !== "system" &&
+                !String(u?.name || "").toLowerCase().includes("standup bot") &&
+                !String(u?.email || "").toLowerCase().includes("standup-bot@")
+            )
+          : []
+      );
+      setTeams(Array.isArray(teamsData) ? teamsData : []);
+      setMeetings(Array.isArray(meetingsData) ? meetingsData : []);
+      setSprints(Array.isArray(sprintsData) ? sprintsData : []);
+      setEpics(Array.isArray(epicsData) ? epicsData : []);
+      setProjects(Array.isArray(projectsData) ? projectsData : []);
+      setComponents(Array.isArray(componentsData) ? componentsData : []);
+      setVersions(Array.isArray(versionsData) ? versionsData : []);
+      setTemplates(Array.isArray(templatesData) ? templatesData : []);
+    } catch {
+      setUsers([]);
+      setTeams([]);
+      setMeetings([]);
+      setSprints([]);
+      setEpics([]);
+      setProjects([]);
+      setComponents([]);
+      setVersions([]);
+      setTemplates([]);
+    }
+  };
+
+  useEffect(() => {
+    if (open) {
+      // Apply initial values when dialog opens
+      setTitle(initialTitle || "");
+      setTaskDescription(initialDescription || "");
+      setTeamId(initialTeamId || "");
+      setMeetingId(initialMeetingId || "");
+      setSelectedTags(defaultTags && defaultTags.length > 0 ? defaultTags : []);
+      loadData(initialTeamId);
     } else {
       resetForm();
     }
-  }, [open]);
+  }, [open, initialTitle, initialDescription, initialTeamId, initialMeetingId, defaultTags]);
+
+  // Reload dependent data when team changes
+  useEffect(() => {
+    if (open && teamId) {
+      const teamFilter = teamId !== "none" ? `?teamId=${teamId}` : "";
+      Promise.all([
+        apiGet<any[]>(`/sprints${teamFilter}`).catch(() => []),
+        apiGet<any[]>(`/epics${teamFilter}`).catch(() => []),
+        apiGet<any[]>(`/projects${teamFilter}`).catch(() => []),
+        apiGet<any[]>(`/components${teamFilter}`).catch(() => []),
+        apiGet<any[]>(`/versions${teamFilter}`).catch(() => []),
+        apiGet<any[]>(`/tasks/templates${teamFilter}`).catch(() => []),
+      ]).then(([sprintsData, epicsData, projectsData, componentsData, versionsData, templatesData]) => {
+        setSprints(Array.isArray(sprintsData) ? sprintsData : []);
+        setEpics(Array.isArray(epicsData) ? epicsData : []);
+        setProjects(Array.isArray(projectsData) ? projectsData : []);
+        setComponents(Array.isArray(componentsData) ? componentsData : []);
+        setVersions(Array.isArray(versionsData) ? versionsData : []);
+        setTemplates(Array.isArray(templatesData) ? templatesData : []);
+        // Reset dependent fields when team changes
+        if (teamId === "none") {
+          setSprintId("");
+          setEpicId("");
+          setProjectId("");
+          setComponentId("");
+          setVersionId("");
+        }
+      });
+    }
+  }, [open, teamId]);
+
+  // Auto-fill form when a template is selected
+  useEffect(() => {
+    if (templateId && templateId !== "none") {
+      const template = templates.find((t) => t.id === templateId);
+      if (template) {
+        if (template.title) setTitle(template.title);
+        if (template.content) setTaskDescription(template.content);
+        if (template.priority) setPriority(template.priority);
+        if (template.issueType) setIssueType(template.issueType);
+        if (template.storyPoints != null) setStoryPoints(String(template.storyPoints));
+        if (template.estimate != null) setEstimate(String(template.estimate));
+        if (template.tags && template.tags.length > 0) {
+          setSelectedTags((prev) => Array.from(new Set([...prev, ...template.tags])));
+        }
+      }
+    }
+  }, [templateId, templates]);
 
   const handleSubmit = async () => {
     if (!title.trim()) {
@@ -97,25 +251,44 @@ export default function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialo
       const currentUser = auth.getUser();
       if (!currentUser) throw new Error("Not authenticated");
       
-      await apiPost("/tasks", {
+      const selectedMultipleAssignees = assigneeIds.filter((id) => id && id !== "none");
+      const primaryAssignee = assigneeId && assigneeId !== "none" ? assigneeId : selectedMultipleAssignees[0] || null;
+
+      const created = await apiPost("/tasks", {
         title,
         description: taskDescription || null,
         priority,
+        issueType: issueType || "task",
         status: "todo",
         dueDate: dueDate ? new Date(dueDate).toISOString() : null,
         tags: selectedTags,
-        assigneeId: assigneeId && assigneeId !== "none" ? assigneeId : null,
+        assigneeId: primaryAssignee,
+        assigneeIds: selectedMultipleAssignees,
+        isRecurring,
+        recurringPattern: isRecurring ? recurringPattern : null,
+        recurringInterval: isRecurring ? parseInt(recurringInterval || "1") : null,
+        recurringEndDate: isRecurring && recurringEndDate ? new Date(recurringEndDate).toISOString() : null,
+        templateId: templateId && templateId !== "none" ? templateId : null,
         teamId: teamId && teamId !== "none" ? teamId : null,
         meetingId: meetingId && meetingId !== "none" ? meetingId : null,
         sprintId: sprintId && sprintId !== "none" ? sprintId : null,
         epicId: epicId && epicId !== "none" ? epicId : null,
+        projectId: projectId && projectId !== "none" ? projectId : null,
+        componentId: componentId && componentId !== "none" ? componentId : null,
+        versionId: versionId && versionId !== "none" ? versionId : null,
         storyPoints: storyPoints ? parseInt(storyPoints) : null,
+        estimate: estimate ? parseFloat(estimate) : null,
         createdBy: currentUser.id,
       });
 
       onOpenChange(false);
       resetForm();
-      window.location.reload();
+      if (onCreated && created) {
+        onCreated(created);
+      } else {
+        // Fallback: keep legacy behaviour when no handler is provided
+        window.location.reload();
+      }
     } catch (err: any) {
       setError(err.message ?? "Failed to create task");
     } finally {
@@ -124,10 +297,56 @@ export default function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialo
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <AnimatePresence>
-        {open && (
-          <DialogContent className="max-w-[420px] p-0 gap-0">
+    <>
+      <CreateProjectDialog
+        open={showCreateProject}
+        onOpenChange={setShowCreateProject}
+        onProjectCreated={(project) => {
+          setProjects((prev) => {
+            if (prev.some((p) => p.id === project.id)) return prev;
+            return [...prev, project];
+          });
+          setProjectId(project.id);
+        }}
+      />
+      <CreateEpicDialog
+        open={showCreateEpic}
+        onOpenChange={setShowCreateEpic}
+        onEpicCreated={(epic) => {
+          setEpics((prev) => {
+            if (prev.some((e) => e.id === epic.id)) return prev;
+            return [...prev, epic];
+          });
+          setEpicId(epic.id);
+        }}
+      />
+      <CreateComponentDialog
+        open={showCreateComponent}
+        onOpenChange={setShowCreateComponent}
+        onComponentCreated={(component) => {
+          setComponents((prev) => {
+            if (prev.some((c) => c.id === component.id)) return prev;
+            return [...prev, component];
+          });
+          setComponentId(component.id);
+        }}
+      />
+      <CreateVersionDialog
+        open={showCreateVersion}
+        onOpenChange={setShowCreateVersion}
+        onVersionCreated={(version) => {
+          setVersions((prev) => {
+            if (prev.some((v) => v.id === version.id)) return prev;
+            return [...prev, version];
+          });
+          setVersionId(version.id);
+        }}
+        defaultTeamId={teamId && teamId !== "none" ? teamId : undefined}
+      />
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <AnimatePresence>
+          {open && (
+            <DialogContent className="max-w-[600px] p-0 gap-0">
             {/* Compact Header */}
             <DialogHeader className="px-5 pt-5 pb-3 border-b">
               <DialogTitle className="flex items-center gap-2 text-base font-semibold">
@@ -166,22 +385,23 @@ export default function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialo
                 />
               </div>
 
-              {/* Row 1: Assignee & Priority */}
+              {/* Row 1: Issue Type & Priority */}
               <div className="grid grid-cols-2 gap-2.5">
                 <div className="space-y-1.5">
                   <Label className="text-xs font-semibold text-foreground flex items-center gap-1">
-                    <User className="w-3 h-3" /> 
-                    Assignee
+                    <Layers className="w-3 h-3" /> 
+                    Issue Type
                   </Label>
-                  <Select value={assigneeId || "none"} onValueChange={(v) => setAssigneeId(v === "none" ? "" : v)}>
+                  <Select value={issueType} onValueChange={setIssueType}>
                     <SelectTrigger className="h-9 text-sm">
-                      <SelectValue placeholder="Select" />
+                      <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="none">Unassigned</SelectItem>
-                      {users.map((user) => (
-                        <SelectItem key={user.id} value={user.id}>{user.name}</SelectItem>
-                      ))}
+                      <SelectItem value="task">📋 Task</SelectItem>
+                      <SelectItem value="bug">🐛 Bug</SelectItem>
+                      <SelectItem value="story">📖 Story</SelectItem>
+                      <SelectItem value="epic">🎯 Epic</SelectItem>
+                      <SelectItem value="subtask">📝 Subtask</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -205,7 +425,279 @@ export default function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialo
                 </div>
               </div>
 
-              {/* Row 2: Due Date & Team */}
+              {/* Row 1.5: Assignee & Project */}
+              <div className="grid grid-cols-2 gap-2.5">
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold text-foreground flex items-center gap-1">
+                    <User className="w-3 h-3" /> 
+                    Assignee (Primary)
+                  </Label>
+                  <Select value={assigneeId || "none"} onValueChange={(v) => setAssigneeId(v === "none" ? "" : v)}>
+                    <SelectTrigger className="h-9 text-sm">
+                      <SelectValue placeholder="Select" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Unassigned</SelectItem>
+                      {users.map((user) => (
+                        <SelectItem key={user.id} value={user.id}>{user.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+
+                  <Label className="text-[11px] font-medium text-muted-foreground mt-2 block">Additional Assignees</Label>
+                  <div className="max-h-20 overflow-y-auto border rounded-md p-2 space-y-1">
+                    {users.length === 0 && <div className="text-[11px] text-muted-foreground">No users</div>}
+                    {users.map((user) => (
+                      <button
+                        key={user.id}
+                        type="button"
+                        onClick={() => toggleAssignee(user.id)}
+                        className={cn(
+                          "w-full text-left text-[11px] px-2 py-1 rounded",
+                          assigneeIds.includes(user.id)
+                            ? "bg-primary/15 text-primary font-medium"
+                            : "hover:bg-muted"
+                        )}
+                      >
+                        {user.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold text-foreground flex items-center gap-1">
+                    <Package className="w-3 h-3" /> 
+                    Project <span className="text-muted-foreground/60">(Required)</span>
+                  </Label>
+                  <div className="flex gap-1.5">
+                    <Select 
+                      value={projectId && projectId !== "none" ? String(projectId) : "none"} 
+                      onValueChange={(v) => {
+                        if (v === "none") {
+                          setProjectId("");
+                        } else {
+                          setProjectId(String(v));
+                        }
+                      }}
+                    >
+                      <SelectTrigger className="h-9 text-sm flex-1">
+                        <SelectValue placeholder="Select Project" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">No Project</SelectItem>
+                        {projects.length > 0 ? (
+                          projects.map((project) => (
+                            <SelectItem key={project.id} value={String(project.id)}>
+                              <div className="flex items-center gap-1.5">
+                                {project.color && <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: project.color }} />}
+                                <span className="font-mono text-xs">{project.key}</span>
+                                <span>{project.name}</span>
+                              </div>
+                            </SelectItem>
+                          ))
+                        ) : (
+                          <SelectItem value="none" disabled>No projects available</SelectItem>
+                        )}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="h-9 w-9 shrink-0"
+                      onClick={() => setShowCreateProject(true)}
+                      title="Create new project"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Row 2: Sprint & Epic */}
+              <div className="grid grid-cols-2 gap-2.5">
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold text-foreground flex items-center gap-1">
+                    <LinkIcon className="w-3 h-3" /> 
+                    Sprint
+                  </Label>
+                  <Select 
+                    value={sprintId ? sprintId : "none"} 
+                    onValueChange={(v) => {
+                      if (v === "none") {
+                        setSprintId("");
+                      } else {
+                        setSprintId(v);
+                      }
+                    }}
+                  >
+                    <SelectTrigger className="h-9 text-sm">
+                      <SelectValue placeholder="Select Sprint" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">No Sprint</SelectItem>
+                      {sprints.length > 0 ? (
+                        sprints.map((sprint) => (
+                          <SelectItem key={sprint.id} value={sprint.id}>{sprint.name}</SelectItem>
+                        ))
+                      ) : (
+                        <SelectItem value="none" disabled>No sprints available</SelectItem>
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold text-foreground flex items-center gap-1">
+                    <Target className="w-3 h-3" /> 
+                    Epic
+                  </Label>
+                  <div className="flex gap-1.5">
+                    <Select 
+                      value={epicId ? epicId : "none"} 
+                      onValueChange={(v) => {
+                        if (v === "none") {
+                          setEpicId("");
+                        } else {
+                          setEpicId(v);
+                        }
+                      }}
+                    >
+                      <SelectTrigger className="h-9 text-sm flex-1">
+                        <SelectValue placeholder="Select Epic" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">No Epic</SelectItem>
+                        {epics.length > 0 ? (
+                          epics.map((epic) => (
+                            <SelectItem key={epic.id} value={epic.id}>
+                              <div className="flex items-center gap-1.5">
+                                {epic.color && <div className="w-2 h-2 rounded-full" style={{ backgroundColor: epic.color }} />}
+                                <span>{epic.name}</span>
+                              </div>
+                            </SelectItem>
+                          ))
+                        ) : (
+                          <SelectItem value="none" disabled>No epics available</SelectItem>
+                        )}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="h-9 w-9 shrink-0"
+                      onClick={() => setShowCreateEpic(true)}
+                      title="Create new epic"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Row 3: Component & Version */}
+              <div className="grid grid-cols-2 gap-2.5">
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold text-foreground flex items-center gap-1">
+                    <Package className="w-3 h-3" /> 
+                    Component
+                  </Label>
+                  <div className="flex gap-1.5">
+                    <Select 
+                      value={componentId ? componentId : "none"} 
+                      onValueChange={(v) => {
+                        if (v === "none") {
+                          setComponentId("");
+                        } else {
+                          setComponentId(v);
+                        }
+                      }}
+                    >
+                      <SelectTrigger className="h-9 text-sm flex-1">
+                        <SelectValue placeholder="Select Component" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">No Component</SelectItem>
+                        {components.length > 0 ? (
+                          components.map((component) => (
+                            <SelectItem key={component.id} value={component.id}>{component.name}</SelectItem>
+                          ))
+                        ) : (
+                          <SelectItem value="none" disabled>No components available</SelectItem>
+                        )}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="h-9 w-9 shrink-0"
+                      onClick={() => setShowCreateComponent(true)}
+                      title="Create new component"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
+                </div>
+                
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold text-foreground flex items-center gap-1">
+                    <Target className="w-3 h-3" /> 
+                    Version
+                  </Label>
+                  <div className="flex gap-1.5">
+                    <Select 
+                      value={versionId ? versionId : "none"} 
+                      onValueChange={(v) => {
+                        if (v === "none") {
+                          setVersionId("");
+                        } else {
+                          setVersionId(v);
+                        }
+                      }}
+                    >
+                      <SelectTrigger className="h-9 text-sm flex-1">
+                        <SelectValue placeholder="Select Version" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">No Version</SelectItem>
+                        {versions.length > 0 ? (
+                          versions
+                            .sort((a, b) => {
+                              // Sort: released first, then by name
+                              if (a.released && !b.released) return -1;
+                              if (!a.released && b.released) return 1;
+                              return a.name.localeCompare(b.name);
+                            })
+                            .map((version) => (
+                              <SelectItem key={version.id} value={version.id}>
+                                {version.name}
+                                {version.released && " ✓ Released"}
+                                {version.releaseDate && ` (${new Date(version.releaseDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })})`}
+                              </SelectItem>
+                            ))
+                        ) : (
+                          <SelectItem value="none" disabled>No versions available</SelectItem>
+                        )}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="h-9 w-9 shrink-0"
+                      onClick={() => setShowCreateVersion(true)}
+                      title="Create new version"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Row 4: Due Date & Team */}
               <div className="grid grid-cols-2 gap-2.5">
                 <div className="space-y-1.5">
                   <Label className="text-xs font-semibold text-foreground flex items-center gap-1">
@@ -239,52 +731,70 @@ export default function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialo
                 </div>
               </div>
 
-              {/* Row 3: Sprint & Epic */}
+              {/* Row 4.5: Template + Recurring */}
               <div className="grid grid-cols-2 gap-2.5">
                 <div className="space-y-1.5">
                   <Label className="text-xs font-semibold text-foreground flex items-center gap-1">
-                    <LinkIcon className="w-3 h-3" /> 
-                    Sprint
+                    <FileText className="w-3 h-3" />
+                    Task Template
                   </Label>
-                  <Select value={sprintId || "none"} onValueChange={(v) => setSprintId(v === "none" ? "" : v)}>
+                  <Select value={templateId || "none"} onValueChange={(v) => setTemplateId(v === "none" ? "" : v)}>
                     <SelectTrigger className="h-9 text-sm">
-                      <SelectValue placeholder="None" />
+                      <SelectValue placeholder="Select template" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="none">No Sprint</SelectItem>
-                      {sprints.map((sprint) => (
-                        <SelectItem key={sprint.id} value={sprint.id}>{sprint.name}</SelectItem>
+                      <SelectItem value="none">No Template</SelectItem>
+                      {templates.map((template) => (
+                        <SelectItem key={template.id} value={template.id}>{template.name}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
-                
+
                 <div className="space-y-1.5">
                   <Label className="text-xs font-semibold text-foreground flex items-center gap-1">
-                    <Target className="w-3 h-3" /> 
-                    Epic
+                    <Clock className="w-3 h-3" />
+                    Recurring Task
                   </Label>
-                  <Select value={epicId || "none"} onValueChange={(v) => setEpicId(v === "none" ? "" : v)}>
-                    <SelectTrigger className="h-9 text-sm">
-                      <SelectValue placeholder="None" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">No Epic</SelectItem>
-                      {epics.map((epic) => (
-                        <SelectItem key={epic.id} value={epic.id}>
-                          <div className="flex items-center gap-1.5">
-                            {epic.color && <div className="w-2 h-2 rounded-full" style={{ backgroundColor: epic.color }} />}
-                            <span>{epic.name}</span>
-                          </div>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <div className="flex items-center gap-2 mb-1">
+                    <input
+                      type="checkbox"
+                      checked={isRecurring}
+                      onChange={(e) => setIsRecurring(e.target.checked)}
+                    />
+                    <span className="text-xs">Enable recurring</span>
+                  </div>
+                  {isRecurring && (
+                    <div className="grid grid-cols-3 gap-1.5">
+                      <Select value={recurringPattern} onValueChange={setRecurringPattern}>
+                        <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="daily">Daily</SelectItem>
+                          <SelectItem value="weekly">Weekly</SelectItem>
+                          <SelectItem value="monthly">Monthly</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Input
+                        type="number"
+                        min="1"
+                        value={recurringInterval}
+                        onChange={(e) => setRecurringInterval(e.target.value)}
+                        className="h-8 text-xs"
+                        placeholder="Every"
+                      />
+                      <Input
+                        type="date"
+                        value={recurringEndDate}
+                        onChange={(e) => setRecurringEndDate(e.target.value)}
+                        className="h-8 text-xs"
+                      />
+                    </div>
+                  )}
                 </div>
               </div>
 
-              {/* Row 4: Meeting & Story Points */}
-              <div className="grid grid-cols-2 gap-2.5">
+              {/* Row 5: Meeting, Story Points & Estimate */}
+              <div className="grid grid-cols-3 gap-2.5">
                 <div className="space-y-1.5">
                   <Label className="text-xs font-semibold text-foreground flex items-center gap-1">
                     <LinkIcon className="w-3 h-3" /> 
@@ -315,6 +825,21 @@ export default function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialo
                     className="h-9 text-sm"
                     value={storyPoints}
                     onChange={(e) => setStoryPoints(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold text-foreground flex items-center gap-1">
+                    <Clock className="w-3 h-3" /> 
+                    Estimate (hours)
+                  </Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.5"
+                    placeholder="e.g., 8"
+                    className="h-9 text-sm"
+                    value={estimate}
+                    onChange={(e) => setEstimate(e.target.value)}
                   />
                 </div>
               </div>
@@ -375,5 +900,6 @@ export default function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialo
         )}
       </AnimatePresence>
     </Dialog>
+    </>
   );
 }

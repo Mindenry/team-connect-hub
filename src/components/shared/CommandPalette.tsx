@@ -15,6 +15,12 @@ import {
   Settings,
   ArrowRight,
   Command,
+  Folder,
+  BookOpen,
+  Megaphone,
+  FileBarChart,
+  FileSearch,
+  User,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -36,12 +42,19 @@ const allResults: SearchResult[] = [
   // Pages
   { id: "p1", type: "page", title: "Dashboard", subtitle: "Main overview", icon: LayoutDashboard, url: "/" },
   { id: "p2", type: "page", title: "Meetings", subtitle: "View & schedule meetings", icon: Video, url: "/meetings" },
-  { id: "p3", type: "page", title: "Chat", subtitle: "Channels & direct messages", icon: MessageSquare, url: "/chat" },
-  { id: "p4", type: "page", title: "Tasks", subtitle: "Kanban board & task management", icon: CheckSquare, url: "/tasks" },
-  { id: "p5", type: "page", title: "Teams", subtitle: "Team & member management", icon: Users, url: "/teams" },
-  { id: "p6", type: "page", title: "Notifications", subtitle: "View all notifications", icon: Bell, url: "/notifications" },
-  { id: "p8", type: "page", title: "Admin", subtitle: "Users, roles & security", icon: Shield, url: "/admin" },
-  { id: "p9", type: "page", title: "Settings", subtitle: "Profile, devices & privacy", icon: Settings, url: "/settings" },
+  { id: "p3", type: "page", title: "Calendar", subtitle: "Team schedule & events", icon: Calendar, url: "/calendar" },
+  { id: "p4", type: "page", title: "Chat", subtitle: "Channels & direct messages", icon: MessageSquare, url: "/chat" },
+  { id: "p5", type: "page", title: "Tasks", subtitle: "Kanban board & task management", icon: CheckSquare, url: "/tasks" },
+  { id: "p6b", type: "page", title: "Teams", subtitle: "Team collaboration", icon: Users, url: "/teams" },
+  { id: "p7", type: "page", title: "Shared Drive", subtitle: "Files & documents", icon: Folder, url: "/drive" },
+  { id: "p8", type: "page", title: "Knowledge Base", subtitle: "Docs & guides", icon: BookOpen, url: "/wiki" },
+  { id: "p9", type: "page", title: "Announcements", subtitle: "Company updates & news", icon: Megaphone, url: "/announcements" },
+  { id: "p10", type: "page", title: "Reports", subtitle: "Analytics & insights", icon: FileBarChart, url: "/reports" },
+  { id: "p11", type: "page", title: "Reminders", subtitle: "Personal reminders & notes", icon: FileText, url: "/reminders" },
+  { id: "p12", type: "page", title: "Notifications", subtitle: "View all notifications", icon: Bell, url: "/notifications" },
+  { id: "p13", type: "page", title: "Audit Trail", subtitle: "Activity logs & security", icon: FileSearch, url: "/audit-trail" },
+  { id: "p14", type: "page", title: "Admin", subtitle: "Users, roles & security", icon: Shield, url: "/admin" },
+  { id: "p15", type: "page", title: "Settings", subtitle: "Profile, devices & privacy", icon: Settings, url: "/settings" },
   // Meetings
   { id: "m1", type: "meeting", title: "Sprint Planning", subtitle: "Today 10:00 AM · Engineering", icon: Video, url: "/meeting-room" },
   { id: "m2", type: "meeting", title: "Design Review", subtitle: "Today 2:00 PM · Design", icon: Video, url: "/meetings" },

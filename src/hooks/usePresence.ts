@@ -12,6 +12,7 @@ interface ActiveRoom {
 interface OnlineUser {
   userId: string;
   name: string;
+  avatar?: string;
 }
 
 export function usePresence() {
@@ -27,6 +28,7 @@ export function usePresence() {
       socket.emit("presence:online", {
         userId: currentUser.id,
         name: currentUser.name,
+        avatar: currentUser.avatar,
       });
     }
 

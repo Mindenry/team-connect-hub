@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { useSearchParams, useLocation } from "react-router-dom";
+import { useSearchParams, useLocation, useNavigate } from "react-router-dom";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import {
@@ -16,6 +16,14 @@ import { auth, useAuth } from "@/lib/auth";
 import { getSocket } from "@/lib/websocket";
 import { usePresence } from "@/hooks/usePresence";
 import { apiGet, apiPost, apiFetch, apiDelete, apiPatch } from "@/lib/api";
+import {
+  clearChannelUnread,
+  clearDmUnread,
+  getChatUnreadState,
+  incrementChannelUnread,
+  incrementDmUnread,
+  setChatActive,
+} from "@/lib/chat-unread";
 
 // Dialogs
 import CreateChannelDialog from "@/components/dialogs/CreateChannelDialog";
@@ -24,12 +32,14 @@ import EditChannelDialog from "@/components/dialogs/EditChannelDialog";
 import InviteUserDialog from "@/components/dialogs/InviteUserDialog";
 
 // Chat sub-components
+import WorkspaceRail from "@/components/chat/WorkspaceRail";
 import ChatSidebar from "@/components/chat/ChatSidebar";
 import ChatHeader from "@/components/chat/ChatHeader";
 import MessageList from "@/components/chat/MessageList";
 import MessageComposer from "@/components/chat/MessageComposer";
 import ChatPanels from "@/components/chat/ChatPanels";
 import StatusIndicator from "@/components/shared/StatusIndicator";
+import CreateTaskDialog from "@/components/dialogs/CreateTaskDialog";
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
 
@@ -49,7 +59,7 @@ interface Message {
   id: string;
   text: string;
   senderId: string;
-  sender: { id: string; name: string; email: string };
+  sender: { id: string; name: string; email: string; avatar?: string };
   channelId: string;
   isPinned: boolean;
   isSystem: boolean;
@@ -91,17 +101,44 @@ const getDmStorageKey = (userA: string, userB: string) => {
   return `dm:${a}:${b}`;
 };
 
+const normalizeAttachmentUrl = (att: { url: string; name: string; type: string }) => {
+  if (!att?.url) return att;
+  const url = att.url;
+  // Already absolute URL – use as-is
+  if (url.startsWith("http://") || url.startsWith("https://")) return att;
+  // Prefix backend base URL for relative paths (e.g. `/uploads/...`)
+  const base = (API_BASE || "").replace(/\/+$/, "");
+  const normalized = url.startsWith("/") ? `${base}${url}` : `${base}/${url}`;
+  return { ...att, url: normalized };
+};
+
+const normalizeMessageAttachments = <
+  T extends { attachments?: Array<{ url: string; name: string; type: string }> }
+>(
+  msg: T
+): T => {
+  if (!Array.isArray(msg.attachments) || msg.attachments.length === 0) return msg;
+  return {
+    ...msg,
+    attachments: msg.attachments.map((att) => normalizeAttachmentUrl(att)),
+  };
+};
+
 // ── Component ──
 
 export default function Chat() {
   const isMobile = useIsMobile();
   const location = useLocation();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { user: currentUser } = useAuth();
   const { isUserOnline, onlineCount: presenceOnlineCount } = usePresence();
 
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Rail tab state
+  const [activeTab, setActiveTab] = useState<"channels" | "dms">("channels");
 
   // Channel + message state
   const [activeChannel, setActiveChannel] = useState<string | null>(null);
@@ -162,10 +199,18 @@ export default function Chat() {
   const [drivePath, setDrivePath] = useState<string>("/");
   const [driveTeamId, setDriveTeamId] = useState<string | null>(null);
 
+  // Create task from message
+  const [showCreateTaskFromMessage, setShowCreateTaskFromMessage] = useState(false);
+  const [taskSeed, setTaskSeed] = useState<{
+    title: string;
+    description: string;
+    teamId: string | null;
+    meetingId?: string | null;
+  } | null>(null);
+
   // ── Derived state ──
 
   const currentChannel = channels.find((c) => c.id === activeChannel) || null;
-  const currentDmContact = dmContacts.find((c) => c.id === activeDm);
   const rawMessages = activeDm ? dmMessages : messages;
   const displayMessages = Array.isArray(rawMessages) ? rawMessages : [];
 
@@ -175,10 +220,18 @@ export default function Chat() {
     return { ...contact, status: isOnline ? "online" : "offline" };
   });
 
+  // currentDmContact ต้องใช้ dmContactsWithStatus เพื่อให้ได้สถานะที่ถูกต้อง
+  const currentDmContact = dmContactsWithStatus.find((c) => c.id === activeDm);
+
   // Members lists: ใช้ socket presence เป็นแหล่งความจริง
   const safeAllUsers = Array.isArray(allUsers) ? allUsers : [];
-  const membersOnline = safeAllUsers.filter((u) => isUserOnline(u.id));
-  const membersOffline = safeAllUsers.filter((u) => !isUserOnline(u.id));
+  // อัปเดต status ให้ตรงกับ presence system
+  const membersWithStatus = safeAllUsers.map((u) => ({
+    ...u,
+    status: isUserOnline(u.id) ? (u.status && ["online", "away", "busy", "dnd"].includes(u.status) ? u.status : "online") : "offline",
+  }));
+  const membersOnline = membersWithStatus.filter((u) => isUserOnline(u.id));
+  const membersOffline = membersWithStatus.filter((u) => !isUserOnline(u.id));
 
   // Typing names
   const channelId = activeChannel || activeDm || "";
@@ -189,6 +242,38 @@ export default function Chat() {
   const mentionableUsers = (Array.isArray(allUsers) ? allUsers : [])
     .filter((u) => u.id !== currentUser?.id && u.name.toLowerCase().includes(mentionQuery.toLowerCase()))
     .slice(0, 5);
+
+  const buildTaskSeedFromMessage = (msg: Message) => {
+    const rawText = msg.text || "";
+    const firstLine = rawText.split("\n")[0] || "";
+    const baseTitle = firstLine.trim().slice(0, 80) || "Follow up from chat";
+    const channelLabel = activeDm
+      ? `DM with ${currentDmContact?.name || "user"}`
+      : `#${currentChannel?.name || "channel"}`;
+    const createdAt = new Date(msg.createdAt).toLocaleString();
+    const descriptionLines = [
+      `From chat: ${channelLabel}`,
+      `Sender: ${msg.sender.name}`,
+      `Time: ${createdAt}`,
+      "",
+      "Message:",
+      rawText,
+    ];
+
+    return {
+      title: baseTitle,
+      description: descriptionLines.join("\n"),
+      teamId: currentChannel?.teamId || null,
+      meetingId: null,
+    };
+  };
+
+  const handleCreateTaskFromMessage = (msg: Message) => {
+    if (!currentUser) return;
+    const seed = buildTaskSeedFromMessage(msg);
+    setTaskSeed(seed);
+    setShowCreateTaskFromMessage(true);
+  };
 
   // ── DM local storage helpers ──
 
@@ -247,7 +332,6 @@ export default function Chat() {
       setMessages([]);
       setDmMessages([]);
       setDmContacts([]);
-      setInitialLoad(true);
       return;
     }
 
@@ -257,13 +341,11 @@ export default function Chat() {
       return;
     }
 
-    // Load data immediately
+    // Load data only once when entering chat
     let cancelled = false;
     const loadData = async () => {
       try {
-        if (initialLoad) {
-          setLoading(true);
-        }
+        setLoading(true);
         
         const [channelsRes, usersRes] = await Promise.all([
           apiGet<Channel[]>("/channels").catch(() => []),
@@ -275,28 +357,15 @@ export default function Chat() {
         const safeChannels = Array.isArray(channelsRes) ? channelsRes : [];
         const safeUsers = Array.isArray(usersRes) ? usersRes : [];
         
-        setChannels(safeChannels);
+        // Hydrate unread counts from persistent store (so badges survive refresh / route changes)
+        const unreadState = currentUser?.id ? getChatUnreadState(currentUser.id) : { channels: {}, dms: {} };
+        setChannels(
+          safeChannels.map((c: any) => ({
+            ...c,
+            unread: (unreadState.channels as any)?.[c.id] || 0,
+          }))
+        );
         setAllUsers(safeUsers);
-
-        // Set active channel
-        const urlChannel = searchParams.get("channel");
-        setActiveChannel((prevChannel) => {
-          // Don't change if in DM mode
-          if (activeDm) {
-            return prevChannel;
-          }
-          
-          if (safeChannels.length > 0) {
-            if (urlChannel && safeChannels.some((c) => c.id === urlChannel)) {
-              return urlChannel;
-            } else if (!prevChannel) {
-              return safeChannels[0].id;
-            } else if (prevChannel && !safeChannels.some((c) => c.id === prevChannel)) {
-              return safeChannels[0].id;
-            }
-          }
-          return prevChannel || null;
-        });
 
         // Set DM contacts
         setDmContacts(
@@ -306,15 +375,14 @@ export default function Chat() {
               id: u.id,
               name: u.name,
               initials: u.name.split(" ").map((n: string) => n[0]).join(""),
-              status: u.status || "online",
-              unread: 0,
+              status: "offline", 
+              unread: (unreadState.dms as any)?.[u.id] || 0,
               lastMsg: "",
             }))
         );
         
-        setInitialLoad(false);
       } catch (err) {
-        console.error("Failed to load channels:", err);
+        console.error("Failed to load chat data:", err);
       } finally {
         if (!cancelled) {
           setLoading(false);
@@ -327,7 +395,25 @@ export default function Chat() {
     return () => {
       cancelled = true;
     };
-  }, [location.pathname, currentUser, searchParams, initialLoad, activeDm]);
+  }, [location.pathname, currentUser?.id]);
+
+  // Sync activeChannel with URL and initial open
+  useEffect(() => {
+    if (location.pathname !== "/chat" || channels.length === 0 || loading || activeDm) return;
+
+    const urlChannel = searchParams.get("channel");
+    
+    setActiveChannel((prevChannel) => {
+      if (urlChannel && channels.some((c) => c.id === urlChannel)) {
+        return urlChannel;
+      } else if (!prevChannel) {
+        return channels[0]?.id || null;
+      } else if (prevChannel && !channels.some((c) => c.id === prevChannel)) {
+        return channels[0]?.id || null;
+      }
+      return prevChannel || null;
+    });
+  }, [location.pathname, channels, searchParams, loading, activeDm]);
 
   // ── Load messages when channel changes ──
 
@@ -343,10 +429,16 @@ export default function Chat() {
         
         if (cancelled) return;
         
-        if (Array.isArray(data)) setMessages(data);
-        else if (data && Array.isArray(data.messages)) setMessages(data.messages);
-        else if (data && data.id) setMessages(data.messages || []);
-        else setMessages([]);
+        if (Array.isArray(data)) {
+          setMessages(data.map((m) => normalizeMessageAttachments(m)));
+        } else if (data && Array.isArray(data.messages)) {
+          setMessages(data.messages.map((m: any) => normalizeMessageAttachments(m)));
+        } else if (data && data.id) {
+          const msgs = Array.isArray(data.messages) ? data.messages : [];
+          setMessages(msgs.map((m: any) => normalizeMessageAttachments(m)));
+        } else {
+          setMessages([]);
+        }
       } catch {
         if (!cancelled) {
           setMessages([]);
@@ -359,6 +451,27 @@ export default function Chat() {
       cancelled = true;
     };
   }, [activeChannel, currentUser, location.pathname]);
+
+  // Track active conversation globally + clear unread only when user is actually viewing it
+  useEffect(() => {
+    if (!currentUser?.id || location.pathname !== "/chat") return;
+
+    if (activeDm) {
+      setChatActive(currentUser.id, { kind: "dm", id: activeDm });
+      clearDmUnread(currentUser.id, activeDm);
+      setDmContacts((prev) => prev.map((c) => (c.id === activeDm ? { ...c, unread: 0 } : c)));
+      return;
+    }
+
+    if (activeChannel) {
+      setChatActive(currentUser.id, { kind: "channel", id: activeChannel });
+      clearChannelUnread(currentUser.id, activeChannel);
+      setChannels((prev) => prev.map((c) => (c.id === activeChannel ? ({ ...c, unread: 0 } as Channel) : c)));
+      return;
+    }
+
+    setChatActive(currentUser.id, { kind: "none" });
+  }, [activeChannel, activeDm, currentUser?.id, location.pathname]);
 
   // ── Reactions helpers ──
 
@@ -414,7 +527,23 @@ export default function Chat() {
     const socket = getSocket();
 
     const handleNewMessage = (message: Message) => {
-      if (message.channelId === activeChannel) setMessages((prev) => [...prev, message]);
+      const normalized = normalizeMessageAttachments(message);
+      if (normalized.channelId === activeChannel) {
+        // Active channel: append to visible messages
+        setMessages((prev) => [...prev, normalized]);
+      } else {
+        // Other channel: bump unread counter for that channel
+        if (currentUser?.id) {
+          incrementChannelUnread(currentUser.id, normalized.channelId, 1);
+        }
+        setChannels((prev) =>
+          prev.map((c) =>
+            c.id === normalized.channelId
+              ? ({ ...c, unread: ((c as any).unread || 0) + 1 } as Channel)
+              : c
+          )
+        );
+      }
     };
     const handleMessageUpdated = (message: Message) => {
       setMessages((prev) => prev.map((m) => (m.id === message.id ? message : m)));
@@ -427,36 +556,48 @@ export default function Chat() {
       const toId = data.receiverId;
       const otherUserId = fromId === currentUser.id ? toId : fromId;
       const isFromMe = fromId === currentUser.id;
-      const msg: Message = {
+      const msg: Message = normalizeMessageAttachments({
         id: data.id || `${Date.now()}-${Math.random().toString(36).slice(2)}`,
         text: data.text,
         senderId: fromId,
-        sender: { id: fromId, name: data.senderName || "User", email: "" },
+        sender: {
+          id: fromId,
+          name: data.senderName || "User",
+          email: "",
+          avatar: data.senderAvatar,
+        },
         channelId: "dm",
         isPinned: false,
         isSystem: false,
         createdAt: data.createdAt || new Date().toISOString(),
-        attachments: data.attachments,
+        attachments: Array.isArray(data.attachments)
+          ? data.attachments.map((att: any) => normalizeAttachmentUrl(att))
+          : data.attachments,
         mentions: data.mentions,
-      };
+      });
 
-      // Update contacts list
+      // Update contacts list (สถานะจะถูกอัปเดตโดย dmContactsWithStatus จาก presence system)
       setDmContacts((prev) => {
         const exists = prev.find((c) => c.id === otherUserId);
         const base = exists ?? {
           id: otherUserId,
           name: data.senderName || "User",
           initials: (data.senderName || "U").split(" ").map((n: string) => n[0]).join(""),
-          status: "online",
+          status: "offline", // Default to offline, จะถูกอัปเดตโดย presence system
           unread: 0,
           lastMsg: "",
         };
         const updated = prev.filter((c) => c.id !== otherUserId);
         const isActive = activeDm === otherUserId;
-        return [{ ...base, lastMsg: data.text, unread: isActive ? 0 : (base.unread || 0) + (isFromMe ? 0 : 1) }, ...updated];
+        const bump = isActive ? 0 : (isFromMe ? 0 : 1);
+        if (bump > 0 && currentUser?.id) {
+          incrementDmUnread(currentUser.id, otherUserId, bump);
+        }
+        return [{ ...base, lastMsg: data.text, unread: isActive ? 0 : (base.unread || 0) + bump }, ...updated];
       });
 
-      // If DM is active, add message immediately
+      // If DM is active, add message immediately (real-time display)
+      // Note: Message is already persisted in DB by backend, so we just update UI
       if (activeDm === otherUserId) {
         console.log(`DM is active, adding message immediately`);
         setDmMessages((prev) => {
@@ -465,76 +606,18 @@ export default function Chat() {
             return prev;
           }
           const next = [...prev, msg];
-          saveDmHistory(otherUserId, next);
-          console.log(`Added message, total: ${next.length}`);
-          return next;
+          // Sort by createdAt to maintain chronological order
+          const sorted = [...next].sort((a, b) => {
+            const timeA = new Date(a.createdAt).getTime();
+            const timeB = new Date(b.createdAt).getTime();
+            return timeA - timeB;
+          });
+          console.log(`Added message, total: ${sorted.length}`);
+          return sorted;
         });
-      } else {
-        // If DM is not active, save to localStorage
-        console.log(`DM is not active, saving to localStorage`);
-        const existing = loadDmHistory(otherUserId);
-        const updated = [...existing, msg];
-        saveDmHistory(otherUserId, updated);
-        console.log(`Saved message to localStorage, total: ${updated.length}`);
-        
-        // Show notification and play sound if message is from someone else
-        if (!isFromMe) {
-          // Play notification sound
-          try {
-            const audio = new Audio('/notification.mp3');
-            audio.volume = 0.5;
-            audio.play().catch(() => {
-              // Fallback: use Web Audio API to generate a beep sound
-              const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-              const oscillator = audioContext.createOscillator();
-              const gainNode = audioContext.createGain();
-              
-              oscillator.connect(gainNode);
-              gainNode.connect(audioContext.destination);
-              
-              oscillator.frequency.value = 800;
-              oscillator.type = 'sine';
-              
-              gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-              gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
-              
-              oscillator.start(audioContext.currentTime);
-              oscillator.stop(audioContext.currentTime + 0.3);
-            });
-          } catch (err) {
-            console.debug("Could not play notification sound:", err);
-          }
-          
-          // Show browser notification
-          const showNotification = () => {
-            if ("Notification" in window && Notification.permission === "granted") {
-              const notification = new Notification(`${data.senderName || "Someone"} sent you a message`, {
-                body: data.text.length > 100 ? data.text.substring(0, 100) + "..." : data.text,
-                icon: "/favicon.ico",
-                tag: `dm-${otherUserId}`,
-                requireInteraction: false,
-              });
-              
-              // Close notification after 5 seconds
-              setTimeout(() => {
-                notification.close();
-              }, 5000);
-            }
-          };
-          
-          if ("Notification" in window) {
-            if (Notification.permission === "granted") {
-              showNotification();
-            } else if (Notification.permission !== "denied") {
-              Notification.requestPermission().then((permission) => {
-                if (permission === "granted") {
-                  showNotification();
-                }
-              });
-            }
-          }
-        }
       }
+      // If DM is not active, just update contacts list
+      // Message is already in DB, will be loaded when user opens DM conversation
     };
 
     const handleReactionAdded = (data: { messageId: string }) => loadReactionsForMessage(data.messageId);
@@ -576,7 +659,7 @@ export default function Chat() {
       socket.off("channel:updated", handleChannelUpdated);
       socket.off("channel:deleted", handleChannelDeleted);
     };
-  }, [activeChannel, activeDm, currentUser, location.pathname, loadDmHistory, saveDmHistory]);
+  }, [activeChannel, activeDm, currentUser, location.pathname]);
 
   // ── Message actions ──
 
@@ -625,7 +708,7 @@ export default function Chat() {
 
   // ── Input handlers ──
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const value = e.target.value;
     setMessageInput(value);
     handleTyping();
@@ -682,14 +765,30 @@ export default function Chat() {
     const formData = new FormData();
     formData.append("file", file);
     try {
-      const res = await apiFetch("/upload", { method: "POST", body: formData });
+      const params = new URLSearchParams();
+      if (file.name) {
+        // Preserve original filename (including Thai characters) on backend
+        params.set("filename", file.name);
+      }
+      const query = params.toString();
+      const endpoint = query ? `/upload?${query}` : "/upload";
+      const res = await apiFetch(endpoint, { method: "POST", body: formData });
       if (!res.ok) throw new Error("Upload failed");
-      const data = await res.json();
-      setAttachments((prev) => [...prev, {
-        url: `${API_BASE}${data.url}`,
-        name: data.name,
-        type: data.mimetype || file.type,
-      }]);
+      const raw = await res.json();
+      const payload = raw && typeof raw === "object" && "data" in raw ? (raw as any).data : raw;
+      const url = payload?.url;
+      const name = payload?.name ?? file.name;
+      const type = payload?.mimetype || file.type;
+      if (!url || !name) {
+        console.error("Upload response missing url or name", payload);
+        return;
+      }
+      const normalized = normalizeAttachmentUrl({
+        url,
+        name,
+        type,
+      });
+      setAttachments((prev) => [...prev, normalized]);
     } catch (err) {
       console.error("Upload failed:", err);
     }
@@ -707,7 +806,7 @@ export default function Chat() {
   const handlePickDriveFile = (entry: DriveEntry) => {
     if (entry.isFolder || !entry.latestVersion) return;
     const v = entry.latestVersion;
-    const url = v.url.startsWith("http") ? v.url : `${API_BASE}${v.url}`;
+    const url = v.url;
     setAttachments((prev) => [...prev, { url, name: entry.name, type: v.mimeType || "application/octet-stream" }]);
     setShowDrivePicker(false);
   };
@@ -717,7 +816,7 @@ export default function Chat() {
   const sendMessage = useCallback(async () => {
     if ((!messageInput.trim() && attachments.length === 0) || !currentUser || sending) return;
     const mentions = parseMentions(messageInput);
-    const messageText = messageInput.trim() || (attachments.length > 0 ? "📎" : "");
+    const messageText = messageInput.trim();
 
     // DM mode
     if (activeDm) {
@@ -746,10 +845,17 @@ export default function Chat() {
         attachments: msg.attachments,
         mentions: msg.mentions,
       };
+      // Add message to UI immediately (optimistic update)
+      // Backend will persist it to DB and broadcast via WebSocket
       setDmMessages((prev) => {
         const next = [...prev, localMsg];
-        saveDmHistory(activeDm, next);
-        return next;
+        // Sort by createdAt to maintain chronological order
+        const sorted = [...next].sort((a, b) => {
+          const timeA = new Date(a.createdAt).getTime();
+          const timeB = new Date(b.createdAt).getTime();
+          return timeA - timeB;
+        });
+        return sorted;
       });
       setDmContacts((prev) => prev.map((c) => (c.id === activeDm ? { ...c, lastMsg: msg.text, unread: 0 } : c)));
       setMessageInput("");
@@ -783,32 +889,82 @@ export default function Chat() {
   const selectChannel = useCallback((channelId: string) => {
     setActiveChannel(channelId);
     setActiveDm(null);
+    // Reset unread counter for this channel when user opens it
+    setChannels((prev) =>
+      prev.map((c) =>
+        c.id === channelId ? ({ ...c, unread: 0 } as Channel) : c
+      )
+    );
+    if (currentUser?.id) {
+      setChatActive(currentUser.id, { kind: "channel", id: channelId });
+      clearChannelUnread(currentUser.id, channelId);
+    }
     if (isMobile) setShowChannelList(false);
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev);
       next.set("channel", channelId);
       return next;
     });
-  }, [isMobile, setSearchParams]);
+  }, [isMobile, setSearchParams, currentUser?.id]);
 
-  const selectDm = useCallback((userId: string) => {
-    setActiveDm(userId);
-    setActiveChannel(null);
-    
-    // Load from localStorage for instant display
-    const history = loadDmHistory(userId);
-    console.log(`Loading DM with ${userId}, found ${history.length} messages in localStorage`);
-    setDmMessages(history);
-    
-    // Mark as read
-    setDmContacts((prev) => prev.map((c) => (c.id === userId ? { ...c, unread: 0 } : c)));
-    if (isMobile) setShowChannelList(false);
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev);
-      next.delete("channel");
-      return next;
-    });
-  }, [isMobile, setSearchParams, loadDmHistory]);
+  const selectDm = useCallback(
+    async (userId: string) => {
+      setActiveDm(userId);
+      setActiveChannel(null);
+
+      try {
+        // Load DM history from backend so it behaves like channel messages (no localStorage dependency)
+        const dmHistory = await apiGet<any[]>(`/dm/${userId}/messages?limit=200`).catch(() => []);
+
+        const mapped: Message[] = Array.isArray(dmHistory)
+          ? dmHistory.map((dm) => ({
+              id: dm.id,
+              text: dm.text,
+              senderId: dm.senderId,
+              sender: {
+                id: dm.sender?.id ?? dm.senderId,
+                name: dm.sender?.name ?? "User",
+                email: dm.sender?.email ?? "",
+              },
+              channelId: "dm",
+              isPinned: dm.isPinned ?? false,
+              isSystem: dm.isSystem ?? false,
+              createdAt: dm.createdAt,
+              attachments: dm.attachments ?? undefined,
+              mentions: dm.mentions ?? undefined,
+            }))
+          : [];
+
+        // Sort by createdAt to ensure chronological order
+        const sorted = [...mapped].sort((a, b) => {
+          const timeA = new Date(a.createdAt).getTime();
+          const timeB = new Date(b.createdAt).getTime();
+          return timeA - timeB;
+        });
+
+        setDmMessages(sorted);
+      } catch (err) {
+        console.error("Failed to load DM history from backend:", err);
+        // Don't use localStorage fallback - DM should be stored in DB
+        // If backend fails, show empty array
+        setDmMessages([]);
+      }
+
+      // Mark as read in UI
+      setDmContacts((prev) => prev.map((c) => (c.id === userId ? { ...c, unread: 0 } : c)));
+      if (currentUser?.id) {
+        setChatActive(currentUser.id, { kind: "dm", id: userId });
+        clearDmUnread(currentUser.id, userId);
+      }
+      if (isMobile) setShowChannelList(false);
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete("channel");
+        return next;
+      });
+    },
+    [isMobile, setSearchParams, loadDmHistory, currentUser?.id]
+  );
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -849,21 +1005,21 @@ export default function Chat() {
   // Show loading state only if user is not ready
   if (!currentUser) {
     return (
-      <div className="h-full w-full bg-background/95 flex flex-col overflow-hidden items-center justify-center">
+      <div className="h-full w-full bg-background flex flex-col overflow-hidden items-center justify-center">
         <div className="flex flex-col items-center gap-3">
-          <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-          <p className="text-sm text-muted-foreground">Loading chat...</p>
+          <div className="w-8 h-8 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+          <p className="text-sm text-muted-foreground/60">Loading chat...</p>
         </div>
       </div>
     );
   }
 
-  const totalChannels = channels.length;
-  const totalDms = dmContactsWithStatus.length;
-  const onlineCount = presenceOnlineCount;
+  // Compute unread totals for the workspace rail
+  const totalUnreadChannels = channels.reduce((sum, c) => sum + ((c as any).unread || 0), 0);
+  const totalUnreadDms = dmContactsWithStatus.reduce((sum, c) => sum + (c.unread || 0), 0);
 
   return (
-    <div className="flex flex-col h-screen bg-gradient-to-br from-background via-background to-muted/20">
+    <div className="flex h-screen bg-background overflow-hidden">
       {/* Dialogs */}
       <CreateChannelDialog open={showCreateChannel} onOpenChange={setShowCreateChannel} />
       <DeleteChannelDialog
@@ -882,180 +1038,147 @@ export default function Chat() {
       />
       <InviteUserDialog open={showInviteUser} onOpenChange={setShowInviteUser} />
 
-      {/* Modern Header */}
-      <div className="border-b border-border/50 bg-background/95 backdrop-blur-xl supports-[backdrop-filter]:bg-background/80">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="h-20 flex items-center justify-between gap-6">
-            {/* Left: Logo & Title */}
-            <div className="flex items-center gap-4 min-w-0 flex-1">
-              <div className="relative">
-                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-primary/20 via-primary/10 to-primary/5 flex items-center justify-center shadow-lg shadow-primary/5 ring-1 ring-primary/10">
-                  <MessageSquare className="w-6 h-6 text-primary" />
-                </div>
-                <div className="absolute -top-1 -right-1 w-4 h-4 bg-primary rounded-full border-2 border-background animate-pulse-soft" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <h1 className="text-xl font-bold text-foreground tracking-tight">Team Chat</h1>
-                <p className="text-xs text-muted-foreground mt-0.5 truncate">
-                  แชตทีม · ช่องคุยงาน · ข้อความส่วนตัว · แนบไฟล์จาก Shared Drive
-                </p>
-              </div>
-            </div>
+      {/* ── Layer 1: Workspace Rail (60px) ── */}
+      {!isMobile && (
+        <WorkspaceRail
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          currentUser={currentUser}
+          unreadChannels={totalUnreadChannels}
+          unreadDms={totalUnreadDms}
+        />
+      )}
 
-            {/* Right: Small stats */}
-            <div className="hidden sm:flex items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-background/70 px-3 py-1 text-[11px] text-muted-foreground">
-                <Hash className="w-3 h-3" />
-                <span>{totalChannels} channels</span>
-              </span>
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-background/70 px-3 py-1 text-[11px] text-muted-foreground">
-                <Users className="w-3 h-3" />
-                <span>{totalDms} direct</span>
-              </span>
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-background/70 px-3 py-1 text-[11px] text-muted-foreground">
-                <StatusIndicator status="online" className="w-2.5 h-2.5" />
-                <span>{onlineCount} online</span>
-              </span>
-            </div>
+      {/* ── Layer 2: Conversation Panel (280px) ── */}
+      <ChatSidebar
+        channels={channels}
+        dmContacts={dmContactsWithStatus}
+        activeChannel={activeChannel}
+        activeDm={activeDm}
+        activeTab={activeTab}
+        searchQuery={sidebarSearchQuery}
+        onSearchChange={setSidebarSearchQuery}
+        onSelectChannel={selectChannel}
+        onSelectDm={selectDm}
+        onCreateChannel={() => setShowCreateChannel(true)}
+        currentUser={currentUser}
+        isMobile={isMobile}
+        showChannelList={showChannelList}
+        onClose={() => setShowChannelList(false)}
+      />
+
+      {/* ── Layer 3: Chat Workspace (flex-1) ── */}
+      <main className="flex-1 flex flex-col min-w-0 bg-background">
+        {/* Header */}
+        <ChatHeader
+          currentChannel={currentChannel}
+          activeDm={activeDm}
+          currentDmContact={currentDmContact || null}
+          showPinned={showPinned}
+          showMembers={showMembers}
+          showSearchBar={showSearchBar}
+          searchQuery={channelSearchQuery}
+          searchResults={searchResults}
+          showSearchResults={showSearchResults}
+          onTogglePinned={() => {
+            setShowPinned(!showPinned);
+            setShowMembers(false);
+          }}
+          onToggleMembers={() => {
+            setShowMembers(!showMembers);
+            setShowPinned(false);
+          }}
+          onToggleSearch={() => {
+            setShowSearchBar(!showSearchBar);
+            if (showSearchBar) {
+              setChannelSearchQuery("");
+              setShowSearchResults(false);
+            }
+          }}
+          onSearchChange={handleChannelSearch}
+          onCloseSearch={() => {
+            setShowSearchBar(false);
+            setChannelSearchQuery("");
+            setShowSearchResults(false);
+          }}
+          onSearchResultClick={() => {
+            setShowSearchBar(false);
+            setShowSearchResults(false);
+            setChannelSearchQuery("");
+          }}
+          onToggleSidebar={isMobile ? () => setShowChannelList(true) : undefined}
+          isMobile={isMobile}
+          formatTime={formatTime}
+        />
+
+        {/* Content area: messages + panels */}
+        <div className="flex-1 flex overflow-hidden">
+          {/* Messages + Composer */}
+          <div className="flex-1 flex flex-col min-w-0">
+            <MessageList
+              messages={displayMessages}
+              reactions={messageReactions}
+              currentUserId={currentUser?.id}
+              loading={loading}
+              emptyText={
+                activeDm
+                  ? `Start a conversation with ${currentDmContact?.name || "this user"}`
+                  : "No messages yet. Start the conversation!"
+              }
+              activeDm={activeDm}
+              currentDmContactName={currentDmContact?.name}
+              typingNames={typingNames}
+              onReply={handleReplyMessage}
+              onPin={handlePinMessage}
+              onDelete={handleDeleteMessage}
+              onReact={handleAddReaction}
+              onThread={handleCreateThread}
+              onCreateTaskFromMessage={handleCreateTaskFromMessage}
+            />
+
+            <MessageComposer
+              messageInput={messageInput}
+              onInputChange={handleInputChange}
+              onKeyDown={handleKeyDown}
+              onSend={sendMessage}
+              sending={sending}
+              disabled={!currentUser || (!activeChannel && !activeDm)}
+              placeholder={
+                activeDm
+                  ? `Message ${currentDmContact?.name || "user"}...`
+                  : `Message #${currentChannel?.name || "channel"}...`
+              }
+              inputRef={inputRef}
+              attachments={attachments}
+              onRemoveAttachment={(i) => setAttachments((prev) => prev.filter((_, idx) => idx !== i))}
+              onFileUpload={() => fileInputRef.current?.click()}
+              fileInputRef={fileInputRef}
+              onFileSelect={handleFileSelect}
+              driveTeamId={driveTeamId}
+              onAttachFromDrive={handleAttachFromDrive}
+              showEmojiPicker={showEmojiPicker}
+              onToggleEmojiPicker={setShowEmojiPicker}
+              onInsertEmoji={insertEmoji}
+              showMentionPicker={showMentionPicker}
+              mentionableUsers={mentionableUsers}
+              onInsertMention={insertMention}
+              replyingTo={replyingTo}
+              onCancelReply={() => setReplyingTo(null)}
+              isLoggedIn={!!currentUser}
+            />
           </div>
-        </div>
-      </div>
 
-      {/* Main Shell */}
-      <div className="flex-1 overflow-hidden">
-        <div className="max-w-7xl mx-auto px-2 sm:px-4 lg:px-8 py-3 sm:py-4 h-full flex gap-2 sm:gap-3">
-          {/* Sidebar */}
-          <ChatSidebar
-            channels={channels}
-            dmContacts={dmContactsWithStatus}
-            activeChannel={activeChannel}
-            activeDm={activeDm}
-            searchQuery={sidebarSearchQuery}
-            onSearchChange={setSidebarSearchQuery}
-            onSelectChannel={selectChannel}
-            onSelectDm={selectDm}
-            onCreateChannel={() => setShowCreateChannel(true)}
-            currentUser={currentUser}
-            isMobile={isMobile}
-            showChannelList={showChannelList}
-            onClose={() => setShowChannelList(false)}
+          {/* Panels (Pinned + Members) */}
+          <ChatPanels
+            showPinned={showPinned}
+            pinnedMessages={messages.filter((m) => m.isPinned)}
+            showMembers={showMembers}
+            membersOnline={membersOnline}
+            membersOffline={membersOffline}
+            isUserOnline={isUserOnline}
           />
-
-          {/* Main Chat Area */}
-          <main className="flex-1 flex flex-col min-w-0">
-            <div className="flex-1 flex flex-col bg-card/60 backdrop-blur-xl border border-border/40 rounded-2xl overflow-hidden shadow-xl shadow-black/5">
-              {/* Header */}
-              <ChatHeader
-                currentChannel={currentChannel}
-                activeDm={activeDm}
-                currentDmContact={currentDmContact || null}
-                showPinned={showPinned}
-                showMembers={showMembers}
-                showSearchBar={showSearchBar}
-                searchQuery={channelSearchQuery}
-                searchResults={searchResults}
-                showSearchResults={showSearchResults}
-                onTogglePinned={() => {
-                  setShowPinned(!showPinned);
-                  setShowMembers(false);
-                }}
-                onToggleMembers={() => {
-                  setShowMembers(!showMembers);
-                  setShowPinned(false);
-                }}
-                onToggleSearch={() => {
-                  setShowSearchBar(!showSearchBar);
-                  if (showSearchBar) {
-                    setChannelSearchQuery("");
-                    setShowSearchResults(false);
-                  }
-                }}
-                onSearchChange={handleChannelSearch}
-                onCloseSearch={() => {
-                  setShowSearchBar(false);
-                  setChannelSearchQuery("");
-                  setShowSearchResults(false);
-                }}
-                onSearchResultClick={() => {
-                  setShowSearchBar(false);
-                  setShowSearchResults(false);
-                  setChannelSearchQuery("");
-                }}
-                onToggleSidebar={isMobile ? () => setShowChannelList(true) : undefined}
-                isMobile={isMobile}
-                formatTime={formatTime}
-              />
-
-              {/* Content area: messages + panels */}
-              <div className="flex-1 flex overflow-hidden">
-                {/* Messages + Composer */}
-                <div className="flex-1 flex flex-col min-w-0">
-                  <MessageList
-                    messages={displayMessages}
-                    reactions={messageReactions}
-                    currentUserId={currentUser?.id}
-                    loading={loading}
-                    emptyText={
-                      activeDm
-                        ? `Start a conversation with ${currentDmContact?.name || "this user"}`
-                        : "No messages yet. Start the conversation!"
-                    }
-                    activeDm={activeDm}
-                    currentDmContactName={currentDmContact?.name}
-                    typingNames={typingNames}
-                    onReply={handleReplyMessage}
-                    onPin={handlePinMessage}
-                    onDelete={handleDeleteMessage}
-                    onReact={handleAddReaction}
-                    onThread={handleCreateThread}
-                  />
-
-                  <MessageComposer
-                    messageInput={messageInput}
-                    onInputChange={handleInputChange}
-                    onKeyDown={handleKeyDown}
-                    onSend={sendMessage}
-                    sending={sending}
-                    disabled={!currentUser || (!activeChannel && !activeDm)}
-                    placeholder={
-                      activeDm
-                        ? `Message ${currentDmContact?.name || "user"}...`
-                        : `Message #${currentChannel?.name || "channel"}...`
-                    }
-                    inputRef={inputRef}
-                    attachments={attachments}
-                    onRemoveAttachment={(i) => setAttachments((prev) => prev.filter((_, idx) => idx !== i))}
-                    onFileUpload={() => fileInputRef.current?.click()}
-                    fileInputRef={fileInputRef}
-                    onFileSelect={handleFileSelect}
-                    driveTeamId={driveTeamId}
-                    onAttachFromDrive={handleAttachFromDrive}
-                    showEmojiPicker={showEmojiPicker}
-                    onToggleEmojiPicker={setShowEmojiPicker}
-                    onInsertEmoji={insertEmoji}
-                    showMentionPicker={showMentionPicker}
-                    mentionableUsers={mentionableUsers}
-                    onInsertMention={insertMention}
-                    replyingTo={replyingTo}
-                    onCancelReply={() => setReplyingTo(null)}
-                    isLoggedIn={!!currentUser}
-                  />
-                </div>
-
-                {/* Panels (Pinned + Members) */}
-                <ChatPanels
-                  showPinned={showPinned}
-                  pinnedMessages={messages.filter((m) => m.isPinned)}
-                  showMembers={showMembers}
-                  membersOnline={membersOnline}
-                  membersOffline={membersOffline}
-                  isUserOnline={isUserOnline}
-                />
-              </div>
-            </div>
-          </main>
         </div>
-      </div>
+      </main>
 
       {/* ── Shared Drive Picker Dialog ── */}
       <Dialog open={showDrivePicker} onOpenChange={setShowDrivePicker}>
@@ -1144,9 +1267,7 @@ export default function Chat() {
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
-                            const url = entry.latestVersion!.url.startsWith("http")
-                              ? entry.latestVersion!.url
-                              : `${API_BASE}${entry.latestVersion!.url}`;
+                            const url = entry.latestVersion!.url;
                             window.open(url, "_blank");
                           }}
                           className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-primary"
@@ -1162,6 +1283,30 @@ export default function Chat() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* ── Create Task from Message Dialog ── */}
+      {taskSeed && (
+        <CreateTaskDialog
+          open={showCreateTaskFromMessage}
+          onOpenChange={(open) => {
+            setShowCreateTaskFromMessage(open);
+            if (!open) {
+              setTaskSeed(null);
+            }
+          }}
+          initialTitle={taskSeed.title}
+          initialDescription={taskSeed.description}
+          initialTeamId={taskSeed.teamId || undefined}
+          initialMeetingId={taskSeed.meetingId || undefined}
+          defaultTags={["from-chat"]}
+          onCreated={(task) => {
+            // After creating from chat, go straight to that task's detail in Tasks page
+            setShowCreateTaskFromMessage(false);
+            setTaskSeed(null);
+            navigate("/tasks", { state: { openTask: task } });
+          }}
+        />
+      )}
     </div>
   );
 }

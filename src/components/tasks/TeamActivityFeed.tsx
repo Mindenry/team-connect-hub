@@ -4,7 +4,7 @@ import {
   CheckSquare, User, ArrowRight, Calendar, Flag, MessageSquare, 
   Clock, FileText, Target, Zap, X, Activity
 } from "lucide-react";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -81,7 +81,7 @@ export function TeamActivityFeed({ teamId, maxItems = 10, className }: TeamActiv
     const handleTaskCreated = (task: any) => {
       setActivities((prev) => [{
         id: `activity-${Date.now()}`,
-        type: 'task_created',
+        type: 'task_created' as const,
         user: {
           id: task.assignee?.id || 'system',
           name: task.assignee?.name || 'Someone',
@@ -96,7 +96,7 @@ export function TeamActivityFeed({ teamId, maxItems = 10, className }: TeamActiv
     const handleTaskUpdated = (task: any) => {
       setActivities((prev) => [{
         id: `activity-${Date.now()}`,
-        type: 'task_updated',
+        type: 'task_updated' as const,
         user: {
           id: task.assignee?.id || 'system',
           name: task.assignee?.name || 'Someone',
@@ -217,6 +217,7 @@ export function TeamActivityFeed({ teamId, maxItems = 10, className }: TeamActiv
                   className="flex items-start gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors group"
                 >
                   <Avatar className="h-7 w-7 shrink-0">
+                    <AvatarImage src={activity.user.avatar} alt={activity.user.name || "Avatar"} />
                     <AvatarFallback className="bg-primary/10 text-primary text-[10px]">
                       {activity.user.initials || activity.user.name?.charAt(0) || "?"}
                     </AvatarFallback>

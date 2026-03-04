@@ -8,19 +8,17 @@ import {
   UserPlus,
   Crown,
   Hash,
-  Video,
   CheckSquare,
   Trash2,
   Edit,
   MessageSquare,
-  Grid3x3,
-  List,
   X,
   RefreshCw,
-  Calendar,
-  TrendingUp,
-  Clock,
   Sparkles,
+  Star,
+  StarOff,
+  Filter,
+  IdCard,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,7 +27,7 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import StatusIndicator from "@/components/shared/StatusIndicator";
-import InviteUserDialog from "@/components/dialogs/InviteUserDialog";
+import AddTeamMemberDialog from "@/components/dialogs/AddTeamMemberDialog";
 import CreateChannelDialog from "@/components/dialogs/CreateChannelDialog";
 import { apiGet, apiPost, apiPatch, apiDelete } from "@/lib/api";
 import {
@@ -57,15 +55,19 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { motion } from "framer-motion";
+import { useAuth } from "@/lib/auth";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface TeamMember {
   name: string;
   initials: string;
   email: string;
-  role: "lead" | "member";
+  role: string;
   status: "online" | "busy" | "away" | "offline";
   joinedDate: string;
   userId?: string;
+  department?: string;
+  position?: string;
 }
 
 interface TeamChannel {
@@ -85,14 +87,41 @@ interface Team {
   createdDate: string;
 }
 
-type ViewMode = "grid" | "list";
+type ViewMode = "gallery" | "compact";
+
+type TeamsFilter = "all" | "mine" | "favorites" | "active";
+
+function getRoleLabel(role?: string) {
+  const value = String(role || "member").toLowerCase();
+  if (value === "lead") return "Team Lead";
+  if (value === "admin") return "Admin";
+  if (value === "manager") return "Manager";
+  if (value === "viewer") return "Viewer";
+  return "Member";
+}
+
+function rolePriority(role?: string) {
+  const value = String(role || "member").toLowerCase();
+  if (value === "lead") return 0;
+  if (value === "admin") return 1;
+  if (value === "manager") return 2;
+  if (value === "member") return 3;
+  if (value === "viewer") return 4;
+  return 5;
+}
+
+function canPromoteToLead(currentUserRole?: string) {
+  const r = String(currentUserRole || "").toLowerCase();
+  return r === "org_owner" || r === "admin";
+}
 
 export default function Teams() {
   const { isUserOnline } = usePresence();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedTeam, setSelectedTeam] = useState<string | null>(null);
-  const [showInvite, setShowInvite] = useState(false);
+  const [showAddMember, setShowAddMember] = useState(false);
   const [showCreateChannel, setShowCreateChannel] = useState(false);
   const [showCreateTeam, setShowCreateTeam] = useState(false);
   const [teams, setTeams] = useState<Team[]>([]);
@@ -102,8 +131,47 @@ export default function Teams() {
   const [showEditTeam, setShowEditTeam] = useState(false);
   const [editTeamName, setEditTeamName] = useState("");
   const [editTeamDescription, setEditTeamDescription] = useState("");
-  const [viewMode, setViewMode] = useState<ViewMode>("grid");
+  const [viewMode, setViewMode] = useState<ViewMode>("gallery");
   const [refreshing, setRefreshing] = useState(false);
+  const [activeFilter, setActiveFilter] = useState<TeamsFilter>("all");
+  const [favoriteTeamIds, setFavoriteTeamIds] = useState<string[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const raw = window.localStorage.getItem("tc:teams:favorites");
+      const parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const canSeeEmployees =
+    !!user && ["org_owner", "admin", "manager"].includes((user.role || "").toLowerCase());
+
+  // สิทธิ์ระดับองค์กรสำหรับจัดการทีม
+  // - เปลี่ยน role สมาชิกทีม: org_owner, admin (ให้ตรงกับ backend @Roles)
+  // - ลบสมาชิกออกจากทีม: org_owner, admin, manager
+  const canManageTeamRoles = useMemo(() => canPromoteToLead(user?.role), [user?.role]);
+  const orgRole = String(user?.role || "").toLowerCase();
+
+  const persistFavorites = (ids: string[]) => {
+    setFavoriteTeamIds(ids);
+    try {
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem("tc:teams:favorites", JSON.stringify(ids));
+      }
+    } catch {
+      // ignore storage errors
+    }
+  };
+
+  const toggleFavorite = (teamId: string) => {
+    persistFavorites(
+      favoriteTeamIds.includes(teamId)
+        ? favoriteTeamIds.filter((id) => id !== teamId)
+        : [...favoriteTeamIds, teamId]
+    );
+  };
 
   const loadTeams = async (showRefresh = false) => {
     try {
@@ -112,64 +180,75 @@ export default function Teams() {
       } else {
         setLoading(true);
       }
-      
-      // Load base data first
+
       const [teamsResRaw, tasksResRaw, channelsResRaw] = await Promise.all([
         apiGet<any[]>("/teams").catch(() => []),
         apiGet<any[]>("/tasks").catch(() => []),
-        apiGet<any[]>("/channels").catch(() => []), // Load once for all teams
+        apiGet<any[]>("/channels").catch(() => []),
       ]);
 
-      // Ensure all responses are arrays (apiGet should handle this, but double-check)
       const teamsRes = Array.isArray(teamsResRaw) ? teamsResRaw : [];
       const tasksRes = Array.isArray(tasksResRaw) ? tasksResRaw : [];
       const channelsRes = Array.isArray(channelsResRaw) ? channelsResRaw : [];
 
       if (teamsRes.length === 0) {
-        console.warn("No teams found or invalid response format");
         setTeams([]);
         return;
       }
 
-      // Process teams sequentially with delay to avoid rate limiting
       const teamsWithData = [];
       for (let i = 0; i < teamsRes.length; i++) {
         const team = teamsRes[i];
-        
-        // Add delay between requests (except first one)
+
         if (i > 0) {
           await new Promise(resolve => setTimeout(resolve, 150));
         }
-        
-          const membersRes = await apiGet<any[]>(`/teams/${team.id}/members`).catch(() => []);
-          const members = Array.isArray(membersRes) ? membersRes.map((m: any) => ({
-            name: m.user?.name || "Unknown",
-            initials: (m.user?.name || "U").split(" ").map((n: string) => n[0]).join(""),
-            email: m.user?.email || "",
-            role: m.role === "admin" ? "lead" : "member",
-            status: (isUserOnline(m.user?.id) ? "online" : "offline") as const,
-            joinedDate: new Date(m.createdAt).toLocaleDateString("en-US", { month: "short", year: "numeric" }),
-            userId: m.user?.id,
-          })) : [];
 
-          const teamChannels = Array.isArray(channelsRes) ? channelsRes.filter((c: any) => c.teamId === team.id).map((c: any) => ({
-            id: c.id,
-            name: c.name,
-            type: c.type || "general",
-            messages: c._count?.messages || 0,
-          })) : [];
+        const membersRes = await apiGet<any[]>(`/teams/${team.id}/members`).catch(() => []);
+        const members = Array.isArray(membersRes)
+          ? membersRes
+              .map((m: any) => {
+                const userId = m.user?.id as string | undefined;
+                const role = String(m.role || "member").toLowerCase();
+                return {
+                  name: m.user?.name || "Unknown",
+                  initials: (m.user?.name || "U").split(" ").map((n: string) => n[0]).join(""),
+                  email: m.user?.email || "",
+                  role,
+                  avatar: m.user?.avatar || undefined,
+                  status: (isUserOnline(userId) ? "online" : "offline"),
+                  joinedDate: new Date(m.createdAt).toLocaleDateString("en-US", {
+                    month: "short",
+                    year: "numeric",
+                  }),
+                  userId,
+                  department: m.user?.department,
+                  position: m.user?.position,
+                } as any;
+              })
+              .sort((a: TeamMember, b: TeamMember) => rolePriority(a.role) - rolePriority(b.role))
+          : [];
 
-          const teamTasks = Array.isArray(tasksRes) ? tasksRes.filter((t: any) => t.teamId === team.id) : [];
-          const activeTasks = teamTasks.filter((t: any) => t.status !== "done").length;
+        const teamChannels = Array.isArray(channelsRes)
+          ? channelsRes.filter((c: any) => c.teamId === team.id).map((c: any) => ({
+              id: c.id,
+              name: c.name,
+              type: c.type || "general",
+              messages: c._count?.messages || 0,
+            }))
+          : [];
+
+        const teamTasks = Array.isArray(tasksRes) ? tasksRes.filter((t: any) => t.teamId === team.id) : [];
+        const activeTasks = teamTasks.filter((t: any) => t.status !== "done").length;
 
         teamsWithData.push({
-            id: team.id,
-            name: team.name,
-            description: team.description || "",
-            members,
-            channels: teamChannels,
-            activeTasks,
-            createdDate: new Date(team.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+          id: team.id,
+          name: team.name,
+          description: team.description || "",
+          members,
+          channels: teamChannels,
+          activeTasks,
+          createdDate: new Date(team.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
         });
       }
 
@@ -191,14 +270,48 @@ export default function Teams() {
   }, []);
 
   const filteredTeams = useMemo(() => {
-    if (!searchQuery.trim()) return teams;
+    let result = teams;
+
+    if (activeFilter === "mine" && user?.id) {
+      result = result.filter((team) =>
+        team.members.some((m) => m.userId === user.id)
+      );
+    } else if (activeFilter === "favorites") {
+      result = result.filter((team) => favoriteTeamIds.includes(team.id));
+    } else if (activeFilter === "active") {
+      result = result.filter((team) => team.activeTasks > 0);
+    }
+
+    if (!searchQuery.trim()) return result;
     const query = searchQuery.toLowerCase();
-    return teams.filter(
+    return result.filter(
       (team) =>
         team.name.toLowerCase().includes(query) ||
         team.description.toLowerCase().includes(query)
     );
-  }, [teams, searchQuery]);
+  }, [teams, searchQuery, activeFilter, favoriteTeamIds, user?.id]);
+
+  const orgStats = useMemo(() => {
+    const totalTeams = teams.length;
+    const uniqueMembers = new Set<string>();
+    let totalActiveTasks = 0;
+    let totalChannels = 0;
+
+    teams.forEach((t) => {
+      t.members.forEach((m) => {
+        if (m.userId) uniqueMembers.add(m.userId);
+      });
+      totalActiveTasks += t.activeTasks;
+      totalChannels += t.channels.length;
+    });
+
+    return {
+      totalTeams,
+      totalMembers: uniqueMembers.size,
+      totalActiveTasks,
+      totalChannels,
+    };
+  }, [teams]);
 
   const handleCreateTeam = async () => {
     try {
@@ -244,7 +357,7 @@ export default function Teams() {
   const handleRemoveMember = async (teamId: string, userId: string) => {
     if (!confirm("Are you sure you want to remove this member from the team?")) return;
     try {
-      await apiPatch(`/teams/${teamId}/members/${userId}`, { isActive: false });
+      await apiDelete(`/teams/${teamId}/members?userId=${encodeURIComponent(userId)}`);
       toast.success("Member removed successfully");
       loadTeams();
     } catch (err: any) {
@@ -253,80 +366,110 @@ export default function Teams() {
     }
   };
 
+  const handleChangeMemberRole = async (teamId: string, userId: string, role: "lead" | "admin" | "manager" | "member" | "viewer") => {
+    try {
+      await apiPatch(`/teams/${teamId}/members/${userId}/role?role=${role}`);
+      toast.success("อัปเดตบทบาทเรียบร้อย");
+      loadTeams();
+    } catch (err: any) {
+      console.error("Failed to update member role:", err);
+      toast.error(err.message || "Failed to update member role");
+    }
+  };
+
   const handleNavigateToChannel = (channelId: string) => {
-    navigate(`/chat?channel=${channelId}`);
+    // Navigate to channel logic
   };
 
   const activeTeam = teams.find((t) => t.id === selectedTeam);
+  const activeTeamManagerRole = activeTeam?.members.find((m) => m.userId === user?.id)?.role?.toLowerCase();
+  
+  const canChangeTeamMemberRoles = orgRole === "org_owner" || activeTeamManagerRole === "lead" || activeTeamManagerRole === "admin";
+  const canRemoveTeamMembers = orgRole === "org_owner" || activeTeamManagerRole === "lead" || activeTeamManagerRole === "admin";
+  
   const onlineMembers = activeTeam?.members.filter(m => isUserOnline(m.userId || "")) || [];
   const totalMembers = activeTeam?.members.length || 0;
 
   return (
     <TooltipProvider>
       <div className="flex flex-col h-screen bg-gradient-to-br from-background via-background to-muted/20">
-        {/* Modern Header */}
-        <div className="border-b border-border/50 bg-background/95 backdrop-blur-xl supports-[backdrop-filter]:bg-background/80">
+        <div className="border-b border-border/40 bg-background/95 backdrop-blur-xl supports-[backdrop-filter]:bg-background/80">
           <div className="max-w-7xl mx-auto px-6 lg:px-8">
             <div className="h-20 flex items-center justify-between gap-6">
-              {/* Left: Logo & Title */}
               <div className="flex items-center gap-4 min-w-0 flex-1">
                 <div className="relative">
-                  <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-primary/20 via-primary/10 to-primary/5 flex items-center justify-center shadow-lg shadow-primary/5 ring-1 ring-primary/10">
+                  <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-primary/25 via-primary/10 to-primary/5 flex items-center justify-center shadow-md shadow-primary/10 ring-1 ring-primary/20">
                     <Users className="w-6 h-6 text-primary" />
                   </div>
-                  <div className="absolute -top-1 -right-1 w-4 h-4 bg-primary rounded-full border-2 border-background animate-pulse" />
+                  <div className="absolute -top-1 -right-1 flex items-center justify-center w-4 h-4 rounded-full bg-primary text-[9px] text-primary-foreground border border-background shadow-sm">
+                    <Sparkles className="w-3 h-3" />
+                  </div>
                 </div>
                 <div className="min-w-0 flex-1">
-                  <h1 className="text-xl font-bold text-foreground tracking-tight">Teams</h1>
+                  <h1 className="text-xl font-semibold tracking-tight text-foreground">
+                    Teams OS
+                  </h1>
                   <p className="text-xs text-muted-foreground mt-0.5 truncate">
-                    จัดการทีม · สมาชิก · ช่องทางสื่อสาร · ทำงานร่วมกัน
+                    มุมมองรวมของทีม · คน · ช่องทางสื่อสาร · งานที่ยังเดินอยู่
                   </p>
                 </div>
               </div>
 
-              {/* Right: Actions */}
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 shrink-0">
+                <div className="hidden sm:flex items-center gap-2 rounded-xl border border-border/60 bg-background/60 px-3 py-1.5 text-[11px] text-muted-foreground/90">
+                  <span className="inline-flex items-center gap-1">
+                    <Users className="w-3 h-3" />
+                    <span>{orgStats.totalTeams} ทีม</span>
+                  </span>
+                  <span className="inline-flex items-center gap-1">
+                    <Hash className="w-3 h-3" />
+                    <span>{orgStats.totalChannels} ช่อง</span>
+                  </span>
+                  <span className="inline-flex items-center gap-1">
+                    <CheckSquare className="w-3 h-3" />
+                    <span>{orgStats.totalActiveTasks} งานเปิดอยู่</span>
+                  </span>
+                </div>
+
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button
                       variant="outline"
                       size="icon"
-                      className="h-10 w-10 border-border/60 bg-background/50 hover:bg-background"
+                      className="h-9 w-9 border-border/60 bg-background/60 hover:bg-accent hover:text-accent-foreground"
                       onClick={() => loadTeams(true)}
                     >
                       <RefreshCw className={cn("w-4 h-4", refreshing && "animate-spin")} />
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent>รีเฟรช</TooltipContent>
+                  <TooltipContent>รีเฟรชข้อมูลทีม</TooltipContent>
                 </Tooltip>
+
                 <Button
                   size="sm"
-                  className="h-10 gap-2 px-4"
+                  className="h-9 gap-2 px-3 font-medium"
                   onClick={() => setShowCreateTeam(true)}
                 >
                   <Plus className="w-4 h-4" />
-                  <span className="hidden sm:inline">ทีมใหม่</span>
+                  <span className="hidden sm:inline">สร้างทีมใหม่</span>
+                  <span className="sm:hidden">New</span>
                 </Button>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Main Content */}
         <div className="flex-1 overflow-hidden">
           <div className="max-w-7xl mx-auto px-6 lg:px-8 h-full flex flex-col">
-            {/* Toolbar */}
-            <div className="py-6 space-y-4">
-              {/* Search & View Toggle */}
-              <div className="flex items-center gap-3 flex-wrap">
-                {/* Search */}
-                <div className="relative flex-1 min-w-[280px]">
+            <div className="py-5 space-y-4">
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="relative flex-1 min-w-[220px] sm:min-w-[260px]">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <Input
-                    placeholder="ค้นหาทีม..."
+                    placeholder="ค้นหาทีมตามชื่อหรือคำอธิบาย..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-9 h-10 bg-background/50 border-border/60 focus-visible:ring-2 focus-visible:ring-primary/20"
+                    className="pl-9 h-10 bg-background/60 border-border/60 focus-visible:ring-2 focus-visible:ring-primary/20"
                   />
                   {searchQuery && (
                     <Button
@@ -340,590 +483,495 @@ export default function Teams() {
                   )}
                 </div>
 
-                {/* View Mode Toggle */}
-                <div className="flex items-center gap-1 p-1 bg-muted/40 rounded-lg border border-border/50 backdrop-blur-sm">
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant={viewMode === "grid" ? "default" : "ghost"}
-                        size="icon"
-                        className={cn(
-                          "h-8 w-8 transition-all duration-200",
-                          viewMode === "grid" && "bg-background shadow-md ring-1 ring-border/50"
-                        )}
-                        onClick={() => setViewMode("grid")}
-                      >
-                        <Grid3x3 className={cn("w-4 h-4 transition-colors", viewMode === "grid" ? "text-primary" : "")} />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>มุมมองแบบ Grid</TooltipContent>
-                  </Tooltip>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant={viewMode === "list" ? "default" : "ghost"}
-                        size="icon"
-                        className={cn(
-                          "h-8 w-8 transition-all duration-200",
-                          viewMode === "list" && "bg-background shadow-md ring-1 ring-border/50"
-                        )}
-                        onClick={() => setViewMode("list")}
-                      >
-                        <List className={cn("w-4 h-4 transition-colors", viewMode === "list" ? "text-primary" : "")} />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>มุมมองแบบ List</TooltipContent>
-                  </Tooltip>
+                <div className="flex items-center gap-1.5 rounded-xl border border-border/60 bg-muted/40 px-1 py-1 backdrop-blur-sm">
+                  <span className="hidden sm:inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] text-muted-foreground">
+                    <Filter className="w-3 h-3" />
+                    มุมมอง
+                  </span>
+                  {[
+                    { key: "all", label: "ทั้งหมด" },
+                    { key: "mine", label: "ของฉัน" },
+                    { key: "favorites", label: "ที่ปักหมุด" },
+                    { key: "active", label: "มีงานเปิดอยู่" },
+                  ].map((item) => (
+                    <button
+                      key={item.key}
+                      onClick={() => setActiveFilter(item.key as TeamsFilter)}
+                      className={cn(
+                        "px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all",
+                        activeFilter === item.key
+                          ? "bg-background shadow-sm ring-1 ring-border/60 text-foreground"
+                          : "text-muted-foreground hover:text-foreground hover:bg-background/50"
+                      )}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="flex items-center gap-1 rounded-xl border border-border/60 bg-background/60 px-1 py-1">
+                  <button
+                    onClick={() => setViewMode("gallery")}
+                    className={cn(
+                      "px-2.5 py-1 rounded-lg text-[11px] font-medium",
+                      viewMode === "gallery"
+                        ? "bg-primary/10 text-primary"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    Gallery
+                  </button>
+                  <button
+                    onClick={() => setViewMode("compact")}
+                    className={cn(
+                      "px-2.5 py-1 rounded-lg text-[11px] font-medium",
+                      viewMode === "compact"
+                        ? "bg-primary/10 text-primary"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    Compact
+                  </button>
                 </div>
               </div>
             </div>
 
-            {/* Content Area - Split View */}
-            <div className="flex-1 overflow-hidden pb-6 flex gap-6">
-              <div className={cn("flex-1 transition-all duration-300", activeTeam && "max-w-[calc(100%-432px)]")}>
-              {loading ? (
-                <div className="space-y-4">
-                  {viewMode === "grid" ? (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                      {[...Array(8)].map((_, i) => (
-                        <Card key={i} className="border-border/60">
-                          <CardContent className="p-6">
-                            <Skeleton className="h-12 w-12 rounded-xl mb-4" />
-                            <Skeleton className="h-4 w-3/4 mb-2" />
-                            <Skeleton className="h-3 w-1/2" />
-                          </CardContent>
-                        </Card>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      {[...Array(8)].map((_, i) => (
-                        <Card key={i} className="border-border/60">
-                          <CardContent className="p-4">
-                            <div className="flex items-center gap-4">
-                              <Skeleton className="h-10 w-10 rounded-lg" />
-                              <div className="flex-1 space-y-2">
-                                <Skeleton className="h-4 w-1/3" />
-                                <Skeleton className="h-3 w-1/4" />
-                              </div>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      ))}
-                    </div>
+            <div className="flex-1 flex gap-5 pb-6 overflow-hidden min-h-0">
+              <div className="w-[260px] shrink-0 flex flex-col rounded-2xl border border-border/60 bg-card/70 backdrop-blur-sm overflow-hidden">
+                <div className="px-4 py-3 border-b border-border/60 flex items-center justify-between">
+                  <div>
+                    <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
+                      Teams index
+                    </p>
+                    <p className="text-[11px] text-muted-foreground/80">
+                      {filteredTeams.length} จาก {teams.length} ทีม
+                    </p>
+                  </div>
+                  {favoriteTeamIds.length > 0 && (
+                    <Badge variant="outline" className="h-6 px-2 text-[10px]">
+                      <Star className="w-3 h-3 mr-1 text-amber-500" />
+                      {favoriteTeamIds.length}
+                    </Badge>
                   )}
                 </div>
-              ) : filteredTeams.length === 0 ? (
-                <Card className="border-border/50 border-dashed bg-card/40">
-                  <CardContent className="flex flex-col items-center justify-center py-20 px-6">
-                    <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-muted/60 to-muted/40 flex items-center justify-center mb-5 shadow-sm">
-                      {searchQuery ? (
-                        <Search className="w-10 h-10 text-muted-foreground" />
-                      ) : (
-                        <Users className="w-10 h-10 text-muted-foreground" />
+                <ScrollArea className="flex-1">
+                  {loading ? (
+                    <div className="p-3 space-y-2">
+                      {[...Array(6)].map((_, i) => (
+                        <div
+                          key={i}
+                          className="rounded-xl border border-border/40 bg-muted/40 px-3 py-2 flex items-center gap-3"
+                        >
+                          <Skeleton className="h-8 w-8 rounded-lg" />
+                          <div className="flex-1 space-y-1">
+                            <Skeleton className="h-3 w-4/5" />
+                            <Skeleton className="h-2.5 w-1/2" />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : filteredTeams.length === 0 ? (
+                    <div className="px-4 py-8 text-center text-xs text-muted-foreground space-y-3">
+                      <div className="flex justify-center">
+                        <div className="w-10 h-10 rounded-full bg-muted/50 flex items-center justify-center">
+                          <Users className="w-5 h-5 text-muted-foreground" />
+                        </div>
+                      </div>
+                      <p className="font-medium">
+                        {searchQuery ? "ไม่พบทีมที่ตรงกับคำค้นหา" : "ยังไม่มีทีมในมุมมองนี้"}
+                      </p>
+                      {!searchQuery && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setShowCreateTeam(true)}
+                          className="h-8 text-xs"
+                        >
+                          สร้างทีมแรกของคุณ
+                        </Button>
                       )}
                     </div>
-                    <h3 className="text-lg font-bold text-foreground mb-2">
-                      {searchQuery ? "ไม่พบผลลัพธ์" : "ยังไม่มีทีม"}
-                    </h3>
-                    <p className="text-sm text-muted-foreground text-center max-w-sm leading-relaxed mb-6">
-                      {searchQuery
-                        ? "ลองค้นหาด้วยคำอื่น หรือลบคำค้นหาเพื่อดูรายการทั้งหมด"
-                        : "เริ่มต้นด้วยการสร้างทีมแรกของคุณเพื่อทำงานร่วมกัน"}
-                    </p>
-                    {!searchQuery && (
-                      <Button onClick={() => setShowCreateTeam(true)} className="gap-2">
-                        <Plus className="w-4 h-4" />
-                        สร้างทีมใหม่
-                      </Button>
-                    )}
-                  </CardContent>
-                </Card>
-              ) : viewMode === "grid" ? (
-                <ScrollArea className="h-full">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 pb-4">
-                    {filteredTeams.map((team) => (
-                      <motion.div
-                        key={team.id}
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.3 }}
-                      >
-                        <Card
-                          className={cn(
-                            "group border-border/50 bg-card/60 hover:bg-card hover:border-border/80 transition-all duration-300 cursor-pointer",
-                            "hover:shadow-xl hover:shadow-black/10 hover:-translate-y-1.5",
-                            "ring-0 hover:ring-1 hover:ring-primary/20",
-                            selectedTeam === team.id && "ring-2 ring-primary/30 border-primary/50 bg-primary/5"
-                          )}
-                          onClick={() => setSelectedTeam(team.id)}
-                        >
-                          <CardContent className="p-5">
-                            <div className="flex items-start justify-between mb-4">
-                              <div
-                                className={cn(
-                                  "w-14 h-14 rounded-xl flex items-center justify-center transition-all duration-300 shadow-sm",
-                                  "bg-gradient-to-br from-primary/15 to-primary/5 group-hover:from-primary/20 group-hover:to-primary/10",
-                                  "group-hover:scale-110 group-hover:shadow-md"
-                                )}
-                              >
-                                <Users className="w-7 h-7 text-primary transition-transform duration-300" />
-                              </div>
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
-                                  >
-                                    <MoreHorizontal className="w-4 h-4" />
-                                  </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end">
-                                  <DropdownMenuItem onClick={() => {
-                                    setEditTeamName(team.name);
-                                    setEditTeamDescription(team.description);
-                                    setShowEditTeam(true);
-                                  }}>
-                                    <Edit className="w-4 h-4 mr-2" />
-                                    แก้ไขทีม
-                                  </DropdownMenuItem>
-                                  <DropdownMenuSeparator />
-                                  <DropdownMenuItem
-                                    className="text-destructive"
-                                    onClick={() => handleDeleteTeam(team.id)}
-                                  >
-                                    <Trash2 className="w-4 h-4 mr-2" />
-                                    ลบทีม
-                                  </DropdownMenuItem>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                            </div>
-                            <h3 className="font-semibold text-sm text-foreground mb-1.5 line-clamp-2 group-hover:text-primary transition-colors duration-200">
-                              {team.name}
-                            </h3>
-                            {team.description && (
-                              <p className="text-xs text-muted-foreground mb-3 line-clamp-2">
-                                {team.description}
-                              </p>
+                  ) : (
+                    <div className="p-3 space-y-1.5">
+                      {filteredTeams.map((team) => {
+                        const isSelected = team.id === selectedTeam;
+                        const isFavorite = favoriteTeamIds.includes(team.id);
+                        const isMyTeam = !!user?.id && team.members.some((m) => m.userId === user.id);
+                        return (
+                          <motion.div
+                            key={team.id}
+                            initial={{ opacity: 0, x: -8 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ duration: 0.18 }}
+                            onClick={() => setSelectedTeam(team.id)}
+                            role="button"
+                            tabIndex={0}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" || e.key === " ") {
+                                e.preventDefault();
+                                setSelectedTeam(team.id);
+                              }
+                            }}
+                            className={cn(
+                              "w-full text-left rounded-xl border transition-all flex items-center cursor-pointer select-none",
+                              "hover:border-primary/40 hover:bg-primary/5",
+                              isSelected
+                                ? "border-primary/60 bg-primary/10 shadow-sm"
+                                : "border-border/40 bg-background/40",
+                              viewMode === "gallery"
+                                ? "px-3 py-2.5 gap-3"
+                                : "px-2.5 py-1.5 gap-2 text-[11px]"
                             )}
-                            <div className="flex items-center gap-4 text-xs text-muted-foreground mt-3 pt-3 border-t border-border/50">
-                              <span className="flex items-center gap-1">
-                                <Users className="w-3 h-3" />
-                                {team.members.length}
-                              </span>
-                              <span className="flex items-center gap-1">
-                                <Hash className="w-3 h-3" />
-                                {team.channels.length}
-                              </span>
-                              <span className="flex items-center gap-1">
-                                <CheckSquare className="w-3 h-3" />
-                                {team.activeTasks}
-                              </span>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      </motion.div>
-                    ))}
-                  </div>
-                </ScrollArea>
-              ) : (
-                <ScrollArea className="h-full">
-                  <div className="space-y-1 pb-4">
-                    {filteredTeams.map((team) => (
-                      <motion.div
-                        key={team.id}
-                        initial={{ opacity: 0, x: -20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ duration: 0.3 }}
-                      >
-                        <Card
-                          className={cn(
-                            "group border-border/50 bg-card/60 hover:bg-card hover:border-border/80 transition-all duration-300 cursor-pointer",
-                            "hover:shadow-lg hover:shadow-black/8",
-                            "ring-0 hover:ring-1 hover:ring-primary/10",
-                            selectedTeam === team.id && "ring-2 ring-primary/30 border-primary/50 bg-primary/5"
-                          )}
-                          onClick={() => setSelectedTeam(team.id)}
-                        >
-                          <CardContent className="p-4">
-                            <div className="flex items-center gap-4">
+                          >
+                            <div className="relative">
                               <div
                                 className={cn(
-                                  "w-12 h-12 rounded-lg flex items-center justify-center transition-all duration-300 shadow-sm",
-                                  "bg-gradient-to-br from-primary/15 to-primary/5 group-hover:from-primary/20 group-hover:to-primary/10",
-                                  "group-hover:scale-110 group-hover:shadow-md"
+                                  "rounded-lg bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center",
+                                  viewMode === "gallery" ? "w-9 h-9" : "w-7 h-7"
                                 )}
                               >
-                                <Users className="w-6 h-6 text-primary transition-transform duration-300" />
+                                <Users className={cn("text-primary", viewMode === "gallery" ? "w-4 h-4" : "w-3.5 h-3.5")} />
                               </div>
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2 mb-1.5">
-                                  <h3 className="font-semibold text-sm text-foreground truncate group-hover:text-primary transition-colors duration-200">
-                                    {team.name}
-                                  </h3>
-                                </div>
-                                <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                                  {team.description && (
-                                    <span className="truncate max-w-xs">{team.description}</span>
-                                  )}
-                                  <span className="flex items-center gap-1">
-                                    <Users className="w-3 h-3" />
-                                    {team.members.length} สมาชิก
-                                  </span>
-                                  <span className="flex items-center gap-1">
-                                    <Hash className="w-3 h-3" />
-                                    {team.channels.length} ช่อง
-                                  </span>
-                                  <span className="flex items-center gap-1">
-                                    <CheckSquare className="w-3 h-3" />
-                                    {team.activeTasks} งาน
-                                  </span>
-                                </div>
-                              </div>
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
-                                  >
-                                    <MoreHorizontal className="w-4 h-4" />
-                                  </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end">
-                                  <DropdownMenuItem onClick={() => {
-                                    setEditTeamName(team.name);
-                                    setEditTeamDescription(team.description);
-                                    setShowEditTeam(true);
-                                  }}>
-                                    <Edit className="w-4 h-4 mr-2" />
-                                    แก้ไขทีม
-                                  </DropdownMenuItem>
-                                  <DropdownMenuSeparator />
-                                  <DropdownMenuItem
-                                    className="text-destructive"
-                                    onClick={() => handleDeleteTeam(team.id)}
-                                  >
-                                    <Trash2 className="w-4 h-4 mr-2" />
-                                    ลบทีม
-                                  </DropdownMenuItem>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      </motion.div>
-                    ))}
-                  </div>
-                </ScrollArea>
-              )}
-              </div>
-
-              {/* Team Detail Sidebar */}
-              {activeTeam && (
-                <motion.div
-                  initial={{ opacity: 0, x: 20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ duration: 0.3 }}
-                  className="w-[420px] border-l border-border/50 bg-background/95 backdrop-blur-sm flex flex-col shrink-0"
-                >
-                  <ScrollArea className="flex-1">
-                    {/* Header */}
-                    <div className="p-6 border-b border-border/50 bg-gradient-to-r from-primary/5 via-primary/2 to-transparent">
-                      <div className="flex items-start justify-between mb-4">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-3 mb-2">
-                            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center shadow-sm ring-1 ring-primary/10">
-                              <Users className="w-6 h-6 text-primary" />
+                              {isFavorite && (
+                                <Star className="w-3 h-3 text-amber-500 absolute -top-1 -right-1 drop-shadow-sm" />
+                              )}
                             </div>
                             <div className="flex-1 min-w-0">
-                              <h2 className="text-xl font-bold text-foreground truncate">{activeTeam.name}</h2>
-                              <p className="text-xs text-muted-foreground mt-0.5">สร้างเมื่อ {activeTeam.createdDate}</p>
+                              <p
+                                className={cn(
+                                  "font-medium text-foreground truncate",
+                                  viewMode === "gallery" ? "text-xs" : "text-[11px]"
+                                )}
+                              >
+                                {team.name}
+                              </p>
+                              <div className="mt-0.5 flex items-center gap-2 text-[10px] text-muted-foreground">
+                                <span className="inline-flex items-center gap-1">
+                                  <Users className="w-3 h-3" />
+                                  {team.members.length}
+                                </span>
+                                <span className="inline-flex items-center gap-1">
+                                  <Hash className="w-3 h-3" />
+                                  {team.channels.length}
+                                </span>
+                                {team.activeTasks > 0 && (
+                                  <span className="inline-flex items-center gap-1 text-amber-600 dark:text-amber-400">
+                                    <CheckSquare className="w-3 h-3" />
+                                    {team.activeTasks}
+                                  </span>
+                                )}
+                              </div>
                             </div>
-                          </div>
-                          {activeTeam.description && (
-                            <p className="text-sm text-muted-foreground leading-relaxed">{activeTeam.description}</p>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Stats */}
-                      <div className="grid grid-cols-3 gap-3 mt-4">
-                        <div className="p-3 rounded-lg bg-background/60 border border-border/50">
-                          <div className="flex items-center gap-2 mb-1">
-                            <Users className="w-4 h-4 text-primary" />
-                            <span className="text-xs text-muted-foreground">สมาชิก</span>
-                          </div>
-                          <p className="text-lg font-bold text-foreground">{totalMembers}</p>
-                          {onlineMembers.length > 0 && (
-                            <p className="text-[10px] text-green-500 mt-0.5">{onlineMembers.length} ออนไลน์</p>
-                          )}
-                        </div>
-                        <div className="p-3 rounded-lg bg-background/60 border border-border/50">
-                          <div className="flex items-center gap-2 mb-1">
-                            <Hash className="w-4 h-4 text-primary" />
-                            <span className="text-xs text-muted-foreground">ช่อง</span>
-                          </div>
-                          <p className="text-lg font-bold text-foreground">{activeTeam.channels.length}</p>
-                        </div>
-                        <div className="p-3 rounded-lg bg-background/60 border border-border/50">
-                          <div className="flex items-center gap-2 mb-1">
-                            <CheckSquare className="w-4 h-4 text-primary" />
-                            <span className="text-xs text-muted-foreground">งาน</span>
-                          </div>
-                          <p className="text-lg font-bold text-foreground">{activeTeam.activeTasks}</p>
-                        </div>
-                      </div>
-
-                      {/* Actions */}
-                      <div className="flex gap-2 mt-4">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="flex-1 h-9 gap-2"
-                          onClick={() => setShowInvite(true)}
-                        >
-                          <UserPlus className="w-4 h-4" />
-                          เพิ่มสมาชิก
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-9 gap-2"
-                          onClick={() => {
-                            setEditTeamName(activeTeam.name);
-                            setEditTeamDescription(activeTeam.description);
-                            setShowEditTeam(true);
-                          }}
-                        >
-                          <Edit className="w-4 h-4" />
-                        </Button>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="outline" size="sm" className="h-9">
-                              <Settings className="w-4 h-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => navigate(`/chat?teamId=${activeTeam.id}`)}>
-                              <MessageSquare className="w-4 h-4 mr-2" />
-                              เปิดแชททีม
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => navigate(`/tasks?teamId=${activeTeam.id}`)}>
-                              <CheckSquare className="w-4 h-4 mr-2" />
-                              ดูงานทีม
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              className="text-destructive"
-                              onClick={() => handleDeleteTeam(activeTeam.id)}
-                            >
-                              <Trash2 className="w-4 h-4 mr-2" />
-                              ลบทีม
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
-                    </div>
-
-                    {/* Tabs */}
-                    <div className="p-6">
-                <Tabs defaultValue="members" className="w-full">
-                  <TabsList className="w-full mb-4">
-                    <TabsTrigger value="members" className="flex-1">
-                      สมาชิก ({activeTeam.members.length})
-                    </TabsTrigger>
-                    <TabsTrigger value="channels" className="flex-1">
-                      ช่อง ({activeTeam.channels.length})
-                    </TabsTrigger>
-                  </TabsList>
-
-                  <TabsContent value="members" className="space-y-2 mt-0">
-                    {activeTeam.members.length === 0 ? (
-                      <Card className="border-dashed border-border/50 bg-card/40">
-                        <CardContent className="flex flex-col items-center justify-center py-12 px-6">
-                          <div className="w-16 h-16 rounded-xl bg-muted/50 flex items-center justify-center mb-4">
-                            <Users className="w-8 h-8 text-muted-foreground" />
-                          </div>
-                          <p className="text-sm font-medium text-foreground mb-1">ยังไม่มีสมาชิก</p>
-                          <p className="text-xs text-muted-foreground text-center mb-4">
-                            เพิ่มสมาชิกคนแรกเพื่อเริ่มทำงานร่วมกัน
-                          </p>
-                          <Button size="sm" onClick={() => setShowInvite(true)} className="gap-2">
-                            <UserPlus className="w-4 h-4" />
-                            เพิ่มสมาชิก
-                          </Button>
-                        </CardContent>
-                      </Card>
-                    ) : (
-                      activeTeam.members.map((member) => {
-                        const online = member.userId ? isUserOnline(member.userId) : false;
-                        const status = online ? "online" : "offline";
-                        return (
-                          <Card
-                            key={member.name}
-                            className="group border-border/50 bg-card/60 hover:bg-card hover:border-border/80 transition-all duration-200"
-                          >
-                            <CardContent className="p-4">
-                              <div className="flex items-center gap-3">
-                                <div className="relative">
-                                  <Avatar className="h-10 w-10 ring-2 ring-background">
-                                    <AvatarFallback className="bg-gradient-to-br from-primary/20 to-primary/10 text-primary text-xs font-semibold">
-                                      {member.initials}
-                                    </AvatarFallback>
-                                  </Avatar>
-                                  <StatusIndicator
-                                    status={status as "online" | "offline" | "busy" | "away"}
-                                    className="absolute -bottom-0.5 -right-0.5 border-2 border-background"
-                                  />
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-2 mb-1">
-                                    <p className="text-sm font-semibold text-foreground truncate">{member.name}</p>
-                                    {member.role === "lead" && (
-                                      <Badge variant="default" className="h-5 px-1.5 text-[10px] gap-1">
-                                        <Crown className="w-3 h-3" />
-                                        Lead
-                                      </Badge>
-                                    )}
-                                  </div>
-                                  <p className="text-xs text-muted-foreground truncate">{member.email}</p>
-                                  <p className="text-[10px] text-muted-foreground mt-0.5">เข้าร่วม {member.joinedDate}</p>
-                                </div>
-                                <DropdownMenu>
-                                  <DropdownMenuTrigger asChild>
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
-                                    >
-                                      <MoreHorizontal className="w-4 h-4" />
-                                    </Button>
-                                  </DropdownMenuTrigger>
-                                  <DropdownMenuContent align="end">
-                                    <DropdownMenuItem onClick={() => navigate(`/chat?dm=${member.userId}`)}>
-                                      <MessageSquare className="w-4 h-4 mr-2" />
-                                      ส่งข้อความ
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem onClick={() => navigate(`/tasks?assigneeId=${member.userId}`)}>
-                                      <CheckSquare className="w-4 h-4 mr-2" />
-                                      ดูงาน
-                                    </DropdownMenuItem>
-                                    <DropdownMenuSeparator />
-                                    <DropdownMenuItem
-                                      className="text-destructive"
-                                      onClick={() => selectedTeam && member.userId && handleRemoveMember(selectedTeam, member.userId)}
-                                    >
-                                      <Trash2 className="w-4 h-4 mr-2" />
-                                      ลบออกจากทีม
-                                    </DropdownMenuItem>
-                                  </DropdownMenuContent>
-                                </DropdownMenu>
-                              </div>
-                            </CardContent>
-                          </Card>
-                        );
-                      })
-                    )}
-                  </TabsContent>
-
-                  <TabsContent value="channels" className="space-y-2 mt-0">
-                    <div className="flex justify-end mb-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-8 gap-2"
-                        onClick={() => setShowCreateChannel(true)}
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                        เพิ่มช่อง
-                      </Button>
-                    </div>
-                    {activeTeam.channels.length === 0 ? (
-                      <Card className="border-dashed border-border/50 bg-card/40">
-                        <CardContent className="flex flex-col items-center justify-center py-12 px-6">
-                          <div className="w-16 h-16 rounded-xl bg-muted/50 flex items-center justify-center mb-4">
-                            <Hash className="w-8 h-8 text-muted-foreground" />
-                          </div>
-                          <p className="text-sm font-medium text-foreground mb-1">ยังไม่มีช่อง</p>
-                          <p className="text-xs text-muted-foreground text-center mb-4">
-                            สร้างช่องแรกเพื่อเริ่มสนทนา
-                          </p>
-                          <Button size="sm" onClick={() => setShowCreateChannel(true)} className="gap-2">
-                            <Plus className="w-4 h-4" />
-                            สร้างช่อง
-                          </Button>
-                        </CardContent>
-                      </Card>
-                    ) : (
-                      activeTeam.channels.map((ch) => (
-                        <Card
-                          key={ch.id}
-                          className="group border-border/50 bg-card/60 hover:bg-card hover:border-border/80 transition-all duration-200 cursor-pointer"
-                          onClick={() => handleNavigateToChannel(ch.id)}
-                        >
-                          <CardContent className="p-4">
-                            <div className="flex items-center gap-3">
-                              <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-primary/15 to-primary/5 flex items-center justify-center">
-                                <Hash className="w-5 h-5 text-primary" />
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2 mb-1">
-                                  <p className="text-sm font-semibold text-foreground">#{ch.name}</p>
-                                  <Badge variant="secondary" className="h-4 px-1.5 text-[10px]">
-                                    {ch.type}
-                                  </Badge>
-                                </div>
-                                <p className="text-xs text-muted-foreground">{ch.messages} ข้อความ</p>
-                              </div>
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
+                            <div className="flex flex-col items-end gap-1">
+                              {isMyTeam && (
+                                <Badge
+                                  variant="outline"
+                                  className="h-4 px-1.5 text-[9px] border-primary/40 text-primary"
+                                >
+                                  My
+                                </Badge>
+                              )}
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      toggleFavorite(team.id);
+                                    }}
+                                    className="inline-flex items-center justify-center rounded-full h-6 w-6 hover:bg-background/80"
                                   >
-                                    <MoreHorizontal className="w-4 h-4" />
-                                  </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end">
-                                  <DropdownMenuItem onClick={() => handleNavigateToChannel(ch.id)}>
-                                    <MessageSquare className="w-4 h-4 mr-2" />
-                                    เปิดช่อง
-                                  </DropdownMenuItem>
-                                  <DropdownMenuSeparator />
-                                  <DropdownMenuItem className="text-destructive">
-                                    <Trash2 className="w-4 h-4 mr-2" />
-                                    ลบช่อง
-                                  </DropdownMenuItem>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
+                                    {isFavorite ? (
+                                      <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
+                                    ) : (
+                                      <StarOff className="w-3.5 h-3.5 text-muted-foreground" />
+                                    )}
+                                  </button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  {isFavorite ? "เอาออกจากที่ปักหมุด" : "ปักหมุดทีมนี้"}
+                                </TooltipContent>
+                              </Tooltip>
                             </div>
-                          </CardContent>
-                        </Card>
-                      ))
-                    )}
-                  </TabsContent>
-                    </Tabs>
+                          </motion.div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </ScrollArea>
+              </div>
+
+              <div className="flex-1 min-w-0 min-h-0 flex flex-col gap-4">
+                {loading ? (
+                  <div className="space-y-4">
+                    <Card className="border-border/60 bg-card/70">
+                      <CardContent className="p-6 space-y-4">
+                        <Skeleton className="h-5 w-40" />
+                        <Skeleton className="h-4 w-64" />
+                        <div className="grid grid-cols-3 gap-4">
+                          <Skeleton className="h-16 w-full rounded-xl" />
+                          <Skeleton className="h-16 w-full rounded-xl" />
+                          <Skeleton className="h-16 w-full rounded-xl" />
+                        </div>
+                      </CardContent>
+                    </Card>
                   </div>
-                  </ScrollArea>
-                </motion.div>
-              )}
+                ) : !activeTeam ? (
+                  <Card className="border-dashed border-border/60 bg-card/60 flex-1 flex flex-col">
+                    <CardContent className="flex-1 flex flex-col items-center justify-center py-16 text-center space-y-4">
+                      <div className="w-16 h-16 rounded-2xl bg-muted/60 flex items-center justify-center">
+                        <Users className="w-8 h-8 text-muted-foreground" />
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-sm font-semibold text-foreground">
+                          เลือกทีมจากด้านซ้ายเพื่อดูรายละเอียด
+                        </p>
+                        <p className="text-xs text-muted-foreground max-w-sm">
+                          หรือสร้างทีมใหม่เพื่อเริ่มต้น workspace สำหรับทีมของคุณ
+                        </p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <>
+                    <Card className="border-border/70 bg-gradient-to-r from-primary/8 via-primary/5 to-transparent">
+                      <CardContent className="p-6 flex flex-col gap-4">
+                        <div className="flex flex-wrap items-start gap-4 justify-between">
+                          <div className="flex items-start gap-4 min-w-0">
+                            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary/25 via-primary/15 to-primary/5 flex items-center justify-center shadow-md ring-1 ring-primary/20">
+                              <Users className="w-6 h-6 text-primary" />
+                            </div>
+                            <div className="min-w-0 space-y-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <h2 className="text-lg font-semibold text-foreground truncate">
+                                  {activeTeam.name}
+                                </h2>
+                              </div>
+                              <p className="text-xs text-muted-foreground">
+                                สร้างเมื่อ {activeTeam.createdDate}
+                              </p>
+                              {activeTeam.description && (
+                                <p className="text-xs text-muted-foreground/90 mt-1 line-clamp-2">
+                                  {activeTeam.description}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                          
+                          {canChangeTeamMemberRoles && (
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground">
+                                  <Settings className="w-4 h-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem 
+                                  onClick={() => {
+                                    setEditTeamName(activeTeam.name);
+                                    setEditTeamDescription(activeTeam.description || "");
+                                    setShowEditTeam(true);
+                                  }}
+                                >
+                                  <Edit className="w-4 h-4 mr-2" />
+                                  แก้ไขทีม
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem 
+                                  className="text-destructive focus:text-destructive focus:bg-destructive/10"
+                                  onClick={() => handleDeleteTeam(activeTeam.id)}
+                                >
+                                  <Trash2 className="w-4 h-4 mr-2" />
+                                  ลบทีม
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          )}
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-3 text-xs">
+                          <div className="rounded-xl border border-border/60 bg-background/70 px-3 py-2.5">
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+                                <Users className="w-3 h-3" />
+                                สมาชิก
+                              </span>
+                              {onlineMembers.length > 0 && (
+                                <span className="text-[10px] text-emerald-500">
+                                  {onlineMembers.length} ออนไลน์
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-base font-semibold text-foreground">
+                              {totalMembers}
+                            </p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    <Card className="border-border/70 bg-card/80 flex-1 min-h-0">
+                      <CardContent className="p-4 flex flex-col min-h-0 h-full">
+                        <Tabs defaultValue="people" className="flex flex-col min-h-0 h-full">
+                          <div className="flex items-center justify-between gap-3 flex-wrap">
+                            <TabsList className="bg-muted/40 border border-border/60">
+                              <TabsTrigger value="people" className="text-xs">
+                                People
+                                <span className="ml-1 text-[10px] text-muted-foreground">
+                                  ({activeTeam.members.length})
+                                </span>
+                              </TabsTrigger>
+                            </TabsList>
+
+                            {canChangeTeamMemberRoles && selectedTeam && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-8 gap-2 px-3 text-xs bg-background/60 hover:bg-primary/5 border-border/60"
+                                onClick={() => setShowAddMember(true)}
+                              >
+                                <UserPlus className="w-3.5 h-3.5" />
+                                เพิ่มสมาชิก
+                              </Button>
+                            )}
+                          </div>
+
+                          <TabsContent value="people" className="flex-1 min-h-0 mt-3">
+                            <ScrollArea className="h-full">
+                              <div className={cn("pr-2", viewMode === "gallery" ? "space-y-2" : "space-y-1.5")}>
+                                {activeTeam.members.map((member) => {
+                                  const online = member.userId ? isUserOnline(member.userId) : false;
+                                  const status = online ? "online" : "offline";
+                                  const roleLabel = getRoleLabel(member.role);
+                                  const isSelf = member.userId && user?.id && member.userId === user.id;
+
+                                  return (
+                                    <div
+                                      key={member.userId ?? member.email}
+                                      className={cn(
+                                        "group rounded-xl border border-border/60 bg-background/80 flex items-center transition-all",
+                                        "hover:border-primary/40 hover:bg-primary/5",
+                                        viewMode === "gallery" ? "px-3 py-2.5 gap-3" : "px-2.5 py-2 gap-2"
+                                      )}
+                                    >
+                                      <div className="relative">
+                                        <Avatar className="h-9 w-9 ring-2 ring-background">
+                                          <AvatarImage src={(member as any).avatar} alt={member.name || "Avatar"} />
+                                          <AvatarFallback className="bg-gradient-to-br from-primary/25 to-primary/10 text-[11px] font-semibold text-primary">
+                                            {member.initials}
+                                          </AvatarFallback>
+                                          {member.userId && (
+                                            <StatusIndicator
+                                              status={status as "online" | "offline" | "busy" | "away"}
+                                              className="absolute -bottom-0.5 -right-0.5 border-2 border-background"
+                                            />
+                                          )}
+                                        </Avatar>
+                                      </div>
+                                      <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-2 mb-0.5">
+                                          <p className="text-xs font-medium text-foreground truncate">{member.name}</p>
+                                          {member.role === "lead" && (
+                                            <Badge
+                                              variant="secondary"
+                                              className="h-4 px-1.5 text-[9px] gap-0.5 bg-primary/10 text-primary border-primary/20"
+                                            >
+                                              <Crown className="w-3 h-3" />
+                                              Lead
+                                            </Badge>
+                                          )}
+                                        </div>
+                                        <p className="text-[10px] text-muted-foreground truncate">{member.email}</p>
+                                        <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[9px] text-muted-foreground">
+                                          <span>
+                                            {member.position || roleLabel}
+                                            {member.department ? ` · ${member.department}` : ""}
+                                          </span>
+                                          <span className="text-[9px] text-muted-foreground/80">
+                                            เข้าร่วม {member.joinedDate}
+                                          </span>
+                                        </div>
+                                      </div>
+                                      <DropdownMenu>
+                                        <DropdownMenuTrigger asChild>
+                                          <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
+                                          >
+                                            <MoreHorizontal className="w-3.5 h-3.5" />
+                                          </Button>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent align="end">
+                                          {member.userId && (
+                                            <>
+                                              <DropdownMenuItem onClick={() => navigate(`/chat?dm=${member.userId}`)}>
+                                                <MessageSquare className="w-4 h-4 mr-2" />
+                                                ส่งข้อความ
+                                              </DropdownMenuItem>
+                                              <DropdownMenuItem onClick={() => navigate(`/tasks?assigneeId=${member.userId}`)}>
+                                                <CheckSquare className="w-4 h-4 mr-2" />
+                                                ดูงาน
+                                              </DropdownMenuItem>
+
+                                              {canChangeTeamMemberRoles && selectedTeam && !isSelf && (
+                                                <>
+                                                  <DropdownMenuSeparator />
+                                                  <DropdownMenuItem onClick={() => handleChangeMemberRole(selectedTeam, member.userId!, "lead")}>
+                                                    <Crown className="w-4 h-4 mr-2" />
+                                                    ตั้งเป็น Team Lead
+                                                  </DropdownMenuItem>
+                                                  <DropdownMenuItem onClick={() => handleChangeMemberRole(selectedTeam, member.userId!, "member")}>
+                                                    <IdCard className="w-4 h-4 mr-2" />
+                                                    ตั้งเป็น Member
+                                                  </DropdownMenuItem>
+                                                  <DropdownMenuItem onClick={() => handleChangeMemberRole(selectedTeam, member.userId!, "viewer")}>
+                                                    <IdCard className="w-4 h-4 mr-2" />
+                                                    ตั้งเป็น Viewer
+                                                  </DropdownMenuItem>
+                                                </>
+                                              )}
+                                            </>
+                                          )}
+
+                                          {member.userId && selectedTeam && canRemoveTeamMembers && !isSelf && (
+                                            <>
+                                              <DropdownMenuSeparator />
+                                              <DropdownMenuItem
+                                                className="text-destructive"
+                                                onClick={() => handleRemoveMember(selectedTeam, member.userId!)}
+                                              >
+                                                <Trash2 className="w-4 h-4 mr-2" />
+                                                ลบออกจากทีม
+                                              </DropdownMenuItem>
+                                            </>
+                                          )}
+                                        </DropdownMenuContent>
+                                      </DropdownMenu>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </ScrollArea>
+                          </TabsContent>
+                        </Tabs>
+                      </CardContent>
+                    </Card>
+                  </>
+                )}
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Dialogs */}
-        <InviteUserDialog
-          open={showInvite}
-          onOpenChange={setShowInvite}
-          teamId={selectedTeam || undefined}
-          onInviteSuccess={loadTeams}
+        <AddTeamMemberDialog
+          open={showAddMember}
+          onOpenChange={setShowAddMember}
+          teamId={selectedTeam || ""}
+          onSuccess={() => loadTeams(true)}
         />
         <CreateChannelDialog open={showCreateChannel} onOpenChange={setShowCreateChannel} />
 
-        {/* Edit Team Dialog */}
         <Dialog open={showEditTeam} onOpenChange={setShowEditTeam}>
           <DialogContent className="max-w-md">
             <DialogHeader>
@@ -987,7 +1035,6 @@ export default function Teams() {
           </DialogContent>
         </Dialog>
 
-        {/* Create Team Dialog */}
         <Dialog open={showCreateTeam} onOpenChange={setShowCreateTeam}>
           <DialogContent className="max-w-md">
             <DialogHeader>
@@ -1005,11 +1052,6 @@ export default function Teams() {
                   className="mt-1.5 h-10"
                   value={teamName}
                   onChange={(e) => setTeamName(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && teamName.trim()) {
-                      handleCreateTeam();
-                    }
-                  }}
                 />
               </div>
               <div>

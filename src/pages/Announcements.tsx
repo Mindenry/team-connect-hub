@@ -16,6 +16,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { apiGet, apiPost } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import ReactMarkdown from "react-markdown";
+import { useAuth } from "@/lib/auth";
 
 interface Announcement {
   id: string;
@@ -35,6 +36,7 @@ interface Announcement {
 
 export default function Announcements() {
   const { toast } = useToast();
+  const { user } = useAuth();
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [loading, setLoading] = useState(true);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
@@ -48,6 +50,9 @@ export default function Announcements() {
     targetType: "all",
     expiresAt: "",
   });
+
+  const canManageAnnouncements =
+    !!user && ["org_owner", "admin", "manager"].includes((user.role || "").toLowerCase());
 
   useEffect(() => {
     loadAnnouncements();
@@ -177,13 +182,15 @@ export default function Announcements() {
 
               {/* Right: Actions */}
               <div className="flex items-center gap-3">
-                <Button
-                  onClick={() => setCreateDialogOpen(true)}
-                  className="h-9 gap-2 shadow-sm hover:shadow-md transition-all duration-200"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span className="hidden sm:inline">ประกาศใหม่</span>
-                </Button>
+                {canManageAnnouncements && (
+                  <Button
+                    onClick={() => setCreateDialogOpen(true)}
+                    className="h-9 gap-2 shadow-sm hover:shadow-md transition-all duration-200"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span className="hidden sm:inline">ประกาศใหม่</span>
+                  </Button>
+                )}
               </div>
             </div>
           </div>
@@ -236,10 +243,12 @@ export default function Announcements() {
                   </div>
                   <h3 className="text-lg font-semibold text-foreground mb-1">ยังไม่มีประกาศ</h3>
                   <p className="text-sm text-muted-foreground mb-4">สร้างประกาศแรกเพื่อแจ้งข่าวสารให้กับทีม</p>
-                  <Button onClick={() => setCreateDialogOpen(true)} variant="outline">
-                    <Plus className="w-4 h-4 mr-2" />
-                    สร้างประกาศแรก
-                  </Button>
+                  {canManageAnnouncements && (
+                    <Button onClick={() => setCreateDialogOpen(true)} variant="outline">
+                      <Plus className="w-4 h-4 mr-2" />
+                      สร้างประกาศแรก
+                    </Button>
+                  )}
                 </CardContent>
               </Card>
             ) : (

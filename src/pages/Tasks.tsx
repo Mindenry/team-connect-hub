@@ -1,1265 +1,706 @@
-import { useState, useCallback, useEffect, useMemo } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useState, useEffect, useMemo, useCallback } from "react";
+import { useLocation } from "react-router-dom";
+import { motion } from "framer-motion";
 import {
-  DndContext,
-  DragOverlay,
-  closestCorners,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  useDroppable,
-  type DragStartEvent,
-  type DragEndEvent,
-  type DragOverEvent,
-} from "@dnd-kit/core";
-import {
-  SortableContext,
-  verticalListSortingStrategy,
-  useSortable,
-  arrayMove,
-} from "@dnd-kit/sortable";
-import {
-  Plus, Filter, Search, Calendar, CheckSquare,
-  ArrowUp, ArrowRight, ArrowDown, LayoutGrid, List, GripVertical,
-  BarChart3, Clock, Users, Target, Zap, FileText,
-  X, Tag, Flag, Rocket, FolderKanban, Activity, SidebarOpen, SidebarClose,
-  ChevronRight, Sparkles, Layers,
+  CheckSquare, Plus, Search, Filter, X, Rocket, LayoutGrid, Rows3, List,
+  Target, Package, Tag, MoreHorizontal, RefreshCw, FileText, Users,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { apiGet, clearApiCache } from "@/lib/api";
+import { getSocket } from "@/lib/websocket";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Card, CardContent } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { cn } from "@/lib/utils";
+import { useAuth } from "@/lib/auth";
+
+import FilterChips, { type ActiveFilter } from "@/components/tasks-v2/FilterChips";
+import FilterDrawer, { type FilterValues } from "@/components/tasks-v2/FilterDrawer";
+import TaskBoard from "@/components/tasks-v2/TaskBoard";
+import TaskBacklog from "@/components/tasks-v2/TaskBacklog";
+import TaskList from "@/components/tasks-v2/TaskList";
+import TaskDetailDrawer from "@/components/tasks-v2/TaskDetailDrawer";
+import EmptyState from "@/components/tasks-v2/EmptyState";
 import CreateTaskDialog from "@/components/dialogs/CreateTaskDialog";
-import TaskDetailDialog from "@/components/dialogs/TaskDetailDialog";
-import { PresenceIndicator } from "@/components/tasks/PresenceIndicator";
-import { TeamActivityFeed } from "@/components/tasks/TeamActivityFeed";
-import { TeamWorkloadView } from "@/components/tasks/TeamWorkloadView";
-import { getSocket } from "@/lib/websocket";
-import { apiGet, apiPatch } from "@/lib/api";
-import { auth } from "@/lib/auth";
-import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
+import SprintManagementDialog from "@/components/dialogs/SprintManagementDialog";
+import CreateEpicDialog from "@/components/dialogs/CreateEpicDialog";
+import CreateComponentDialog from "@/components/dialogs/CreateComponentDialog";
+import CreateVersionDialog from "@/components/dialogs/CreateVersionDialog";
+import CreateTaskTemplateDialog from "@/components/dialogs/CreateTaskTemplateDialog";
+import type { TaskCardData } from "@/components/tasks-v2/TaskCard";
 
-const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
+type ViewMode = "board" | "backlog" | "list";
 
-interface Task {
-  id: string;
-  title: string;
-  description?: string;
-  priority: "urgent" | "high" | "medium" | "low";
-  status?: string;
-  assignee?: { id: string; name: string; initials: string; avatar?: string };
-  dueDate?: string;
-  tags: string[];
-  linkedMeeting?: string;
-  sprint?: { id: string; name: string };
-  epic?: { id: string; name: string; color?: string };
-  storyPoints?: number;
-  estimate?: number;
-  subtasks?: Array<{ id: string; title: string; isCompleted: boolean }>;
-  _count?: {
-    subtasks: number;
-    timeEntries: number;
-    attachments: number;
-  };
-}
-
-interface Column {
-  id: string;
-  title: string;
-  color: string;
-  tasks: Task[];
-}
-
-interface Sprint {
-  id: string;
-  name: string;
-  startDate: string;
-  endDate: string;
-  status: string;
-  _count?: { tasks: number };
-}
-
-interface Epic {
-  id: string;
-  name: string;
-  color?: string;
-  status: string;
-  _count?: { tasks: number };
-}
-
-const priorityIcons: Record<string, { icon: React.ElementType; color: string; label: string }> = {
-  urgent: { icon: Rocket, color: "text-red-600", label: "Urgent" },
-  high: { icon: ArrowUp, color: "text-orange-600", label: "High" },
-  medium: { icon: ArrowRight, color: "text-yellow-600", label: "Medium" },
-  low: { icon: ArrowDown, color: "text-green-600", label: "Low" },
+const EMPTY_FILTERS: FilterValues = {
+  projectId: "",
+  issueType: "",
+  priority: "",
+  assigneeId: "",
+  sprintId: "",
+  epicId: "",
+  componentId: "",
+  versionId: "",
+  status: "",
 };
 
-const columnConfig = [
-  { id: "todo", title: "To Do", color: "from-slate-500/10 to-slate-500/5", accent: "border-slate-500/20" },
-  { id: "in_progress", title: "In Progress", color: "from-blue-500/10 to-blue-500/5", accent: "border-blue-500/20" },
-  { id: "review", title: "In Review", color: "from-amber-500/10 to-amber-500/5", accent: "border-amber-500/20" },
-  { id: "done", title: "Done", color: "from-emerald-500/10 to-emerald-500/5", accent: "border-emerald-500/20" },
+const viewConfig: { key: ViewMode; label: string; icon: any }[] = [
+  { key: "board", label: "Board", icon: LayoutGrid },
+  { key: "backlog", label: "Backlog", icon: Rows3 },
+  { key: "list", label: "List", icon: List },
 ];
 
-function SortableTaskCard({
-  task,
-  onSelect,
-}: {
-  task: Task;
-  onSelect: (task: Task) => void;
-}) {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id: task.id });
-
-  const style: React.CSSProperties = {
-    transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
-    transition,
-  };
-
-  const PriorityIcon = priorityIcons[task.priority]?.icon || ArrowRight;
-  const priorityColor = priorityIcons[task.priority]?.color || "text-muted-foreground";
-  const completedSubtasks = task.subtasks?.filter(s => s.isCompleted).length || 0;
-  const totalSubtasks = task.subtasks?.length || task._count?.subtasks || 0;
-  const isOverdue = task.dueDate && new Date(task.dueDate) < new Date() && task.status !== "done";
-
-  return (
-    <motion.div
-      ref={setNodeRef}
-      style={style}
-      initial={{ opacity: 1, y: 0 }}
-      animate={{ opacity: isDragging ? 0.5 : 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.95 }}
-      transition={{ duration: 0.1 }}
-      className={cn("touch-none", isDragging && "z-50")}
-    >
-      <Card
-        {...attributes}
-        {...listeners}
-        className={cn(
-          "group cursor-grab active:cursor-grabbing transition-all duration-200",
-          "bg-card/80 backdrop-blur-sm border border-border/50",
-          "hover:border-border hover:shadow-lg hover:shadow-black/5",
-          "hover:-translate-y-0.5",
-          isDragging && "shadow-2xl shadow-black/10 ring-2 ring-primary/20 rotate-1",
-          task.priority === "urgent" && "border-l-2 border-l-red-500/50",
-          task.priority === "high" && "border-l-2 border-l-orange-500/50",
-          task.priority === "medium" && "border-l-2 border-l-yellow-500/50",
-          task.priority === "low" && "border-l-2 border-l-green-500/50",
-          isOverdue && "bg-red-50/30 dark:bg-red-950/10 border-red-500/30"
-        )}
-        onClick={(e) => {
-          if (!isDragging) {
-            onSelect(task);
-          }
-        }}
-      >
-        <CardContent className="p-4 space-y-3">
-          {/* Header */}
-          <div className="flex items-start justify-between gap-2">
-            <div className="flex items-start gap-2 flex-1 min-w-0">
-              <GripVertical className="w-4 h-4 shrink-0 text-muted-foreground/40 mt-0.5 group-hover:text-muted-foreground transition-colors" />
-              <div className="flex-1 min-w-0">
-                <h4 className="text-sm font-semibold text-foreground leading-snug line-clamp-2 group-hover:text-primary transition-colors">
-                  {task.title}
-                </h4>
-                {task.description && (
-                  <p className="text-xs text-muted-foreground mt-1.5 line-clamp-2 leading-relaxed">
-                    {task.description}
-                  </p>
-                )}
-              </div>
-            </div>
-            <div className="flex items-center gap-1.5 shrink-0">
-              {task.epic && (
-                <div
-                  className="w-2 h-2 rounded-full ring-2 ring-background"
-                  style={{ backgroundColor: task.epic.color || "#6366f1" }}
-                  title={task.epic.name}
-                />
-              )}
-              <PriorityIcon className={cn("w-4 h-4 shrink-0", priorityColor)} />
-            </div>
-          </div>
-
-          {/* Tags */}
-          {task.tags.length > 0 && (
-            <div className="flex flex-wrap gap-1.5">
-              {task.tags.slice(0, 3).map((tag) => (
-                <Badge 
-                  key={tag} 
-                  variant="secondary" 
-                  className="text-[10px] px-2 py-0.5 font-normal bg-muted/50 text-muted-foreground border-0"
-                >
-                  {tag}
-                </Badge>
-              ))}
-              {task.tags.length > 3 && (
-                <Badge variant="outline" className="text-[10px] px-2 py-0.5 border-muted-foreground/20">
-                  +{task.tags.length - 3}
-                </Badge>
-              )}
-            </div>
-          )}
-
-          {/* Subtasks Progress */}
-          {totalSubtasks > 0 && (
-            <div className="flex items-center gap-2">
-              <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
-                <motion.div
-                  className="h-full bg-primary rounded-full"
-                  initial={{ width: 0 }}
-                  animate={{ width: `${(completedSubtasks / totalSubtasks) * 100}%` }}
-                  transition={{ duration: 0.3 }}
-                />
-              </div>
-              <span className="text-[10px] text-muted-foreground font-medium tabular-nums">
-                {completedSubtasks}/{totalSubtasks}
-              </span>
-            </div>
-          )}
-
-          {/* Footer */}
-          <div className="flex items-center justify-between pt-1 border-t border-border/50">
-            <div className="flex items-center gap-2">
-              {task.assignee ? (
-                <Avatar className="h-6 w-6 border border-border/50 ring-2 ring-background">
-                  <AvatarFallback className="bg-muted text-muted-foreground text-[10px] font-semibold">
-                    {task.assignee.initials || task.assignee.name?.charAt(0) || "?"}
-                  </AvatarFallback>
-                </Avatar>
-              ) : (
-                <div className="h-6 w-6 rounded-full border-2 border-dashed border-muted-foreground/20 flex items-center justify-center">
-                  <Users className="w-3 h-3 text-muted-foreground/30" />
-                </div>
-              )}
-              {task.storyPoints && (
-                <Badge variant="outline" className="text-[9px] px-1.5 py-0 font-mono border-muted-foreground/20">
-                  {task.storyPoints}SP
-                </Badge>
-              )}
-            </div>
-            {task.dueDate && (
-              <div className={cn(
-                "flex items-center gap-1 text-[10px] font-medium",
-                isOverdue ? "text-red-600 dark:text-red-400" : "text-muted-foreground"
-              )}>
-                <Calendar className="w-3 h-3" />
-                <span>{new Date(task.dueDate).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</span>
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-    </motion.div>
-  );
-}
-
-function DroppableColumn({
-  column,
-  onAddTask,
-  onSelectTask,
-}: {
-  column: Column;
-  onAddTask: () => void;
-  onSelectTask: (task: Task) => void;
-}) {
-  const taskIds = column.tasks.map((t) => t.id);
-  const totalStoryPoints = column.tasks.reduce((sum, t) => sum + (t.storyPoints || 0), 0);
-  const colConfig = columnConfig.find(c => c.id === column.id) || columnConfig[0];
-  
-  const { setNodeRef, isOver } = useDroppable({
-    id: column.id,
-  });
-
-  return (
-    <div className="w-full sm:w-80 flex flex-col shrink-0">
-      {/* Column Header */}
-      <motion.div
-        initial={{ opacity: 0, y: -10 }}
-        animate={{ opacity: 1, y: 0 }}
-        className={cn(
-          "mb-4 p-4 rounded-xl border bg-gradient-to-br",
-          colConfig.color,
-          colConfig.accent,
-          "backdrop-blur-sm shadow-sm",
-          isOver && "ring-2 ring-primary/30 ring-offset-2 ring-offset-background"
-        )}
-      >
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-2.5">
-            <div className={cn(
-              "w-1.5 h-1.5 rounded-full",
-              column.id === "todo" && "bg-slate-500",
-              column.id === "in_progress" && "bg-blue-500",
-              column.id === "review" && "bg-amber-500",
-              column.id === "done" && "bg-emerald-500",
-            )} />
-            <h3 className="text-sm font-bold text-foreground tracking-tight">{column.title}</h3>
-            <Badge variant="secondary" className="text-[10px] font-semibold px-1.5 py-0 bg-background/50 border-0">
-              {column.tasks.length}
-            </Badge>
-          </div>
-          {totalStoryPoints > 0 && (
-            <Badge variant="outline" className="text-[9px] font-mono border-muted-foreground/20">
-              {totalStoryPoints}SP
-            </Badge>
-          )}
-        </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-7 w-full text-xs text-muted-foreground hover:text-foreground hover:bg-background/50"
-          onClick={onAddTask}
-        >
-          <Plus className="w-3.5 h-3.5 mr-1.5" />
-          Add task
-        </Button>
-      </motion.div>
-
-      {/* Column Content */}
-      <div
-        ref={setNodeRef}
-        className={cn(
-          "flex-1 rounded-xl p-3 bg-muted/20 backdrop-blur-sm border border-border/30 transition-all duration-200",
-          isOver && "bg-primary/5 border-primary/30 ring-2 ring-primary/20"
-        )}
-      >
-        <SortableContext items={taskIds} strategy={verticalListSortingStrategy}>
-          <div className="space-y-3 min-h-[400px]">
-            <AnimatePresence>
-              {column.tasks.length === 0 ? (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  className="flex flex-col items-center justify-center h-64 text-center p-6 border-2 border-dashed border-border/30 rounded-xl bg-background/30"
-                >
-                  <FolderKanban className="w-10 h-10 text-muted-foreground/20 mb-3" />
-                  <p className="text-xs text-muted-foreground font-medium">Drop tasks here</p>
-                </motion.div>
-              ) : (
-                column.tasks.map((task) => (
-                  <SortableTaskCard key={task.id} task={task} onSelect={onSelectTask} />
-                ))
-              )}
-            </AnimatePresence>
-          </div>
-        </SortableContext>
-      </div>
-    </div>
-  );
-}
-
-function TaskDragOverlay({ task }: { task: Task }) {
-  const PriorityIcon = priorityIcons[task.priority]?.icon || ArrowRight;
-  const priorityColor = priorityIcons[task.priority]?.color || "text-muted-foreground";
-
-  return (
-    <Card className="w-80 shadow-2xl ring-2 ring-primary/30 rotate-2 cursor-grabbing border-l-4 border-l-primary bg-card/95 backdrop-blur-md">
-      <CardContent className="p-4">
-        <div className="flex items-start gap-2 mb-2">
-          <GripVertical className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5" />
-          <h4 className="text-sm font-semibold text-foreground leading-tight flex-1">{task.title}</h4>
-          <PriorityIcon className={cn("w-4 h-4 shrink-0", priorityColor)} />
-        </div>
-        <div className="flex items-center justify-between">
-          {task.assignee && (
-            <Avatar className="h-5 w-5">
-              <AvatarFallback className="bg-primary/10 text-primary text-[9px]">
-                {task.assignee.initials || task.assignee.name?.charAt(0) || "?"}
-              </AvatarFallback>
-            </Avatar>
-          )}
-          {task.dueDate && (
-            <div className="flex items-center gap-1 text-xs text-muted-foreground">
-              <Calendar className="w-3 h-3" />
-              {new Date(task.dueDate).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
-            </div>
-          )}
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
 export default function Tasks() {
-  const [columns, setColumns] = useState<Column[]>([]);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [showCreateTask, setShowCreateTask] = useState(false);
-  const [showFilter, setShowFilter] = useState(false);
-  const [filterStatus, setFilterStatus] = useState<string>("all");
-  const [filterPriority, setFilterPriority] = useState<string>("all");
-  const [filterTeam, setFilterTeam] = useState<string>("all");
-  const [filterSprint, setFilterSprint] = useState<string>("all");
-  const [filterEpic, setFilterEpic] = useState<string>("all");
-  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
-  const [viewMode, setViewMode] = useState<"kanban" | "list" | "analytics">("kanban");
-  const [activeTask, setActiveTask] = useState<Task | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const location = useLocation();
+  const isMobile = useIsMobile();
+  const { user } = useAuth();
+
+  // UI state
+  const [activeView, setActiveView] = useState<ViewMode>("board");
+  const [filters, setFilters] = useState<FilterValues>({ ...EMPTY_FILTERS });
+  const [search, setSearch] = useState("");
+  const [filterDrawerOpen, setFilterDrawerOpen] = useState(false);
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [sprintDialogOpen, setSprintDialogOpen] = useState(false);
+  const [epicDialogOpen, setEpicDialogOpen] = useState(false);
+  const [componentDialogOpen, setComponentDialogOpen] = useState(false);
+  const [versionDialogOpen, setVersionDialogOpen] = useState(false);
+  const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
+  const [selectedTask, setSelectedTask] = useState<TaskCardData | null>(null);
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [selectedTeamId, setSelectedTeamId] = useState<string>("all");
+
+  // Data state
+  const [tasks, setTasks] = useState<TaskCardData[]>([]);
+  const [projects, setProjects] = useState<any[]>([]);
+  const [sprints, setSprints] = useState<any[]>([]);
+  const [epics, setEpics] = useState<any[]>([]);
+  const [components, setComponents] = useState<any[]>([]);
+  const [versions, setVersions] = useState<any[]>([]);
+  const [users, setUsers] = useState<any[]>([]);
   const [teams, setTeams] = useState<any[]>([]);
-  const [sprints, setSprints] = useState<Sprint[]>([]);
-  const [epics, setEpics] = useState<Epic[]>([]);
-  const [analytics, setAnalytics] = useState<any>(null);
-  const [selectedSprint, setSelectedSprint] = useState<string | null>(null);
-  const [showSidebar, setShowSidebar] = useState(true);
-  const [presenceUsers, setPresenceUsers] = useState<Array<{ userId: string; name: string; initials?: string; isViewing?: boolean; isEditing?: boolean }>>([]);
-  const [teamMembers, setTeamMembers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [teamsInitialized, setTeamsInitialized] = useState(false);
 
-  const mapTask = (t: any): Task => {
-    const mapPrio = (p: string | null | undefined): Task["priority"] => {
-      if (p === "urgent" || p === "high" || p === "medium" || p === "low") return p;
-      return "medium";
-    };
+  // Helper: normalize task shape from backend into TaskCardData
+  const normalizeTask = useCallback((task: any): TaskCardData => {
+    if (!task) return task;
     return {
-      id: t.id,
-      title: t.title,
-      description: t.description ?? undefined,
-      priority: mapPrio(t.priority),
-      status: t.status || "todo",
-      assignee: t.assignee ? {
-        id: t.assignee.id,
-        name: t.assignee.name,
-        initials: t.assignee.name?.split(" ").map((p: string) => p[0]).join("").toUpperCase() ?? "NA",
-        avatar: t.assignee.avatar,
-      } : undefined,
-      dueDate: t.dueDate ? new Date(t.dueDate).toISOString() : undefined,
-      tags: t.tags ?? [],
-      linkedMeeting: t.meeting?.title,
-      sprint: t.sprint ? { id: t.sprint.id, name: t.sprint.name } : undefined,
-      epic: t.epic ? { id: t.epic.id, name: t.epic.name, color: t.epic.color } : undefined,
-      storyPoints: t.storyPoints ?? undefined,
-      estimate: t.estimate ?? undefined,
-      subtasks: t.subtasks ?? undefined,
-      _count: t._count,
+      ...(task as TaskCardData),
+      id: String(task.id),
+      project: task.project
+        ? { ...task.project, id: String(task.project.id) }
+        : task.projectId
+        ? { id: String(task.projectId), key: task.projectKey ?? "", name: task.projectName ?? "" }
+        : undefined,
+      sprint: task.sprint
+        ? { ...task.sprint, id: String(task.sprint.id) }
+        : task.sprintId
+        ? { id: String(task.sprintId), name: task.sprintName ?? "" }
+        : task.sprint,
+      epic: task.epic
+        ? { ...task.epic, id: String(task.epic.id) }
+        : task.epicId
+        ? { id: String(task.epicId), name: task.epicName ?? "", color: task.epicColor }
+        : task.epic,
+      assignee: task.assignee
+        ? {
+            ...task.assignee,
+            id: task.assignee.id ? String(task.assignee.id) : task.assignee.id,
+          }
+        : task.assignee,
     };
-  };
+  }, []);
 
-  const updateColumnsFromTasks = (tasks: Task[]) => {
-    const cols: Column[] = [
-      { id: "todo", title: "To Do", color: "bg-gray-400", tasks: [] },
-      { id: "in_progress", title: "In Progress", color: "bg-blue-500", tasks: [] },
-      { id: "review", title: "In Review", color: "bg-yellow-500", tasks: [] },
-      { id: "done", title: "Done", color: "bg-green-500", tasks: [] },
-    ];
-    tasks.forEach((t) => {
-      const status = ["todo", "in_progress", "review", "done"].includes(t.status || "todo") ? (t.status || "todo") : "todo";
-      const col = cols.find((c) => c.id === status);
-      if (col) col.tasks.push(t);
-    });
-    cols.forEach(col => {
-      col.tasks.sort((a, b) => {
-        return 0;
-      });
-    });
-    return cols;
-  };
-
+  // Sync filters with query params (e.g. ?assigneeId=xxx from People page)
   useEffect(() => {
-    let cancelled = false;
-    const load = async () => {
+    const params = new URLSearchParams(location.search);
+    const assigneeId = params.get("assigneeId") || "";
+    if (assigneeId && assigneeId !== filters.assigneeId) {
+      setFilters((prev) => ({ ...prev, assigneeId }));
+    }
+  }, [location.search, filters.assigneeId]);
+
+  // Load data
+  const loadData = useCallback(async (showRefresh = false) => {
+    if (showRefresh) {
+      setRefreshing(true);
+      clearApiCache();
+      setLoading(true); // Provide full visual feedback of reload
+    } else {
       setLoading(true);
-      setError(null);
-      try {
-        const [tasksData, teamsData, sprintsData, epicsData, usersData] = await Promise.all([
-          apiGet<any[]>(`/tasks?${new URLSearchParams({
-            ...(filterStatus !== "all" && { status: filterStatus }),
-            ...(filterPriority !== "all" && { priority: filterPriority }),
-            ...(filterTeam !== "all" && { teamId: filterTeam }),
-            ...(filterSprint !== "all" && { sprintId: filterSprint }),
-            ...(filterEpic !== "all" && { epicId: filterEpic }),
-            ...(searchQuery && { search: searchQuery }),
-          })}`),
-          apiGet<any[]>("/teams"),
-          apiGet<any[]>(`/sprints${filterTeam !== "all" ? `?teamId=${filterTeam}` : ""}`),
-          apiGet<any[]>(`/epics${filterTeam !== "all" ? `?teamId=${filterTeam}` : ""}`),
+    }
+
+    try {
+      const params = new URLSearchParams();
+      if (filters.status) params.set("status", filters.status);
+      if (filters.assigneeId) params.set("assigneeId", filters.assigneeId);
+      if (filters.sprintId) params.set("sprintId", filters.sprintId);
+      if (filters.epicId) params.set("epicId", filters.epicId);
+      if (filters.priority) params.set("priority", filters.priority);
+      if (search) params.set("search", search);
+      if (selectedTeamId && selectedTeamId !== "all") params.set("teamId", selectedTeamId);
+      const qs = params.toString() ? `?${params.toString()}` : "";
+
+      const [tasksData, projectsData, sprintsData, epicsData, componentsData, versionsData, usersData, teamsData] =
+        await Promise.all([
+          apiGet<any[]>(`/tasks${qs}`).catch(() => []),
+          apiGet<any[]>("/projects").catch(() => []),
+          apiGet<any[]>("/sprints").catch(() => []),
+          apiGet<any[]>("/epics").catch(() => []),
+          apiGet<any[]>("/components").catch(() => []),
+          apiGet<any[]>("/versions").catch(() => []),
           apiGet<any[]>("/users").catch(() => []),
+          apiGet<any[]>("/teams").catch(() => []),
         ]);
 
-        if (!cancelled) {
-          // Ensure all responses are arrays
-          const safeTasksData = Array.isArray(tasksData) ? tasksData : [];
-          const safeTeamsData = Array.isArray(teamsData) ? teamsData : [];
-          const safeSprintsData = Array.isArray(sprintsData) ? sprintsData : [];
-          const safeEpicsData = Array.isArray(epicsData) ? epicsData : [];
-          const safeUsersData = Array.isArray(usersData) ? usersData : [];
-          
-          const mappedTasks: Task[] = safeTasksData.map(mapTask);
-          const cols = updateColumnsFromTasks(mappedTasks);
-          setColumns(cols);
-          setTeams(safeTeamsData);
-          setSprints(safeSprintsData);
-          setEpics(safeEpicsData);
-          setTeamMembers(safeUsersData);
+      const loadedTeams = Array.isArray(teamsData) ? teamsData : [];
+      setTeams(loadedTeams);
+
+      // Auto-select first team on initial load
+      if (!teamsInitialized && loadedTeams.length > 0) {
+        // Find teams user belongs to (non-admin users only see their teams via GET /teams)
+        const myTeams = loadedTeams.filter((t: any) =>
+          t.members?.some((m: any) => m.userId === user?.id || m.user?.id === user?.id)
+        );
+        if (myTeams.length > 0) {
+          setSelectedTeamId(myTeams[0].id);
+        } else if (loadedTeams.length > 0) {
+          // Fallback: select first available team
+          setSelectedTeamId(loadedTeams[0].id);
         }
-      } catch (e: any) {
-        console.error(e);
-        if (!cancelled) {
-          setError(e.message ?? "Failed to load tasks");
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
+        setTeamsInitialized(true);
+        // Re-fetch tasks with the selected team — will trigger on next render via dependency
       }
-    };
 
-    load();
+      // For "all" mode, filter client-side to only user's teams' tasks
+      let filteredTasksData = Array.isArray(tasksData) ? tasksData : [];
+      if (selectedTeamId === "all" && loadedTeams.length > 0) {
+        const myTeamIds = new Set(
+          loadedTeams
+            .filter((t: any) =>
+              t.members?.some((m: any) => m.userId === user?.id || m.user?.id === user?.id)
+            )
+            .map((t: any) => t.id)
+        );
+        // If user has teams, filter. If admin with no team membership, show all.
+        if (myTeamIds.size > 0) {
+          filteredTasksData = filteredTasksData.filter((t: any) => myTeamIds.has(t.teamId));
+        }
+      }
 
+      setTasks(filteredTasksData.map((t) => normalizeTask(t)));
+      setProjects(Array.isArray(projectsData) ? projectsData : []);
+      setSprints(Array.isArray(sprintsData) ? sprintsData : []);
+      setEpics(Array.isArray(epicsData) ? epicsData : []);
+      setComponents(Array.isArray(componentsData) ? componentsData : []);
+      setVersions(Array.isArray(versionsData) ? versionsData : []);
+      setUsers(Array.isArray(usersData) ? usersData : []);
+    } catch (err) {
+      console.error("Failed to load task data:", err);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [filters.status, filters.assigneeId, filters.sprintId, filters.epicId, filters.priority, search, selectedTeamId, normalizeTask, user?.id, teamsInitialized]);
+
+  useEffect(() => { loadData(); }, [loadData]);
+
+  // ── Real-time socket listeners ──
+  useEffect(() => {
     const socket = getSocket();
+    if (!socket) return;
+
     const handleTaskCreated = (task: any) => {
-      if (!cancelled) {
-        const mapped = { ...mapTask(task), status: task.status || "todo" };
-        setColumns((prev) => {
-          const cols = prev.map((col) => ({ ...col, tasks: [...col.tasks] }));
-          const col = cols.find((c) => c.id === mapped.status);
-          if (col && !col.tasks.find((t) => t.id === mapped.id)) {
-            col.tasks.push(mapped);
-          }
-          return cols;
-        });
-      }
+      if (!task?.id) return;
+      setTasks((prev) => {
+        if (prev.some((t) => String(t.id) === String(task.id))) return prev;
+        return [...prev, normalizeTask(task)];
+      });
     };
+
     const handleTaskUpdated = (task: any) => {
-      if (!cancelled) {
-        const mapped = { ...mapTask(task), status: task.status || "todo" };
-        setColumns((prev) => {
-          const cols = prev.map((col) => ({
-            ...col,
-            tasks: col.tasks.filter((t) => t.id !== mapped.id),
-          }));
-          const col = cols.find((c) => c.id === mapped.status);
-          if (col) col.tasks.push(mapped);
-          return cols;
-        });
-      }
+      if (!task?.id) return;
+      setTasks((prev) =>
+        prev.map((t) => {
+          if (String(t.id) !== String(task.id)) return t;
+          // Staleness guard: discard if incoming update is older than local
+          if (t.updatedAt && task.updatedAt && new Date(task.updatedAt) < new Date(t.updatedAt)) return t;
+          return { ...t, ...normalizeTask(task) };
+        })
+      );
     };
-    const handleTaskDeleted = ({ id }: { id: string }) => {
-      if (!cancelled) {
-        setColumns((prev) => prev.map((col) => ({
-          ...col,
-          tasks: col.tasks.filter((t) => t.id !== id),
-        })));
-      }
+
+    const handleTaskDeleted = (id: string) => {
+      if (!id) return;
+      setTasks((prev) => prev.filter((t) => String(t.id) !== String(id)));
     };
 
     socket.on('task:created', handleTaskCreated);
     socket.on('task:updated', handleTaskUpdated);
     socket.on('task:deleted', handleTaskDeleted);
 
-    // Presence tracking
-    const currentUser = auth.getUser();
-    if (currentUser) {
-      socket.emit('presence:online', {
-        userId: currentUser.id,
-        name: currentUser.name || 'Unknown',
-      });
-    }
-
-    const handlePresenceUpdate = (users: Array<{ userId: string; name: string }>) => {
-      if (!cancelled) {
-        const mapped = users.map(u => ({
-          userId: u.userId,
-          name: u.name,
-          initials: u.name?.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase(),
-          isViewing: true,
-          isEditing: false,
-        }));
-        setPresenceUsers(mapped);
-      }
-    };
-
-    socket.on('presence:update', handlePresenceUpdate);
-    socket.emit('presence:get');
-
     return () => {
-      cancelled = true;
       socket.off('task:created', handleTaskCreated);
       socket.off('task:updated', handleTaskUpdated);
       socket.off('task:deleted', handleTaskDeleted);
-      socket.off('presence:update', handlePresenceUpdate);
     };
-  }, [filterStatus, filterPriority, filterTeam, filterSprint, filterEpic, searchQuery]);
+  }, [normalizeTask]);
 
+  // Handle navigation state (e.g. created from Chat or Meetings → open task + sync into list)
   useEffect(() => {
-    if (viewMode === "analytics") {
-      apiGet<any>(`/tasks/analytics${filterTeam !== "all" ? `?teamId=${filterTeam}` : ""}`)
-        .then(data => {
-          // Handle response format: {success: true, data: {...}} or direct object
-          const analyticsData = (data && typeof data === 'object' && 'data' in data) ? data.data : data;
-          setAnalytics(analyticsData || {});
-        })
-        .catch(err => {
-          console.error("Failed to load analytics:", err);
-          setAnalytics({});
-        });
-    }
-  }, [viewMode, filterTeam]);
+    const state = location.state as any;
+    if (state?.openTask) {
+      const task = normalizeTask(state.openTask);
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, { 
-      activationConstraint: { 
-        distance: 3,
-      } 
-    })
-  );
-
-  const findColumnByTaskId = useCallback(
-    (taskId: string) => columns.find((col) => col.tasks.some((t) => t.id === taskId)),
-    [columns]
-  );
-
-  const handleDragStart = (event: DragStartEvent) => {
-    const { active } = event;
-    const col = findColumnByTaskId(active.id as string);
-    const task = col?.tasks.find((t) => t.id === active.id);
-    if (task) setActiveTask(task);
-  };
-
-  const handleDragOver = (event: DragOverEvent) => {
-    const { active, over } = event;
-    if (!over) return;
-
-    const activeId = active.id as string;
-    const overId = over.id as string;
-
-    const activeCol = findColumnByTaskId(activeId);
-    const overCol = findColumnByTaskId(overId) || columns.find((c) => c.id === overId);
-
-    if (!activeCol || !overCol || activeCol.id === overCol.id) return;
-
-    setColumns((prev) => {
-      const activeTask = activeCol.tasks.find((t) => t.id === activeId)!;
-      const overTaskIndex = overCol.tasks.findIndex((t) => t.id === overId);
-
-      return prev.map((col) => {
-        if (col.id === activeCol.id) {
-          return { ...col, tasks: col.tasks.filter((t) => t.id !== activeId) };
-        }
-        if (col.id === overCol.id) {
-          const newTasks = [...col.tasks];
-          const insertIndex = overTaskIndex >= 0 ? overTaskIndex : newTasks.length;
-          newTasks.splice(insertIndex, 0, activeTask);
-          return { ...col, tasks: newTasks };
-        }
-        return col;
-      });
-    });
-  };
-
-  const handleDragEnd = async (event: DragEndEvent) => {
-    const { active, over } = event;
-    setActiveTask(null);
-    if (!over) return;
-
-    const activeId = active.id as string;
-    const overId = over.id as string;
-    if (activeId === overId) return;
-
-    const activeCol = findColumnByTaskId(activeId);
-    const overCol = findColumnByTaskId(overId) || columns.find((c) => c.id === overId);
-
-    if (!activeCol || !overCol) return;
-
-    if (activeCol.id !== overCol.id) {
-      const currentUser = auth.getUser();
-      try {
-        await apiPatch(`/tasks/${activeId}/position`, { 
-            status: overCol.id,
-            position: overCol.tasks.length,
-            teamId: filterTeam !== "all" ? filterTeam : undefined,
-        });
-      } catch (err) {
-        console.error("Failed to update task status:", err);
-        setColumns((prev) => {
-          const activeTask = overCol.tasks.find((t) => t.id === activeId);
-          if (!activeTask) return prev;
-          return prev.map((c) => {
-            if (c.id === overCol.id) {
-              return { ...c, tasks: c.tasks.filter((t) => t.id !== activeId) };
-            }
-            if (c.id === activeCol.id) {
-              return { ...c, tasks: [...c.tasks, activeTask] };
-            }
-            return c;
-          });
+      if (task?.id) {
+        // Ensure the new/updated task is present in the local list immediately
+        setTasks((prev) => {
+          const exists = prev.some((t) => String(t.id) === String(task.id));
+          if (exists) {
+            return prev.map((t) => (String(t.id) === String(task.id) ? { ...t, ...task } : t));
+          }
+          return [...prev, task];
         });
       }
+
+      setSelectedTask(task);
+      setDetailOpen(true);
+
+      // Clear the navigation state so it won't re‑open on next visit
+      window.history.replaceState({}, document.title);
+
+      // Fetch fresh data from backend in the background to keep everything in sync
+      if (task?.id) {
+        loadData(true);
+      } else {
+        loadData();
+      }
+    }
+  }, [location.state, loadData, normalizeTask]);
+
+  // User's teams (for selector)
+  const myTeams = useMemo(() => {
+    if (!user?.id) return teams;
+    const filtered = teams.filter((t: any) =>
+      t.members?.some((m: any) => m.userId === user.id || m.user?.id === user.id)
+    );
+    // If user has no explicit membership (e.g. admin), show all teams
+    return filtered.length > 0 ? filtered : teams;
+  }, [teams, user?.id]);
+
+  // Client-side filtration
+  const filteredTasks = useMemo(() => {
+    let result = tasks;
+    // ซ่อนงานที่ถูกยกเลิก (canceled) โดยค่าเริ่มต้น เว้นแต่จะกรองสถานะเป็น canceled โดยตรง
+    if (!filters.status) {
+      result = result.filter((t) => t.status !== "canceled");
+    }
+    if (filters.projectId) result = result.filter((t) => t.project?.id === filters.projectId);
+    if (filters.issueType) result = result.filter((t) => t.issueType === filters.issueType);
+    if (filters.componentId) result = result.filter((t: any) => t.componentId === filters.componentId || t.component?.id === filters.componentId);
+    if (filters.versionId) result = result.filter((t: any) => t.versionId === filters.versionId || t.version?.id === filters.versionId);
+    return result;
+  }, [tasks, filters.projectId, filters.issueType, filters.componentId, filters.versionId]);
+
+  // Active filters as chips
+  const activeFilters = useMemo<ActiveFilter[]>(() => {
+    const chips: ActiveFilter[] = [];
+    if (filters.status) {
+      const labels: Record<string, string> = {
+        todo: "To Do",
+        in_progress: "In Progress",
+        in_review: "In Review",
+        done: "Done",
+        canceled: "Canceled",
+      };
+      chips.push({ key: "status", label: "Status", value: filters.status, displayValue: labels[filters.status] || filters.status });
+    }
+    if (filters.projectId) {
+      const proj = projects.find((p) => p.id === filters.projectId);
+      chips.push({ key: "projectId", label: "Project", value: filters.projectId, displayValue: proj?.name || "Project" });
+    }
+    if (filters.issueType) chips.push({ key: "issueType", label: "Type", value: filters.issueType, displayValue: filters.issueType.charAt(0).toUpperCase() + filters.issueType.slice(1) });
+    if (filters.priority) chips.push({ key: "priority", label: "Priority", value: filters.priority, displayValue: filters.priority.charAt(0).toUpperCase() + filters.priority.slice(1) });
+    if (filters.assigneeId) {
+      const user = users.find((u) => u.id === filters.assigneeId);
+      chips.push({ key: "assigneeId", label: "Assignee", value: filters.assigneeId, displayValue: user?.name || "User" });
+    }
+    if (filters.sprintId) {
+      const spr = sprints.find((s) => s.id === filters.sprintId);
+      chips.push({ key: "sprintId", label: "Sprint", value: filters.sprintId, displayValue: spr?.name || "Sprint" });
+    }
+    if (filters.epicId) {
+      const e = epics.find((e) => e.id === filters.epicId);
+      chips.push({ key: "epicId", label: "Epic", value: filters.epicId, displayValue: e?.name || "Epic" });
+    }
+    if (filters.componentId) {
+      const c = components.find((c) => c.id === filters.componentId);
+      chips.push({ key: "componentId", label: "Component", value: filters.componentId, displayValue: c?.name || "Component" });
+    }
+    if (filters.versionId) {
+      const v = versions.find((v) => v.id === filters.versionId);
+      chips.push({ key: "versionId", label: "Version", value: filters.versionId, displayValue: v?.name || "Version" });
+    }
+    return chips;
+  }, [filters, projects, users, sprints, epics, components, versions]);
+
+  // Stats
+  const taskStats = useMemo(() => ({
+    total: filteredTasks.length,
+    todo: filteredTasks.filter((t) => t.status === "todo").length,
+    inProgress: filteredTasks.filter((t) => t.status === "in_progress").length,
+    done: filteredTasks.filter((t) => t.status === "done").length,
+  }), [filteredTasks]);
+
+  // Handlers
+  const handleFilterChange = (key: keyof FilterValues, value: string) => setFilters((prev) => ({ ...prev, [key]: value }));
+  const handleRemoveFilter = (key: string) => setFilters((prev) => ({ ...prev, [key]: "" }));
+  const handleClearAllFilters = () => { setFilters({ ...EMPTY_FILTERS }); setSearch(""); };
+  const handleTaskClick = (task: TaskCardData) => { setSelectedTask(task); setDetailOpen(true); };
+  const handleDetailClose = (open: boolean) => { setDetailOpen(open); if (!open) loadData(); };
+
+  const handleTaskCreated = (task: any) => {
+    // Optimistic update: แทรกหรืออัปเดต task ใน state ทันที ให้บอร์ด/รายการรีเฟรชโดยไม่ต้องกด refresh
+    if (task?.id) {
+      const normalized = normalizeTask(task);
+      setTasks((prev) => {
+        const exists = prev.some((t) => String(t.id) === String(normalized.id));
+        if (exists) {
+          return prev.map((t) => (String(t.id) === String(normalized.id) ? { ...t, ...normalized } : t));
+        }
+        return [...prev, normalized];
+      });
+      setSelectedTask(normalized);
+      setDetailOpen(true);
+      // ดึงข้อมูลล่าสุดจาก backend ตามหลังเพื่อให้ข้อมูลครบ เช่น activityLog, relations ต่าง ๆ
+      loadData(true);
     } else {
-      const oldIndex = activeCol.tasks.findIndex((t) => t.id === activeId);
-      const newIndex = activeCol.tasks.findIndex((t) => t.id === overId);
-      if (oldIndex === -1 || newIndex === -1) return;
-      setColumns((prev) =>
-        prev.map((c) =>
-          c.id === activeCol.id ? { ...c, tasks: arrayMove(c.tasks, oldIndex, newIndex) } : c
-        )
-      );
+      // fallback ถ้า API ไม่คืน task กลับมา ให้ดึงข้อมูลใหม่ตามปกติ
+      loadData(true);
     }
   };
 
-  const allTasks = columns.flatMap((col) => col.tasks.map((t) => ({ ...t, column: col.title, status: col.id })));
-  
-  const filteredTasks = allTasks.filter((task) => {
-    const matchesSearch = searchQuery === "" || 
-      task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (task.description && task.description.toLowerCase().includes(searchQuery.toLowerCase()));
-    return matchesSearch;
-  });
+  const handleTaskMoved = (taskId: string, _fromStatus: string, targetStatus: string) => {
+    // Optimistic update: move task to new status locally so UI updates immediately.
+    // We intentionally do NOT call loadData() here to avoid racing with the PATCH request
+    // from TaskBoard, which could briefly overwrite the optimistic state with stale data.
+    setTasks((prev) =>
+      prev.map((t) => (String(t.id) === String(taskId) ? { ...t, status: targetStatus } : t))
+    );
+  };
 
-  const hasActiveFilters = filterStatus !== "all" || filterPriority !== "all" || filterTeam !== "all" || filterSprint !== "all" || filterEpic !== "all";
+  const hasActiveFilters = activeFilters.length > 0 || search;
 
   return (
-    <div className="flex flex-col h-screen bg-background">
-      <CreateTaskDialog open={showCreateTask} onOpenChange={setShowCreateTask} />
-      <TaskDetailDialog
-        open={!!selectedTask}
-        onOpenChange={(open) => !open && setSelectedTask(null)}
-        task={selectedTask || undefined}
-      />
-
-      {/* Filter Dialog */}
-      <Dialog open={showFilter} onOpenChange={setShowFilter}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Filter Tasks</DialogTitle>
-            <DialogDescription>Filter tasks by multiple criteria</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div>
-              <Label>Status</Label>
-              <Select value={filterStatus} onValueChange={setFilterStatus}>
-                <SelectTrigger className="mt-1">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Status</SelectItem>
-                  <SelectItem value="todo">To Do</SelectItem>
-                  <SelectItem value="in_progress">In Progress</SelectItem>
-                  <SelectItem value="review">In Review</SelectItem>
-                  <SelectItem value="done">Done</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Priority</Label>
-              <Select value={filterPriority} onValueChange={setFilterPriority}>
-                <SelectTrigger className="mt-1">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Priorities</SelectItem>
-                  <SelectItem value="urgent">🔴 Urgent</SelectItem>
-                  <SelectItem value="high">🟠 High</SelectItem>
-                  <SelectItem value="medium">🟡 Medium</SelectItem>
-                  <SelectItem value="low">🟢 Low</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Team</Label>
-              <Select value={filterTeam} onValueChange={setFilterTeam}>
-                <SelectTrigger className="mt-1">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Teams</SelectItem>
-                  {teams.map((t) => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Sprint</Label>
-              <Select value={filterSprint} onValueChange={setFilterSprint}>
-                <SelectTrigger className="mt-1">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Sprints</SelectItem>
-                  {sprints.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Epic</Label>
-              <Select value={filterEpic} onValueChange={setFilterEpic}>
-                <SelectTrigger className="mt-1">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Epics</SelectItem>
-                  {epics.map((e) => (
-                    <SelectItem key={e.id} value={e.id}>
-                      <div className="flex items-center gap-2">
-                        {e.color && <div className="w-3 h-3 rounded-full" style={{ backgroundColor: e.color }} />}
-                        {e.name}
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => {
-              setFilterStatus("all");
-              setFilterPriority("all");
-              setFilterTeam("all");
-              setFilterSprint("all");
-              setFilterEpic("all");
-              setShowFilter(false);
-            }}>Clear All</Button>
-            <Button onClick={() => setShowFilter(false)}>Apply</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Modern Header */}
-      <motion.header
-        initial={{ y: -20, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        className="sticky top-0 z-50 border-b border-border/50 bg-background/80 backdrop-blur-xl supports-[backdrop-filter]:bg-background/60"
-      >
-        <div className="px-3 xs:px-4 sm:px-6 py-3 sm:py-4">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
-            {/* Left Section */}
-            <div className="flex items-center gap-3 sm:gap-6 flex-1 min-w-0">
-              <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
-                <div className="p-1.5 sm:p-2 rounded-lg bg-primary/10 border border-primary/20 shrink-0">
-                  <Layers className="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
+    <TooltipProvider>
+      <div className="flex flex-col h-screen bg-gradient-to-br from-background via-background to-muted/20">
+        {/* ══════ Header ══════ — Matches Meetings.tsx / Teams.tsx */}
+        <div className="border-b border-border/50 bg-background/95 backdrop-blur-xl supports-[backdrop-filter]:bg-background/80">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="h-16 sm:h-20 flex items-center justify-between gap-3 sm:gap-6">
+              {/* Left: Icon + Title */}
+              <div className="flex items-center gap-3 sm:gap-4 min-w-0 flex-1">
+                <div className="relative shrink-0">
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-gradient-to-br from-primary/20 via-primary/10 to-primary/5 flex items-center justify-center shadow-lg shadow-primary/5 ring-1 ring-primary/10">
+                    <CheckSquare className="w-5 h-5 sm:w-6 sm:h-6 text-primary" />
+                  </div>
+                  {taskStats.inProgress > 0 && (
+                    <div className="absolute -top-0.5 -right-0.5 w-3 h-3 sm:w-4 sm:h-4 bg-primary rounded-full border-2 border-background animate-pulse" />
+                  )}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <h1 className="text-lg sm:text-xl font-bold text-foreground tracking-tight flex items-center gap-2">
-                    <span className="truncate">Tasks</span>
-                    {hasActiveFilters && (
-                      <Badge variant="secondary" className="text-[10px] px-1.5 py-0 shrink-0">
-                        Filtered
-                      </Badge>
-                    )}
-                  </h1>
-                  <div className="flex items-center gap-2 sm:gap-3 mt-0.5 flex-wrap">
-                    <p className="text-xs text-muted-foreground font-medium">
-                      {filteredTasks.length} {filteredTasks.length === 1 ? "task" : "tasks"}
-                    </p>
-                    {presenceUsers.length > 0 && (
-                      <>
-                        <span className="text-muted-foreground/30 hidden sm:inline">•</span>
-                        <div className="flex items-center gap-2">
-                          <PresenceIndicator users={presenceUsers} maxVisible={4} />
-                          <span className="text-xs text-muted-foreground hidden xs:inline">
-                            {presenceUsers.length} online
-                          </span>
-                        </div>
-                      </>
-                    )}
-                  </div>
+                  <h1 className="text-lg sm:text-xl font-bold text-foreground tracking-tight">Tasks</h1>
+                  <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5 truncate">
+                    Manage tasks · Track progress · Organize sprints · Ship faster
+                  </p>
                 </div>
               </div>
-            </div>
 
-            {/* Right Section */}
-            <div className="flex items-center gap-2 flex-wrap">
-              {/* Sidebar Toggle */}
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-9 w-9 p-0 shrink-0"
-                onClick={() => setShowSidebar(!showSidebar)}
-              >
-                {showSidebar ? <SidebarClose className="w-4 h-4" /> : <SidebarOpen className="w-4 h-4" />}
-              </Button>
-
-              {/* View Mode Toggle */}
-              <div className="flex items-center gap-1 p-1 bg-muted/50 rounded-lg border border-border/50">
+              {/* Right: Actions */}
+              <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-8 w-8 sm:h-10 sm:w-10 border-border/60 bg-background/50 hover:bg-accent hover:text-accent-foreground text-foreground"
+                      onClick={() => loadData(true)}
+                    >
+                      <RefreshCw className={cn("w-3.5 h-3.5 sm:w-4 sm:h-4", refreshing && "animate-spin")} />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Refresh</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 gap-1 px-2.5 text-xs border-border/60 bg-background/50 hover:bg-accent hover:text-accent-foreground text-foreground"
+                      onClick={() => setSprintDialogOpen(true)}
+                    >
+                      <Rocket className="w-3 h-3 text-amber-600 dark:text-amber-400 shrink-0" />
+                      <span className="hidden lg:inline">Sprints</span>
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Manage sprints</TooltipContent>
+                </Tooltip>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" className="h-8 gap-1 px-2.5 text-xs border-border/60 bg-background/50 hover:bg-accent hover:text-accent-foreground text-foreground hidden sm:flex">
+                      <MoreHorizontal className="w-3.5 h-3.5 shrink-0" />
+                      <span className="hidden lg:inline">More</span>
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-48">
+                    <DropdownMenuItem onClick={() => setSprintDialogOpen(true)} className="sm:hidden">
+                      <Rocket className="w-4 h-4 mr-2" />
+                      Manage Sprints
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setEpicDialogOpen(true)}>
+                      <Target className="w-4 h-4 mr-2" />
+                      Create Epic
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setComponentDialogOpen(true)}>
+                      <Package className="w-4 h-4 mr-2" />
+                      Create Component
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setVersionDialogOpen(true)}>
+                      <Tag className="w-4 h-4 mr-2" />
+                      Create Version
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setTemplateDialogOpen(true)}>
+                      <FileText className="w-4 h-4 mr-2" />
+                      Create Template
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => setFilterDrawerOpen(true)}>
+                      <Filter className="w-4 h-4 mr-2" />
+                      Advanced Filters
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
                 <Button
-                  variant={viewMode === "kanban" ? "default" : "ghost"}
                   size="sm"
-                  className={cn(
-                    "h-8 px-2 sm:px-3 text-xs font-medium",
-                    viewMode === "kanban" && "shadow-sm"
-                  )}
-                  onClick={() => setViewMode("kanban")}
+                  className="h-8 gap-1 px-2.5 text-xs font-medium shrink-0"
+                  onClick={() => setCreateDialogOpen(true)}
                 >
-                  <LayoutGrid className="w-3.5 h-3.5 sm:mr-1.5" />
-                  <span className="hidden sm:inline">Kanban</span>
-                </Button>
-                <Button
-                  variant={viewMode === "list" ? "default" : "ghost"}
-                  size="sm"
-                  className={cn(
-                    "h-8 px-2 sm:px-3 text-xs font-medium",
-                    viewMode === "list" && "shadow-sm"
-                  )}
-                  onClick={() => setViewMode("list")}
-                >
-                  <List className="w-3.5 h-3.5 sm:mr-1.5" />
-                  <span className="hidden sm:inline">List</span>
-                </Button>
-                <Button
-                  variant={viewMode === "analytics" ? "default" : "ghost"}
-                  size="sm"
-                  className={cn(
-                    "h-8 px-2 sm:px-3 text-xs font-medium",
-                    viewMode === "analytics" && "shadow-sm"
-                  )}
-                  onClick={() => setViewMode("analytics")}
-                >
-                  <BarChart3 className="w-3.5 h-3.5 sm:mr-1.5" />
-                  <span className="hidden md:inline">Analytics</span>
+                  <Plus className="w-3 h-3 shrink-0" />
+                  <span className="hidden lg:inline">New Task</span>
                 </Button>
               </div>
+            </div>
+          </div>
+        </div>
 
-              {/* Search */}
-              <div className="relative hidden md:block">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search tasks..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-9 h-9 w-64 text-sm bg-background border-border/50 focus:border-border"
-                />
-                {searchQuery && (
-                  <button
-                    onClick={() => setSearchQuery("")}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
+        {/* ══════ Main Content ══════ */}
+        <div className="flex-1 overflow-hidden">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-full flex flex-col">
+            {/* Toolbar */}
+            <div className="py-4 sm:py-6 space-y-4">
+              {/* View Tab Pills + Team Selector */}
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="flex items-center gap-1 p-1 bg-muted/40 rounded-lg border border-border/50 backdrop-blur-sm w-fit">
+                  {viewConfig.map(({ key, label, icon: Icon }) => (
+                    <button
+                      key={key}
+                      onClick={() => setActiveView(key)}
+                      className={cn(
+                        "px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 flex items-center gap-1.5",
+                        activeView === key
+                          ? "bg-background shadow-md ring-1 ring-border/50 text-foreground"
+                          : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+                      )}
+                    >
+                      <Icon className={cn("w-3.5 h-3.5", activeView === key && "text-primary")} />
+                      <span>{label}</span>
+                      {key === "board" && taskStats.total > 0 && (
+                        <span className={cn(
+                          "ml-0.5 text-xs font-semibold px-1.5 py-0.5 rounded",
+                          activeView === key ? "bg-primary/15 text-primary" : "bg-muted/80 text-muted-foreground"
+                        )}>
+                          {taskStats.total}
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Team Selector Pills */}
+                {myTeams.length > 0 && (
+                  <div className="flex items-center gap-1 p-1 bg-muted/40 rounded-lg border border-border/50 backdrop-blur-sm">
+                    <span className="hidden sm:inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] text-muted-foreground">
+                      <Users className="w-3 h-3" />
+                      Team
+                    </span>
+                    {myTeams.length > 1 && (
+                      <button
+                        onClick={() => setSelectedTeamId("all")}
+                        className={cn(
+                          "px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-200",
+                          selectedTeamId === "all"
+                            ? "bg-background shadow-md ring-1 ring-border/50 text-foreground"
+                            : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+                        )}
+                      >
+                        All
+                      </button>
+                    )}
+                    {myTeams.map((team: any) => (
+                      <button
+                        key={team.id}
+                        onClick={() => setSelectedTeamId(team.id)}
+                        className={cn(
+                          "px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-200 truncate max-w-[120px]",
+                          selectedTeamId === team.id
+                            ? "bg-background shadow-md ring-1 ring-border/50 text-foreground"
+                            : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+                        )}
+                      >
+                        {team.name}
+                      </button>
+                    ))}
+                  </div>
                 )}
               </div>
 
-              {/* Filter Button */}
-              <Button
-                variant={hasActiveFilters ? "default" : "outline"}
-                size="sm"
-                className="h-9 shrink-0"
-                onClick={() => setShowFilter(true)}
-              >
-                <Filter className="w-4 h-4 sm:mr-2" />
-                <span className="hidden sm:inline">Filter</span>
-              </Button>
-
-              {/* Create Task Button */}
-              <Button
-                size="sm"
-                className="h-9 bg-primary hover:bg-primary/90 shadow-lg shadow-primary/20 shrink-0"
-                onClick={() => setShowCreateTask(true)}
-              >
-                <Plus className="w-4 h-4 sm:mr-2" />
-                <span className="hidden sm:inline">New Task</span>
-                <span className="sm:hidden">New</span>
-              </Button>
-            </div>
-          </div>
-          
-          {/* Mobile Search */}
-          <div className="relative md:hidden mt-2">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              placeholder="Search tasks..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9 h-9 w-full text-sm bg-background border-border/50 focus:border-border"
-            />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery("")}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            )}
-          </div>
-        </div>
-      </motion.header>
-
-      {/* Loading / Error */}
-      {loading && (
-        <div className="flex-1 flex items-center justify-center">
-          <div className="text-center space-y-3">
-            <div className="w-10 h-10 border-3 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
-            <p className="text-sm text-muted-foreground font-medium">Loading tasks...</p>
-          </div>
-        </div>
-      )}
-      {error && !loading && (
-        <div className="flex-1 flex items-center justify-center">
-          <div className="text-center space-y-2">
-            <p className="text-sm text-destructive font-semibold">Failed to load tasks</p>
-            <p className="text-xs text-muted-foreground">{error}</p>
-          </div>
-        </div>
-      )}
-
-      {/* Content */}
-      {!loading && !error && (
-        <div className="flex-1 overflow-hidden flex">
-          {/* Sidebar */}
-          <AnimatePresence>
-            {showSidebar && (
-              <motion.aside
-                initial={{ width: 0, opacity: 0 }}
-                animate={{ width: 320, opacity: 1 }}
-                exit={{ width: 0, opacity: 0 }}
-                transition={{ duration: 0.2 }}
-                className="shrink-0 border-r border-border/50 bg-muted/20 overflow-hidden flex flex-col"
-              >
-                <ScrollArea className="flex-1">
-                  <div className="p-4 space-y-4">
-                    <TeamWorkloadView
-                      tasks={allTasks}
-                      teamMembers={teamMembers}
-                      className="w-full"
-                    />
-                    <TeamActivityFeed
-                      teamId={filterTeam !== "all" ? filterTeam : undefined}
-                      maxItems={10}
-                      className="w-full"
-                    />
-                  </div>
-                  <ScrollBar orientation="vertical" />
-                </ScrollArea>
-              </motion.aside>
-            )}
-          </AnimatePresence>
-
-          {/* Main Content */}
-          <div className="flex-1 overflow-hidden bg-muted/10">
-            {viewMode === "kanban" ? (
-              <div className="h-full overflow-x-auto">
-                <DndContext
-                  sensors={sensors}
-                  collisionDetection={closestCorners}
-                  onDragStart={handleDragStart}
-                  onDragOver={handleDragOver}
-                  onDragEnd={handleDragEnd}
-                >
-                  <div className="flex gap-3 sm:gap-4 h-full p-3 sm:p-4 md:p-6 min-w-max">
-                    {columns.map((column) => (
-                      <DroppableColumn
-                        key={column.id}
-                        column={column}
-                        onAddTask={() => setShowCreateTask(true)}
-                        onSelectTask={setSelectedTask}
-                      />
-                    ))}
-                  </div>
-                  <DragOverlay dropAnimation={null}>
-                    {activeTask ? <TaskDragOverlay task={activeTask} /> : null}
-                  </DragOverlay>
-                </DndContext>
-              </div>
-            ) : viewMode === "list" ? (
-              <div className="h-full overflow-y-auto p-3 sm:p-4 md:p-6">
-                <div className="max-w-7xl mx-auto">
-                  <div className="border rounded-xl overflow-hidden bg-card shadow-sm">
-                    <div className="overflow-x-auto">
-                      <table className="w-full min-w-[600px]">
-                        <thead className="bg-muted/30 border-b border-border/50 sticky top-0 z-10">
-                          <tr>
-                            <th className="text-left text-xs font-semibold text-muted-foreground px-3 sm:px-4 py-2 sm:py-3 uppercase tracking-wider">Task</th>
-                            <th className="text-left text-xs font-semibold text-muted-foreground px-3 sm:px-4 py-2 sm:py-3 uppercase tracking-wider hidden sm:table-cell">Status</th>
-                            <th className="text-left text-xs font-semibold text-muted-foreground px-3 sm:px-4 py-2 sm:py-3 uppercase tracking-wider hidden md:table-cell">Assignee</th>
-                            <th className="text-left text-xs font-semibold text-muted-foreground px-3 sm:px-4 py-2 sm:py-3 uppercase tracking-wider">Priority</th>
-                            <th className="text-left text-xs font-semibold text-muted-foreground px-3 sm:px-4 py-2 sm:py-3 uppercase tracking-wider hidden lg:table-cell">Due Date</th>
-                            <th className="text-left text-xs font-semibold text-muted-foreground px-3 sm:px-4 py-2 sm:py-3 uppercase tracking-wider hidden lg:table-cell">Tags</th>
-                          </tr>
-                        </thead>
-                      <tbody>
-                        {filteredTasks.length === 0 ? (
-                          <tr>
-                            <td colSpan={6} className="px-3 sm:px-4 py-8 sm:py-12 text-center">
-                              <div className="flex flex-col items-center gap-3">
-                                <CheckSquare className="w-12 h-12 text-muted-foreground/20" />
-                                <p className="text-sm font-medium text-muted-foreground">No tasks found</p>
-                                <Button size="sm" variant="outline" onClick={() => setShowCreateTask(true)} className="mt-2">
-                                  <Plus className="w-4 h-4 mr-2" />
-                                  Create Task
-                                </Button>
-                              </div>
-                            </td>
-                          </tr>
-                        ) : (
-                          filteredTasks.map((task) => {
-                            const PriorityIcon = priorityIcons[task.priority]?.icon || ArrowRight;
-                            const priorityColor = priorityIcons[task.priority]?.color || "text-muted-foreground";
-                            const isOverdue = task.dueDate && new Date(task.dueDate) < new Date() && task.status !== "done";
-                            return (
-                              <tr
-                                key={task.id}
-                                className="border-t border-border/30 hover:bg-muted/20 transition-colors cursor-pointer group"
-                                onClick={() => setSelectedTask(task)}
-                              >
-                                <td className="px-3 sm:px-4 py-2 sm:py-3">
-                                  <div className="flex items-center gap-2">
-                                    <div className="flex items-center gap-1.5 min-w-0">
-                                      {task.epic && (
-                                        <div
-                                          className="w-2 h-2 rounded-full shrink-0"
-                                          style={{ backgroundColor: task.epic.color || "#6366f1" }}
-                                          title={task.epic.name}
-                                        />
-                                      )}
-                                      <span className="text-xs sm:text-sm font-medium text-foreground truncate">{task.title}</span>
-                                    </div>
-                                    {task.storyPoints && (
-                                      <Badge variant="outline" className="text-[9px] font-mono shrink-0">
-                                        {task.storyPoints}SP
-                                      </Badge>
-                                    )}
-                                  </div>
-                                  <div className="flex items-center gap-2 mt-1 sm:hidden">
-                                    <Badge variant="secondary" className="text-[10px]">{task.column}</Badge>
-                                    {task.assignee && (
-                                      <div className="flex items-center gap-1">
-                                        <Avatar className="h-4 w-4">
-                                          <AvatarFallback className="bg-primary/10 text-primary text-[8px]">
-                                            {task.assignee.initials || task.assignee.name?.charAt(0) || "?"}
-                                          </AvatarFallback>
-                                        </Avatar>
-                                        <span className="text-[10px] text-muted-foreground truncate">{task.assignee.name}</span>
-                                      </div>
-                                    )}
-                                  </div>
-                                </td>
-                                <td className="px-3 sm:px-4 py-2 sm:py-3 hidden sm:table-cell">
-                                  <Badge variant="secondary" className="text-xs">{task.column}</Badge>
-                                </td>
-                                <td className="px-3 sm:px-4 py-2 sm:py-3 hidden md:table-cell">
-                                  {task.assignee ? (
-                                    <div className="flex items-center gap-2">
-                                      <Avatar className="h-6 w-6">
-                                        <AvatarFallback className="bg-primary/10 text-primary text-[9px]">
-                                          {task.assignee.initials || task.assignee.name?.charAt(0) || "?"}
-                                        </AvatarFallback>
-                                      </Avatar>
-                                      <span className="text-sm text-muted-foreground">{task.assignee.name}</span>
-                                    </div>
-                                  ) : (
-                                    <span className="text-sm text-muted-foreground italic">Unassigned</span>
-                                  )}
-                                </td>
-                                <td className="px-3 sm:px-4 py-2 sm:py-3">
-                                  <div className="flex items-center gap-1">
-                                    <PriorityIcon className={cn("w-3.5 h-3.5 sm:w-4 sm:h-4", priorityColor)} />
-                                    <span className="text-xs sm:text-sm text-muted-foreground capitalize">{task.priority}</span>
-                                  </div>
-                                </td>
-                                <td className="px-3 sm:px-4 py-2 sm:py-3 hidden lg:table-cell">
-                                  {task.dueDate ? (
-                                    <div className={cn(
-                                      "text-xs sm:text-sm flex items-center gap-1",
-                                      isOverdue ? "text-red-600 font-semibold" : "text-muted-foreground"
-                                    )}>
-                                      <Calendar className="w-3 h-3" />
-                                      {new Date(task.dueDate).toLocaleDateString()}
-                                    </div>
-                                  ) : (
-                                    <span className="text-xs sm:text-sm text-muted-foreground italic">No due date</span>
-                                  )}
-                                </td>
-                                <td className="px-3 sm:px-4 py-2 sm:py-3 hidden lg:table-cell">
-                                  <div className="flex gap-1 flex-wrap">
-                                    {task.tags.slice(0, 3).map((tag) => (
-                                      <Badge key={tag} variant="secondary" className="text-[10px]">{tag}</Badge>
-                                    ))}
-                                    {task.tags.length > 3 && (
-                                      <Badge variant="outline" className="text-[10px]">+{task.tags.length - 3}</Badge>
-                                    )}
-                                  </div>
-                                </td>
-                              </tr>
-                            );
-                          })
-                        )}
-                      </tbody>
-                      </table>
-                    </div>
-                  </div>
+              {/* Search + Filter */}
+              <div className="flex items-center gap-3 flex-wrap">
+                <div className="relative flex-1 min-w-[200px] sm:min-w-[280px]">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search tasks..."
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    className="pl-9 h-10 bg-background/50 border-border/60 focus-visible:ring-2 focus-visible:ring-primary/20"
+                  />
+                  {search && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8"
+                      onClick={() => setSearch("")}
+                    >
+                      <X className="w-4 h-4" />
+                    </Button>
+                  )}
                 </div>
+
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className={cn(
+                        "h-10 w-10 border-border/60 bg-background/50 hover:bg-accent hover:text-accent-foreground text-foreground",
+                        hasActiveFilters && "bg-primary/10 border-primary/30 text-primary"
+                      )}
+                      onClick={() => setFilterDrawerOpen(true)}
+                    >
+                      <Filter className="w-4 h-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Filters</TooltipContent>
+                </Tooltip>
               </div>
-            ) : (
-              <div className="h-full overflow-y-auto p-3 sm:p-4 md:p-6">
-                <div className="max-w-7xl mx-auto">
-                  {analytics ? (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-4 sm:mb-6">
-                      <Card>
-                        <CardContent className="p-4">
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Total Tasks</p>
-                              <p className="text-2xl font-bold">{analytics.total}</p>
-                            </div>
-                            <CheckSquare className="w-8 h-8 text-primary/30" />
-                          </div>
-                        </CardContent>
-                      </Card>
-                      <Card>
-                        <CardContent className="p-4">
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Time Spent</p>
-                              <p className="text-2xl font-bold">{analytics.totalTimeSpent.toFixed(1)}h</p>
-                            </div>
-                            <Clock className="w-8 h-8 text-blue-500/30" />
-                          </div>
-                        </CardContent>
-                      </Card>
-                      <Card>
-                        <CardContent className="p-4">
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">By Status</p>
-                              <p className="text-2xl font-bold">{analytics.byStatus.length}</p>
-                            </div>
-                            <BarChart3 className="w-8 h-8 text-green-500/30" />
-                          </div>
-                        </CardContent>
-                      </Card>
-                      <Card>
-                        <CardContent className="p-4">
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">By Priority</p>
-                              <p className="text-2xl font-bold">{analytics.byPriority.length}</p>
-                            </div>
-                            <Flag className="w-8 h-8 text-orange-500/30" />
-                          </div>
-                        </CardContent>
-                      </Card>
+
+              {/* Active filter chips */}
+              {activeFilters.length > 0 && (
+                <FilterChips filters={activeFilters} onRemove={handleRemoveFilter} onClearAll={handleClearAllFilters} />
+              )}
+            </div>
+
+            {/* ══════ Content Area ══════ */}
+            <div className="flex-1 overflow-auto pb-6">
+              {loading ? (
+                <div className="space-y-4">
+                  {activeView === "board" ? (
+                    <div className="flex gap-5">
+                      {[1, 2, 3, 4].map((i) => (
+                        <div key={i} className="flex-1 min-w-[260px] space-y-3">
+                          <Skeleton className="h-10 w-32 mb-4" />
+                          <Skeleton className="h-48 w-full rounded-xl" />
+                          <Skeleton className="h-48 w-full rounded-xl" />
+                          <Skeleton className="h-32 w-full rounded-xl" />
+                        </div>
+                      ))}
                     </div>
                   ) : (
-                    <div className="flex items-center justify-center h-64">
-                      <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+                    <div className="space-y-2">
+                      {[...Array(8)].map((_, i) => (
+                        <div key={i} className="rounded-xl bg-muted/20 animate-pulse border border-border/20 h-20" />
+                      ))}
                     </div>
                   )}
                 </div>
-              </div>
-            )}
+              ) : filteredTasks.length === 0 && !loading ? (
+                hasActiveFilters ? (
+                  <EmptyState type="no-results" onClearFilters={handleClearAllFilters} />
+                ) : (
+                  <EmptyState type="no-tasks" onCreateTask={() => setCreateDialogOpen(true)} />
+                )
+              ) : (
+                <>
+                  {activeView === "board" && (
+                    <TaskBoard
+                      tasks={filteredTasks}
+                      onTaskClick={handleTaskClick}
+                      onTaskMoved={handleTaskMoved}
+                      onCreateTask={() => setCreateDialogOpen(true)}
+                      onTaskCreated={handleTaskCreated}
+                    />
+                  )}
+                  {activeView === "backlog" && (
+                    <TaskBacklog tasks={filteredTasks} sprints={sprints} onTaskClick={handleTaskClick} onCreateTask={() => setCreateDialogOpen(true)} />
+                  )}
+                  {activeView === "list" && (
+                    <TaskList tasks={filteredTasks} onTaskClick={handleTaskClick} onCreateTask={() => setCreateDialogOpen(true)} />
+                  )}
+                </>
+              )}
+            </div>
           </div>
         </div>
-      )}
-    </div>
+
+        {/* ══════ Drawers & Dialogs ══════ */}
+        <FilterDrawer
+          open={filterDrawerOpen}
+          onOpenChange={setFilterDrawerOpen}
+          filters={filters}
+          onFilterChange={handleFilterChange}
+          onClearAll={handleClearAllFilters}
+          projects={projects}
+          users={users}
+          sprints={sprints}
+          epics={epics}
+          components={components}
+          versions={versions}
+        />
+        <TaskDetailDrawer
+          open={detailOpen}
+          onOpenChange={handleDetailClose}
+          task={selectedTask}
+          onTaskDeleted={(taskId) => {
+            setTasks((prev) => prev.filter((t) => String(t.id) !== String(taskId)));
+            setSelectedTask(null);
+            setDetailOpen(false);
+            // Sync กับ backend หลังลบเสร็จเพื่อให้ทุกมุมมองอัปเดตแน่นอน
+            loadData(true);
+          }}
+        />
+        <CreateTaskDialog open={createDialogOpen} onOpenChange={setCreateDialogOpen} onCreated={handleTaskCreated} />
+        <SprintManagementDialog open={sprintDialogOpen} onOpenChange={setSprintDialogOpen} onSprintUpdated={() => loadData(true)} />
+        <CreateEpicDialog open={epicDialogOpen} onOpenChange={setEpicDialogOpen} onEpicCreated={() => loadData(true)} />
+        <CreateComponentDialog open={componentDialogOpen} onOpenChange={setComponentDialogOpen} onComponentCreated={() => loadData(true)} />
+        <CreateVersionDialog open={versionDialogOpen} onOpenChange={setVersionDialogOpen} onVersionCreated={() => loadData(true)} />
+        <CreateTaskTemplateDialog open={templateDialogOpen} onOpenChange={setTemplateDialogOpen} />
+      </div>
+    </TooltipProvider>
   );
 }

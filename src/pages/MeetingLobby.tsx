@@ -18,7 +18,7 @@ import {
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -28,7 +28,16 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { auth } from "@/lib/auth";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { auth, useAuth } from "@/lib/auth";
+import { apiGet } from "@/lib/api";
 import { getSocket } from "@/lib/websocket";
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
@@ -41,7 +50,34 @@ interface MediaDevice {
 export default function MeetingLobby() {
   const { id: meetingId } = useParams();
   const navigate = useNavigate();
-  const currentUser = auth.getUser();
+  const { user: authUser } = useAuth();
+  const [currentUser, setCurrentUser] = useState(authUser);
+
+  // Fetch fresh user profile from API/database on mount
+  useEffect(() => {
+    const fetchProfile = async () => {
+      const cachedUser = auth.getUser();
+      if (!cachedUser?.id) return;
+      try {
+        const profile = await apiGet<any>(`/users/${cachedUser.id}`);
+        if (profile?.id) {
+          let avatarUrl = profile.avatar || undefined;
+          if (avatarUrl && avatarUrl.startsWith('/')) {
+            avatarUrl = `${API_BASE}${avatarUrl}`;
+          }
+          setCurrentUser({ ...cachedUser, ...profile, avatar: avatarUrl });
+        }
+      } catch {
+        // Use cached user data on failure
+      }
+    };
+    fetchProfile();
+  }, []);
+
+  // Sync with authUser updates (e.g., from Settings avatar upload)
+  useEffect(() => {
+    if (authUser) setCurrentUser(authUser);
+  }, [authUser]);
 
   const [meetingTitle, setMeetingTitle] = useState("Zoom Meeting");
   const [isMuted, setIsMuted] = useState(true);
@@ -92,11 +128,16 @@ export default function MeetingLobby() {
       setMeetingTitle("Quick Huddle");
     } else {
       // Try to find meeting by ID first, then by code
-      Promise.all([
-        fetch(`${API_BASE}/meetings/${meetingCode}`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
-        fetch(`${API_BASE}/meetings/code/${meetingCode}`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
-      ]).then(([byId, byCode]) => {
-        const meeting = byId || byCode;
+      const loadMeetingInfo = async () => {
+        const headers = await auth.getAuthHeaders();
+        const unwrap = (d: any) => d?.data ?? d; // unwrap TransformInterceptor { success, data, timestamp }
+        const [byId, byCode] = await Promise.all([
+          fetch(`${API_BASE}/api/meetings/${meetingCode}`, { headers }).then((r) => (r.ok ? r.json().then(unwrap) : null)).catch(() => null),
+          fetch(`${API_BASE}/api/meetings/code/${meetingCode}`, { headers }).then((r) => (r.ok ? r.json().then(unwrap) : null)).catch(() => null),
+        ]);
+        return byId || byCode;
+      };
+      loadMeetingInfo().then((meeting) => {
         if (meeting) {
           // Check if meeting has ended (either status is "ended" or endTime has passed)
           const now = new Date();
@@ -213,9 +254,37 @@ export default function MeetingLobby() {
       return streamRef.current;
     }
 
+    // Try to load preferences from localStorage for initial stream
+    let preferredCamera = selectedCamera;
+    let preferredMic = selectedMic;
+    
+    try {
+      const devicePrefs = localStorage.getItem("device_preferences");
+      if (devicePrefs) {
+        const prefs = JSON.parse(devicePrefs);
+        if (prefs.camera && prefs.camera !== "default" && !preferredCamera) {
+          preferredCamera = prefs.camera;
+        }
+        if (prefs.mic && prefs.mic !== "default" && !preferredMic) {
+          preferredMic = prefs.mic;
+        }
+      }
+    } catch (e) {
+      // Ignore errors, use defaults
+    }
+
+    // Use selected devices from preferences if available
+    const videoConstraints = preferredCamera
+      ? { deviceId: { exact: preferredCamera }, width: { ideal: 1280 }, height: { ideal: 720 } }
+      : { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } };
+    
+    const audioConstraints = preferredMic
+      ? { deviceId: { exact: preferredMic }, echoCancellation: true, noiseSuppression: true }
+      : { echoCancellation: true, noiseSuppression: true };
+
     const stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } },
-      audio: { echoCancellation: true, noiseSuppression: true },
+      video: videoConstraints,
+      audio: audioConstraints,
     });
 
     streamRef.current = stream;
@@ -252,6 +321,47 @@ export default function MeetingLobby() {
     return stream;
   };
 
+  // Load device preferences from localStorage
+  useEffect(() => {
+    try {
+      const devicePrefs = localStorage.getItem("device_preferences");
+      if (devicePrefs) {
+        const prefs = JSON.parse(devicePrefs);
+        // Only set if we have valid device IDs (not "default" or empty)
+        if (prefs.mic && prefs.mic !== "default") {
+          setSelectedMic(prefs.mic);
+        }
+        if (prefs.camera && prefs.camera !== "default") {
+          setSelectedCamera(prefs.camera);
+        }
+        if (prefs.speaker && prefs.speaker !== "default") {
+          setSelectedSpeaker(prefs.speaker);
+        }
+      }
+    } catch (e) {
+      console.warn("Failed to load device preferences:", e);
+    }
+  }, []);
+
+  // Save device preferences to localStorage
+  const saveDevicePreferences = (mic?: string, camera?: string, speaker?: string) => {
+    try {
+      const currentPrefs = localStorage.getItem("device_preferences");
+      const prefs = currentPrefs ? JSON.parse(currentPrefs) : {};
+      
+      const newPrefs = {
+        ...prefs,
+        mic: mic !== undefined ? mic : (selectedMic || prefs.mic || "default"),
+        camera: camera !== undefined ? camera : (selectedCamera || prefs.camera || "default"),
+        speaker: speaker !== undefined ? speaker : (selectedSpeaker || prefs.speaker || "default"),
+      };
+      
+      localStorage.setItem("device_preferences", JSON.stringify(newPrefs));
+    } catch (e) {
+      console.warn("Failed to save device preferences:", e);
+    }
+  };
+
   const enumerate = async () => {
     const devices = await navigator.mediaDevices.enumerateDevices();
 
@@ -280,9 +390,44 @@ export default function MeetingLobby() {
     setVideoInputs(videos);
     setAudioOutputs(speakers);
 
-    if (!selectedMic && audios[0]?.deviceId) setSelectedMic(audios[0].deviceId);
-    if (!selectedCamera && videos[0]?.deviceId) setSelectedCamera(videos[0].deviceId);
-    if (!selectedSpeaker && speakers[0]?.deviceId) setSelectedSpeaker(speakers[0].deviceId);
+    // Load preferences and validate device IDs exist
+    try {
+      const devicePrefs = localStorage.getItem("device_preferences");
+      if (devicePrefs) {
+        const prefs = JSON.parse(devicePrefs);
+        
+        // Check if saved mic exists in available devices
+        if (prefs.mic && prefs.mic !== "default" && audios.some(d => d.deviceId === prefs.mic)) {
+          setSelectedMic(prefs.mic);
+        } else if (!selectedMic && audios[0]?.deviceId) {
+          setSelectedMic(audios[0].deviceId);
+        }
+        
+        // Check if saved camera exists in available devices
+        if (prefs.camera && prefs.camera !== "default" && videos.some(d => d.deviceId === prefs.camera)) {
+          setSelectedCamera(prefs.camera);
+        } else if (!selectedCamera && videos[0]?.deviceId) {
+          setSelectedCamera(videos[0].deviceId);
+        }
+        
+        // Check if saved speaker exists in available devices
+        if (prefs.speaker && prefs.speaker !== "default" && speakers.some(d => d.deviceId === prefs.speaker)) {
+          setSelectedSpeaker(prefs.speaker);
+        } else if (!selectedSpeaker && speakers[0]?.deviceId) {
+          setSelectedSpeaker(speakers[0].deviceId);
+        }
+      } else {
+        // No preferences saved, use defaults
+        if (!selectedMic && audios[0]?.deviceId) setSelectedMic(audios[0].deviceId);
+        if (!selectedCamera && videos[0]?.deviceId) setSelectedCamera(videos[0].deviceId);
+        if (!selectedSpeaker && speakers[0]?.deviceId) setSelectedSpeaker(speakers[0].deviceId);
+      }
+    } catch (e) {
+      // Fallback to defaults if parsing fails
+      if (!selectedMic && audios[0]?.deviceId) setSelectedMic(audios[0].deviceId);
+      if (!selectedCamera && videos[0]?.deviceId) setSelectedCamera(videos[0].deviceId);
+      if (!selectedSpeaker && speakers[0]?.deviceId) setSelectedSpeaker(speakers[0].deviceId);
+    }
   };
 
   useEffect(() => {
@@ -418,6 +563,7 @@ export default function MeetingLobby() {
 
   const handleSelectMic = async (deviceId: string) => {
     setSelectedMic(deviceId);
+    saveDevicePreferences(deviceId, undefined, undefined);
     try {
       await replaceAudioTrack(deviceId);
     } catch (e: any) {
@@ -427,11 +573,17 @@ export default function MeetingLobby() {
 
   const handleSelectCamera = async (deviceId: string) => {
     setSelectedCamera(deviceId);
+    saveDevicePreferences(undefined, deviceId, undefined);
     try {
       await replaceVideoTrack(deviceId);
     } catch (e: any) {
       setError(e?.message || "Failed to switch camera");
     }
+  };
+
+  const handleSelectSpeaker = (deviceId: string) => {
+    setSelectedSpeaker(deviceId);
+    saveDevicePreferences(undefined, undefined, deviceId);
   };
 
   const handleJoin = async () => {
@@ -464,9 +616,10 @@ export default function MeetingLobby() {
       }
       
       try {
-        const res = await fetch(`${API_BASE}/meetings/${meetingData.id}/participants`, {
+        const headers = await auth.getAuthHeaders();
+        const res = await fetch(`${API_BASE}/api/meetings/${meetingData.id}/participants`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { ...headers, "Content-Type": "application/json" },
           body: JSON.stringify({
             userId: currentUser.id,
             password: password || undefined,
@@ -591,6 +744,7 @@ export default function MeetingLobby() {
                     className="relative"
                   >
                     <Avatar className="w-40 h-40 ring-4 ring-white/10 shadow-2xl">
+                      <AvatarImage src={currentUser?.avatar ? (currentUser.avatar.startsWith('/') ? `${API_BASE}${currentUser.avatar}` : currentUser.avatar) : undefined} alt={userName} />
                       <AvatarFallback className="bg-gradient-to-br from-[#0E71EB] via-blue-600 to-indigo-700 text-white text-5xl font-bold">
                           {userInitials}
                         </AvatarFallback>
@@ -725,6 +879,7 @@ export default function MeetingLobby() {
                 className="flex items-center gap-4 p-6 bg-gradient-to-br from-white/5 to-white/0 rounded-xl border border-white/10"
               >
                 <Avatar className="h-20 w-20 ring-4 ring-[#0E71EB]/30 shadow-xl">
+                  <AvatarImage src={currentUser?.avatar ? (currentUser.avatar.startsWith('/') ? `${API_BASE}${currentUser.avatar}` : currentUser.avatar) : undefined} alt={userName} />
                   <AvatarFallback className="bg-gradient-to-br from-[#0E71EB] to-indigo-600 text-white text-2xl font-bold">
                     {userInitials}
                   </AvatarFallback>
@@ -740,7 +895,110 @@ export default function MeetingLobby() {
               <div className="space-y-5">
                 <div className="flex items-center justify-between px-1">
                   <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">Device Controls</p>
-                  <Settings className="w-4 h-4 text-white/30 hover:text-white/60 transition-colors cursor-pointer" />
+                  <Dialog>
+                    <DialogTrigger asChild>
+                      <button
+                        type="button"
+                        className="inline-flex items-center justify-center rounded-full p-1.5 hover:bg-white/5 text-white/40 hover:text-white/90 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0E71EB]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0f0f0f]"
+                      >
+                        <Settings className="w-4 h-4" />
+                        <span className="sr-only">Open device settings</span>
+                      </button>
+                    </DialogTrigger>
+                    <DialogContent className="bg-[#111111] border border-white/10 text-white max-w-lg">
+                      <DialogHeader>
+                        <DialogTitle>Device settings</DialogTitle>
+                        <DialogDescription className="text-white/60">
+                          Choose your microphone, speaker, and camera before joining.
+                        </DialogDescription>
+                      </DialogHeader>
+                      <div className="space-y-5 pt-2">
+                        <div className="space-y-2">
+                          <p className="text-xs font-semibold uppercase tracking-wider text-white/40">
+                            Microphone
+                          </p>
+                          <div className="space-y-1">
+                            {audioInputs.length ? (
+                              audioInputs.map((d) => (
+                                <button
+                                  key={d.deviceId}
+                                  type="button"
+                                  onClick={() => handleSelectMic(d.deviceId)}
+                                  className={cn(
+                                    "w-full flex items-center justify-between rounded-lg px-3 py-2 text-sm bg-white/5 hover:bg-white/10 transition-colors",
+                                    selectedMic === d.deviceId && "ring-1 ring-[#0E71EB] bg-white/10"
+                                  )}
+                                >
+                                  <span className="truncate">{d.label}</span>
+                                  {selectedMic === d.deviceId && (
+                                    <Check className="w-4 h-4 text-[#0E71EB] ml-2 flex-shrink-0" />
+                                  )}
+                                </button>
+                              ))
+                            ) : (
+                              <p className="text-xs text-white/40">No microphones detected</p>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          <p className="text-xs font-semibold uppercase tracking-wider text-white/40">
+                            Speaker
+                          </p>
+                          <div className="space-y-1">
+                            {audioOutputs.length ? (
+                              audioOutputs.map((d) => (
+                                <button
+                                  key={d.deviceId}
+                                  type="button"
+                                  onClick={() => handleSelectSpeaker(d.deviceId)}
+                                  className={cn(
+                                    "w-full flex items-center justify-between rounded-lg px-3 py-2 text-sm bg-white/5 hover:bg-white/10 transition-colors",
+                                    selectedSpeaker === d.deviceId && "ring-1 ring-[#0E71EB] bg-white/10"
+                                  )}
+                                >
+                                  <span className="truncate">{d.label}</span>
+                                  {selectedSpeaker === d.deviceId && (
+                                    <Check className="w-4 h-4 text-[#0E71EB] ml-2 flex-shrink-0" />
+                                  )}
+                                </button>
+                              ))
+                            ) : (
+                              <p className="text-xs text-white/40">No speakers detected</p>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          <p className="text-xs font-semibold uppercase tracking-wider text-white/40">
+                            Camera
+                          </p>
+                          <div className="space-y-1">
+                            {videoInputs.length ? (
+                              videoInputs.map((d) => (
+                                <button
+                                  key={d.deviceId}
+                                  type="button"
+                                  onClick={() => handleSelectCamera(d.deviceId)}
+                                  className={cn(
+                                    "w-full flex items-center justify-between rounded-lg px-3 py-2 text-sm bg-white/5 hover:bg-white/10 transition-colors",
+                                    selectedCamera === d.deviceId && "ring-1 ring-[#0E71EB] bg-white/10"
+                                  )}
+                                >
+                                  <span className="truncate">{d.label}</span>
+                                  {selectedCamera === d.deviceId && (
+                                    <Check className="w-4 h-4 text-[#0E71EB] ml-2 flex-shrink-0" />
+                                  )}
+                                </button>
+                              ))
+                            ) : (
+                              <p className="text-xs text-white/40">No cameras detected</p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </DialogContent>
+                  </Dialog>
                 </div>
                 
                 {/* Microphone Control */}

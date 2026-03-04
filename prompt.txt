@@ -1,0 +1,1199 @@
+I am building a React/TypeScript application and need a comprehensive Figma design for "Team Connect", an enterprise-grade collaboration and productivity workspace.
+
+Based on the highly detailed database schema below, please generate a full UI/UX design system and mockups for the key pages. The application should have a premium, modern, and highly polished aesthetic following best practices in design (clean layouts, consistent spacing, excellent typography, accessible contrast, and professional color palettes).
+
+Please include the following core views:
+1. Dashboard / Home - A high-level overview of active assigned Tasks, upcoming Meetings, recent Messages, and Activity Streams.
+2. Agile Project Management - A detailed view for Sprints, Epics, Tasks (Kanban board or list view), and Task details.
+3. Communication Hub - Channels and Direct Messages view representing Slack-like chat interactions and threads.
+4. Meeting Room / Video Call - A video conferencing UI displaying participants, screen sharing, chat, and meeting controls.
+5. Directory & Admin Console - User list, Role assignments, Organization settings, and Team structures.
+6. Wiki & Documents - A knowledge base layout for Wiki Articles, Document Folders, and Document Versions.
+
+Database Schema (DBML):
+```dbml
+//// ------------------------------------------------------
+//// THIS FILE WAS AUTOMATICALLY GENERATED (DO NOT MODIFY)
+//// ------------------------------------------------------
+
+Table Organization {
+  id String [pk]
+  name String [not null]
+  domain String
+  allowedDomains String[] [not null]
+  settings Json
+  createdAt DateTime [default: `now()`, not null]
+  updatedAt DateTime [not null]
+  users User [not null]
+  teams Team [not null]
+  invites Invite [not null]
+  holidays Holiday [not null]
+  rolePermissions RolePermission [not null]
+}
+
+Table User {
+  id String [pk]
+  email String [unique, not null]
+  name String [not null]
+  displayName String
+  password String
+  role String [not null, default: 'employee']
+  status String [not null, default: 'offline']
+  currentRoom String
+  activity String [not null, default: 'Available']
+  avatar String
+  isActive Boolean [not null, default: true]
+  department String
+  position String
+  createdAt DateTime [default: `now()`, not null]
+  updatedAt DateTime [not null]
+  organizationId String [not null]
+  organization Organization [not null]
+  managerId String
+  manager User
+  directReports User [not null]
+  teams TeamMember [not null]
+  meetings Meeting [not null]
+  meetingParticipants MeetingParticipant [not null]
+  tasks Task [not null]
+  reportedTasks Task [not null]
+  taskWatchers TaskWatcher [not null]
+  messages Message [not null]
+  notifications Notification [not null]
+  taskComments TaskComment [not null]
+  messageReads MessageRead [not null]
+  auditLogs AuditLog [not null]
+  taskActivityLogs TaskActivityLog [not null]
+  driveEntries DriveEntry [not null]
+  driveFileVersions DriveFileVersion [not null]
+  workHours WorkHours [not null]
+  timeEntries TimeEntry [not null]
+  createdSprints Sprint [not null]
+  createdEpics Epic [not null]
+  taskAttachments TaskAttachment [not null]
+  taskTemplates TaskTemplate [not null]
+  refreshTokens RefreshToken [not null]
+  reactions MessageReaction [not null]
+  createdDocuments Document [not null]
+  documentPermissions DocumentPermission [not null]
+  createdVersions DocumentVersion [not null]
+  createdFolders DocumentFolder [not null]
+  createdReminders Reminder [not null]
+  reminderRecipients ReminderRecipient [not null]
+  meetingMinutes MeetingMinutes [not null]
+  workflows Workflow [not null]
+  workflowRuns WorkflowRun [not null]
+  standupEntries StandupEntry [not null]
+  notificationPreferences NotificationPreference
+  notificationDigests NotificationDigest [not null]
+  wikiArticles WikiArticle [not null]
+  wikiVersions WikiArticleVersion [not null]
+  wikiComments WikiComment [not null]
+  createdAnnouncements Announcement [not null]
+  announcementReads AnnouncementRead [not null]
+  sentDirectMessages DirectMessage [not null]
+  receivedDirectMessages DirectMessage [not null]
+}
+
+Table Team {
+  id String [pk]
+  name String [not null]
+  description String
+  createdAt DateTime [default: `now()`, not null]
+  updatedAt DateTime [not null]
+  organizationId String [not null]
+  organization Organization [not null]
+  members TeamMember [not null]
+  meetings Meeting [not null]
+  tasks Task [not null]
+  channels Channel [not null]
+  driveEntries DriveEntry [not null]
+  workHours WorkHours [not null]
+  sprints Sprint [not null]
+  epics Epic [not null]
+  projects Project [not null]
+  components Component [not null]
+  versions Version [not null]
+  documents Document [not null]
+  documentFolders DocumentFolder [not null]
+  workflows Workflow [not null]
+  standupEntries StandupEntry [not null]
+  workflowStatuses TaskWorkflowStatus [not null]
+  wikiArticles WikiArticle [not null]
+}
+
+Table TeamMember {
+  id String [pk]
+  role String [not null, default: 'member']
+  createdAt DateTime [default: `now()`, not null]
+  userId String [not null]
+  teamId String [not null]
+  user User [not null]
+  team Team [not null]
+
+  indexes {
+    (userId, teamId) [unique]
+  }
+}
+
+Table Meeting {
+  id String [pk]
+  title String [not null]
+  description String
+  startTime DateTime [not null]
+  endTime DateTime
+  meetingCode String [unique, not null]
+  password String
+  waitingRoom Boolean [not null, default: true]
+  allowScreenShare Boolean [not null, default: true]
+  isLocked Boolean [not null, default: false]
+  status String [not null, default: 'scheduled']
+  actualStartTime DateTime
+  actualEndTime DateTime
+  summary String
+  recordingUrl String
+  aiSummary String
+  transcript String
+  createdAt DateTime [default: `now()`, not null]
+  updatedAt DateTime [not null]
+  isRecurring Boolean [not null, default: false]
+  recurringPattern String
+  recurringDays Int[] [not null]
+  recurringEndDate DateTime
+  recurringTemplateId String
+  parentMeetingId String
+  parentMeeting Meeting
+  childMeetings Meeting [not null]
+  teamId String
+  hostId String [not null]
+  team Team
+  host User [not null]
+  tasks Task [not null]
+  recordings MeetingRecording [not null]
+  minutes MeetingMinutes [not null]
+  participants MeetingParticipant [not null]
+  reminders MeetingReminder [not null]
+}
+
+Table Task {
+  id String [pk]
+  title String [not null]
+  description String
+  priority String [not null, default: 'medium']
+  status String [not null, default: 'todo']
+  issueType String [not null, default: 'task']
+  resolution String
+  dueDate DateTime
+  tags String[] [not null]
+  storyPoints Int
+  estimate Float
+  isRecurring Boolean [not null, default: false]
+  recurringPattern String
+  recurringInterval Int [default: 1]
+  recurringEndDate DateTime
+  templateId String
+  position Int [not null, default: 0]
+  createdAt DateTime [default: `now()`, not null]
+  updatedAt DateTime [not null]
+  assigneeId String
+  reporterId String
+  teamId String
+  meetingId String
+  sprintId String
+  epicId String
+  projectId String
+  componentId String
+  versionId String
+  parentTaskId String
+  assignee User
+  reporter User
+  team Team
+  meeting Meeting
+  sprint Sprint
+  epic Epic
+  project Project
+  component Component
+  version Version
+  parentTask Task
+  childTasks Task [not null]
+  comments TaskComment [not null]
+  activityLog TaskActivityLog [not null]
+  subtasks Subtask [not null]
+  timeEntries TimeEntry [not null]
+  attachments TaskAttachment [not null]
+  watchers TaskWatcher [not null]
+  linkedIssues IssueLink [not null]
+  linkedFrom IssueLink [not null]
+}
+
+Table Channel {
+  id String [pk]
+  name String [not null]
+  type String [not null, default: 'general']
+  description String
+  createdAt DateTime [default: `now()`, not null]
+  updatedAt DateTime [not null]
+  teamId String [not null]
+  team Team [not null]
+  messages Message [not null]
+  threads Thread [not null]
+
+  indexes {
+    (teamId, name) [unique]
+  }
+}
+
+Table Message {
+  id String [pk]
+  text String [not null]
+  isPinned Boolean [not null, default: false]
+  isSystem Boolean [not null, default: false]
+  attachments Json
+  mentions String[] [not null]
+  createdAt DateTime [default: `now()`, not null]
+  updatedAt DateTime [not null]
+  channelId String [not null]
+  senderId String [not null]
+  replyToId String
+  threadId String
+  channel Channel [not null]
+  sender User [not null]
+  replyTo Message
+  replies Message [not null]
+  reads MessageRead [not null]
+  thread Thread
+  threadMessage Thread
+  reactions MessageReaction [not null]
+}
+
+Table DirectMessage {
+  id String [pk]
+  text String [not null]
+  isPinned Boolean [not null, default: false]
+  isSystem Boolean [not null, default: false]
+  attachments Json
+  mentions String[] [not null]
+  createdAt DateTime [default: `now()`, not null]
+  updatedAt DateTime [not null]
+  senderId String [not null]
+  receiverId String [not null]
+  sender User [not null]
+  receiver User [not null]
+
+  Note: 'Direct one-to-one messages between users (DM)'
+}
+
+Table Invite {
+  id String [pk]
+  email String [not null]
+  token String [unique, not null]
+  role String [not null, default: 'employee']
+  teamId String
+  teamRole String
+  invitedBy String [not null]
+  expiresAt DateTime [not null]
+  usedAt DateTime
+  createdAt DateTime [default: `now()`, not null]
+  organizationId String [not null]
+  organization Organization [not null]
+}
+
+Table TaskComment {
+  id String [pk]
+  text String [not null]
+  createdAt DateTime [default: `now()`, not null]
+  updatedAt DateTime [not null]
+  taskId String [not null]
+  userId String [not null]
+  task Task [not null]
+  user User [not null]
+}
+
+Table TaskActivityLog {
+  id String [pk]
+  action String [not null]
+  oldValue String
+  newValue String
+  createdAt DateTime [default: `now()`, not null]
+  taskId String [not null]
+  userId String
+  task Task [not null]
+  user User
+}
+
+Table MessageRead {
+  id String [pk]
+  readAt DateTime [default: `now()`, not null]
+  messageId String [not null]
+  userId String [not null]
+  message Message [not null]
+  user User [not null]
+
+  indexes {
+    (messageId, userId) [unique]
+  }
+}
+
+Table MessageReaction {
+  id String [pk]
+  emoji String [not null]
+  messageId String [not null]
+  userId String [not null]
+  createdAt DateTime [default: `now()`, not null]
+  message Message [not null]
+  user User [not null]
+
+  indexes {
+    (messageId, userId, emoji) [unique]
+  }
+}
+
+Table Thread {
+  id String [pk]
+  messageId String [unique, not null]
+  channelId String [not null]
+  createdAt DateTime [default: `now()`, not null]
+  updatedAt DateTime [not null]
+  channel Channel [not null]
+  message Message [not null]
+  replies Message [not null]
+}
+
+Table Notification {
+  id String [pk]
+  type String [not null]
+  title String [not null]
+  message String [not null]
+  link String
+  read Boolean [not null, default: false]
+  priority String [not null, default: 'normal']
+  groupedId String
+  createdAt DateTime [default: `now()`, not null]
+  updatedAt DateTime [not null]
+  userId String [not null]
+  user User [not null]
+  relatedId String
+  relatedType String
+}
+
+Table NotificationPreference {
+  id String [pk]
+  userId String [unique, not null]
+  user User [not null]
+  mentionDelivery String [not null, default: 'realtime']
+  taskAssignedDelivery String [not null, default: 'realtime']
+  meetingStartingDelivery String [not null, default: 'realtime']
+  pullRequestReviewDelivery String [not null, default: 'realtime']
+  taskUpdateDelivery String [not null, default: 'digest_hourly']
+  meetingCreatedDelivery String [not null, default: 'digest_hourly']
+  messageDelivery String [not null, default: 'digest_hourly']
+  announcementDelivery String [not null, default: 'digest_daily']
+  teamUpdateDelivery String [not null, default: 'digest_daily']
+  digestTime String [not null, default: '18:00']
+  digestTimezone String [not null, default: 'Asia/Bangkok']
+  digestIncludeRead Boolean [not null, default: false]
+  soundEnabled Boolean [not null, default: true]
+  desktopEnabled Boolean [not null, default: true]
+  badgeEnabled Boolean [not null, default: true]
+  createdAt DateTime [default: `now()`, not null]
+  updatedAt DateTime [not null]
+}
+
+Table NotificationDigest {
+  id String [pk]
+  userId String [not null]
+  user User [not null]
+  digestType String [not null]
+  periodStart DateTime [not null]
+  periodEnd DateTime [not null]
+  totalCount Int [not null, default: 0]
+  unreadCount Int [not null, default: 0]
+  byType Json [not null]
+  highlights Json [not null]
+  notificationIds String[] [not null]
+  sentAt DateTime
+  readAt DateTime
+  isRead Boolean [not null, default: false]
+  createdAt DateTime [default: `now()`, not null]
+  updatedAt DateTime [not null]
+}
+
+Table AuditLog {
+  id String [pk]
+  action String [not null]
+  entity String [not null]
+  entityId String [not null]
+  userId String
+  user User
+  userName String
+  details Json
+  ipAddress String
+  userAgent String
+  createdAt DateTime [default: `now()`, not null]
+}
+
+Table RefreshToken {
+  id String [pk]
+  token String [unique, not null]
+  userId String [not null]
+  expiresAt DateTime [not null]
+  createdAt DateTime [default: `now()`, not null]
+  user User [not null]
+}
+
+Table DocumentFolder {
+  id String [pk]
+  name String [not null]
+  description String
+  parentId String
+  teamId String
+  createdBy String [not null]
+  createdAt DateTime [default: `now()`, not null]
+  updatedAt DateTime [not null]
+  team Team
+  creator User [not null]
+  parent DocumentFolder
+  children DocumentFolder [not null]
+  documents Document [not null]
+}
+
+Table Document {
+  id String [pk]
+  name String [not null]
+  description String
+  fileUrl String [not null]
+  fileSize Int [not null]
+  mimeType String [not null]
+  folderId String
+  teamId String
+  createdBy String [not null]
+  version Int [not null, default: 1]
+  isArchived Boolean [not null, default: false]
+  createdAt DateTime [default: `now()`, not null]
+  updatedAt DateTime [not null]
+  team Team
+  folder DocumentFolder
+  creator User [not null]
+  versions DocumentVersion [not null]
+  permissions DocumentPermission [not null]
+}
+
+Table DocumentVersion {
+  id String [pk]
+  documentId String [not null]
+  version Int [not null]
+  fileUrl String [not null]
+  fileSize Int [not null]
+  mimeType String [not null]
+  changeNote String
+  createdBy String [not null]
+  createdAt DateTime [default: `now()`, not null]
+  document Document [not null]
+  creator User [not null]
+
+  indexes {
+    (documentId, version) [unique]
+  }
+}
+
+Table DocumentPermission {
+  id String [pk]
+  documentId String [not null]
+  userId String [not null]
+  permission String [not null, default: 'view']
+  createdAt DateTime [default: `now()`, not null]
+  updatedAt DateTime [not null]
+  document Document [not null]
+  user User [not null]
+
+  indexes {
+    (documentId, userId) [unique]
+  }
+}
+
+Table MeetingRecording {
+  id String [pk]
+  meetingId String [not null]
+  fileUrl String [not null]
+  fileSize Int [not null]
+  duration Int [not null]
+  transcription String
+  status String [not null, default: 'processing']
+  createdBy String [not null]
+  createdAt DateTime [default: `now()`, not null]
+  updatedAt DateTime [not null]
+  meeting Meeting [not null]
+}
+
+Table MeetingMinutes {
+  id String [pk]
+  meetingId String [not null]
+  title String [not null]
+  content String [not null]
+  actionItems Json
+  decisions Json
+  attendees String[] [not null]
+  createdBy String [not null]
+  createdAt DateTime [default: `now()`, not null]
+  updatedAt DateTime [not null]
+  meeting Meeting [not null]
+  creator User [not null]
+}
+
+Table MeetingParticipant {
+  id String [pk]
+  meetingId String [not null]
+  userId String [not null]
+  joinedAt DateTime [default: `now()`, not null]
+  leftAt DateTime
+  duration Int
+  role String [not null, default: 'participant']
+  handRaised Boolean [not null, default: false]
+  isMuted Boolean [not null, default: false]
+  isVideoOn Boolean [not null, default: false]
+  isSharing Boolean [not null, default: false]
+  waitingRoom Boolean [not null, default: true]
+  meeting Meeting [not null]
+  user User [not null]
+
+  indexes {
+    (meetingId, userId) [unique]
+  }
+}
+
+Table TimeEntry {
+  id String [pk]
+  userId String [not null]
+  taskId String
+  meetingId String
+  description String
+  startTime DateTime [not null]
+  endTime DateTime
+  duration Int
+  billable Boolean [not null, default: false]
+  tags String[] [not null]
+  createdAt DateTime [default: `now()`, not null]
+  updatedAt DateTime [not null]
+  user User [not null]
+  task Task
+}
+
+Table Reminder {
+  id String [pk]
+  title String [not null]
+  description String
+  type String [not null]
+  relatedId String
+  relatedType String
+  remindAt DateTime [not null]
+  isSent Boolean [not null, default: false]
+  createdBy String [not null]
+  createdAt DateTime [default: `now()`, not null]
+  updatedAt DateTime [not null]
+  creator User [not null]
+  recipients ReminderRecipient [not null]
+}
+
+Table ReminderRecipient {
+  id String [pk]
+  reminderId String [not null]
+  userId String [not null]
+  isRead Boolean [not null, default: false]
+  readAt DateTime
+  createdAt DateTime [default: `now()`, not null]
+  reminder Reminder [not null]
+  user User [not null]
+
+  indexes {
+    (reminderId, userId) [unique]
+  }
+}
+
+Table StandupEntry {
+  id String [pk]
+  userId String [not null]
+  teamId String [not null]
+  date DateTime [not null, note: 'วันที่ของ standup (เก็บเป็นช่วงเช้าของวันนั้น เช่น 00:00 น.)']
+  rawText String [not null, note: 'ข้อความดิบทั้งหมดที่ผู้ใช้ส่งใน standup']
+  yesterday String[] [not null, note: 'สิ่งที่ทำเสร็จไปแล้ว (เมื่อวาน / ก่อนหน้า)']
+  today String[] [not null, note: 'สิ่งที่จะทำวันนี้']
+  blockers String[] [not null, note: 'สิ่งที่ติดขัด / Blockers']
+  createdAt DateTime [default: `now()`, not null]
+  updatedAt DateTime [not null]
+  user User [not null]
+  team Team [not null]
+
+  indexes {
+    (userId, teamId, date) [unique]
+  }
+}
+
+Table DriveEntry {
+  id String [pk]
+  name String [not null]
+  path String [not null, default: '/']
+  isFolder Boolean [not null, default: false]
+  createdAt DateTime [default: `now()`, not null]
+  updatedAt DateTime [not null]
+  teamId String [not null]
+  createdById String [not null]
+  team Team [not null]
+  createdBy User [not null]
+  versions DriveFileVersion [not null]
+}
+
+Table DriveFileVersion {
+  id String [pk]
+  version Int [not null]
+  storageKey String [not null]
+  mimeType String [not null]
+  size Int [not null]
+  createdAt DateTime [default: `now()`, not null]
+  entryId String [not null]
+  createdById String [not null]
+  entry DriveEntry [not null]
+  createdBy User [not null]
+
+  indexes {
+    (entryId, version) [unique]
+  }
+}
+
+Table WorkHours {
+  id String [pk]
+  date DateTime [default: `now()`, not null]
+  hours Float [not null]
+  notes String
+  createdAt DateTime [default: `now()`, not null]
+  updatedAt DateTime [not null]
+  userId String [not null]
+  teamId String
+  user User [not null]
+  team Team
+
+  indexes {
+    (userId, date) [unique]
+  }
+}
+
+Table Sprint {
+  id String [pk]
+  name String [not null]
+  description String
+  startDate DateTime [not null]
+  endDate DateTime [not null]
+  goal String
+  status String [not null, default: 'planned']
+  createdAt DateTime [default: `now()`, not null]
+  updatedAt DateTime [not null]
+  teamId String [not null]
+  createdById String [not null]
+  team Team [not null]
+  createdBy User [not null]
+  tasks Task [not null]
+}
+
+Table Epic {
+  id String [pk]
+  name String [not null]
+  description String
+  color String
+  status String [not null, default: 'active']
+  createdAt DateTime [default: `now()`, not null]
+  updatedAt DateTime [not null]
+  teamId String [not null]
+  createdById String [not null]
+  team Team [not null]
+  createdBy User [not null]
+  tasks Task [not null]
+}
+
+Table Subtask {
+  id String [pk]
+  title String [not null]
+  isCompleted Boolean [not null, default: false]
+  position Int [not null, default: 0]
+  createdAt DateTime [default: `now()`, not null]
+  updatedAt DateTime [not null]
+  taskId String [not null]
+  task Task [not null]
+}
+
+Table TaskAttachment {
+  id String [pk]
+  name String [not null]
+  url String [not null]
+  mimeType String
+  size Int
+  createdAt DateTime [default: `now()`, not null]
+  taskId String [not null]
+  userId String [not null]
+  task Task [not null]
+  user User [not null]
+}
+
+Table MeetingReminder {
+  id String [pk]
+  meetingId String [not null]
+  userId String [not null]
+  minutesBefore Int [not null]
+  sentAt DateTime [default: `now()`, not null]
+  meeting Meeting [not null]
+
+  indexes {
+    (meetingId, userId, minutesBefore) [unique]
+  }
+}
+
+Table Holiday {
+  id String [pk]
+  name String [not null]
+  nameEn String
+  date DateTime [not null]
+  isRecurring Boolean [not null, default: true]
+  type String [not null, default: 'public']
+  country String [not null, default: 'TH']
+  createdAt DateTime [default: `now()`, not null]
+  updatedAt DateTime [not null]
+  organizationId String
+  organization Organization
+}
+
+Table Workflow {
+  id String [pk]
+  name String [not null]
+  description String
+  trigger String [not null]
+  conditions Json
+  actions Json [not null]
+  isActive Boolean [not null, default: true]
+  createdAt DateTime [default: `now()`, not null]
+  updatedAt DateTime [not null]
+  teamId String
+  createdBy String [not null]
+  team Team
+  creator User [not null]
+  runs WorkflowRun [not null]
+}
+
+Table WorkflowRun {
+  id String [pk]
+  status String [not null, default: 'running']
+  input Json
+  output Json
+  error String
+  startedAt DateTime [default: `now()`, not null]
+  completedAt DateTime
+  workflowId String [not null]
+  userId String
+  workflow Workflow [not null]
+  user User
+}
+
+Table WikiArticle {
+  id String [pk]
+  title String [not null]
+  content String [not null]
+  category String
+  tags String[] [not null]
+  isPublic Boolean [not null, default: true]
+  teamId String
+  createdBy String [not null]
+  version Int [not null, default: 1]
+  viewCount Int [not null, default: 0]
+  createdAt DateTime [default: `now()`, not null]
+  updatedAt DateTime [not null]
+  team Team
+  creator User [not null]
+  versions WikiArticleVersion [not null]
+  comments WikiComment [not null]
+}
+
+Table WikiArticleVersion {
+  id String [pk]
+  articleId String [not null]
+  version Int [not null]
+  title String [not null]
+  content String [not null]
+  changeNote String
+  createdBy String [not null]
+  createdAt DateTime [default: `now()`, not null]
+  article WikiArticle [not null]
+  creator User [not null]
+
+  indexes {
+    (articleId, version) [unique]
+  }
+}
+
+Table WikiComment {
+  id String [pk]
+  articleId String [not null]
+  content String [not null]
+  createdBy String [not null]
+  createdAt DateTime [default: `now()`, not null]
+  updatedAt DateTime [not null]
+  article WikiArticle [not null]
+  creator User [not null]
+}
+
+Table Announcement {
+  id String [pk]
+  title String [not null]
+  content String [not null]
+  priority String [not null, default: 'normal']
+  targetType String [not null, default: 'all']
+  targetIds String[] [not null]
+  attachments Json
+  createdBy String [not null]
+  expiresAt DateTime
+  status String [not null, default: 'active']
+  createdAt DateTime [default: `now()`, not null]
+  updatedAt DateTime [not null]
+  creator User [not null]
+  reads AnnouncementRead [not null]
+}
+
+Table AnnouncementRead {
+  id String [pk]
+  announcementId String [not null]
+  userId String [not null]
+  readAt DateTime [default: `now()`, not null]
+  announcement Announcement [not null]
+  user User [not null]
+
+  indexes {
+    (announcementId, userId) [unique]
+  }
+}
+
+Table Project {
+  id String [pk]
+  key String [not null]
+  name String [not null]
+  description String
+  color String
+  createdAt DateTime [default: `now()`, not null]
+  updatedAt DateTime [not null]
+  teamId String [not null]
+  team Team [not null]
+  tasks Task [not null]
+
+  indexes {
+    (teamId, key) [unique]
+  }
+}
+
+Table Component {
+  id String [pk]
+  name String [not null]
+  description String
+  createdAt DateTime [default: `now()`, not null]
+  updatedAt DateTime [not null]
+  teamId String [not null]
+  team Team [not null]
+  tasks Task [not null]
+
+  indexes {
+    (teamId, name) [unique]
+  }
+}
+
+Table Version {
+  id String [pk]
+  name String [not null]
+  description String
+  released Boolean [not null, default: false]
+  releaseDate DateTime
+  createdAt DateTime [default: `now()`, not null]
+  updatedAt DateTime [not null]
+  teamId String [not null]
+  team Team [not null]
+  tasks Task [not null]
+}
+
+Table TaskTemplate {
+  id String [pk]
+  name String [not null]
+  description String
+  title String [not null]
+  content String
+  priority String [not null, default: 'medium']
+  issueType String [not null, default: 'task']
+  tags String[] [not null]
+  storyPoints Int
+  estimate Float
+  teamId String
+  projectId String
+  componentId String
+  versionId String
+  createdById String [not null]
+  createdAt DateTime [default: `now()`, not null]
+  updatedAt DateTime [not null]
+  createdBy User [not null]
+}
+
+Table TaskWatcher {
+  id String [pk]
+  taskId String [not null]
+  userId String [not null]
+  createdAt DateTime [default: `now()`, not null]
+  task Task [not null]
+  user User [not null]
+
+  indexes {
+    (taskId, userId) [unique]
+  }
+}
+
+Table IssueLink {
+  id String [pk]
+  type String [not null]
+  sourceId String [not null]
+  targetId String [not null]
+  createdAt DateTime [default: `now()`, not null]
+  source Task [not null]
+  target Task [not null]
+
+  indexes {
+    (sourceId, targetId, type) [unique]
+  }
+}
+
+Table RolePermission {
+  id String [pk]
+  organizationId String [not null]
+  role String [not null]
+  resource String [not null]
+  action String [not null]
+  allowed Boolean [not null, default: false]
+  createdAt DateTime [default: `now()`, not null]
+  updatedAt DateTime [not null]
+  organization Organization [not null]
+
+  indexes {
+    (organizationId, role, resource, action) [unique]
+  }
+}
+
+Table TaskWorkflowStatus {
+  id String [pk]
+  name String [not null]
+  key String [not null]
+  color String [not null, default: '#94a3b8']
+  category String [not null, default: 'todo']
+  position Int [not null, default: 0]
+  teamId String
+  createdAt DateTime [default: `now()`, not null]
+  updatedAt DateTime [not null]
+  team Team
+
+  indexes {
+    (teamId, key) [unique]
+  }
+}
+
+Ref: User.organizationId > Organization.id
+
+Ref: User.managerId - User.id
+
+Ref: Team.organizationId > Organization.id
+
+Ref: TeamMember.userId > User.id
+
+Ref: TeamMember.teamId > Team.id
+
+Ref: Meeting.parentMeetingId - Meeting.id
+
+Ref: Meeting.teamId > Team.id
+
+Ref: Meeting.hostId > User.id
+
+Ref: Task.assigneeId > User.id
+
+Ref: Task.reporterId > User.id
+
+Ref: Task.teamId > Team.id
+
+Ref: Task.meetingId > Meeting.id
+
+Ref: Task.sprintId > Sprint.id
+
+Ref: Task.epicId > Epic.id
+
+Ref: Task.projectId > Project.id
+
+Ref: Task.componentId > Component.id
+
+Ref: Task.versionId > Version.id
+
+Ref: Task.parentTaskId - Task.id
+
+Ref: Channel.teamId > Team.id
+
+Ref: Message.channelId > Channel.id [delete: Cascade]
+
+Ref: Message.senderId > User.id
+
+Ref: Message.replyToId - Message.id
+
+Ref: Message.threadId - Thread.id
+
+Ref: DirectMessage.senderId > User.id
+
+Ref: DirectMessage.receiverId > User.id
+
+Ref: Invite.organizationId > Organization.id
+
+Ref: TaskComment.taskId > Task.id
+
+Ref: TaskComment.userId > User.id
+
+Ref: TaskActivityLog.taskId > Task.id
+
+Ref: TaskActivityLog.userId > User.id
+
+Ref: MessageRead.messageId > Message.id [delete: Cascade]
+
+Ref: MessageRead.userId > User.id
+
+Ref: MessageReaction.messageId > Message.id [delete: Cascade]
+
+Ref: MessageReaction.userId > User.id [delete: Cascade]
+
+Ref: Thread.channelId > Channel.id
+
+Ref: Thread.messageId - Message.id
+
+Ref: Notification.userId > User.id
+
+Ref: NotificationPreference.userId - User.id [delete: Cascade]
+
+Ref: NotificationDigest.userId > User.id [delete: Cascade]
+
+Ref: AuditLog.userId > User.id
+
+Ref: RefreshToken.userId > User.id [delete: Cascade]
+
+Ref: DocumentFolder.teamId > Team.id
+
+Ref: DocumentFolder.createdBy > User.id
+
+Ref: DocumentFolder.parentId - DocumentFolder.id
+
+Ref: Document.teamId > Team.id
+
+Ref: Document.folderId > DocumentFolder.id
+
+Ref: Document.createdBy > User.id
+
+Ref: DocumentVersion.documentId > Document.id [delete: Cascade]
+
+Ref: DocumentVersion.createdBy > User.id
+
+Ref: DocumentPermission.documentId > Document.id [delete: Cascade]
+
+Ref: DocumentPermission.userId > User.id [delete: Cascade]
+
+Ref: MeetingRecording.meetingId > Meeting.id [delete: Cascade]
+
+Ref: MeetingMinutes.meetingId > Meeting.id [delete: Cascade]
+
+Ref: MeetingMinutes.createdBy > User.id
+
+Ref: MeetingParticipant.meetingId > Meeting.id [delete: Cascade]
+
+Ref: MeetingParticipant.userId > User.id [delete: Cascade]
+
+Ref: TimeEntry.userId > User.id
+
+Ref: TimeEntry.taskId > Task.id
+
+Ref: Reminder.createdBy > User.id
+
+Ref: ReminderRecipient.reminderId > Reminder.id [delete: Cascade]
+
+Ref: ReminderRecipient.userId > User.id [delete: Cascade]
+
+Ref: StandupEntry.userId > User.id
+
+Ref: StandupEntry.teamId > Team.id
+
+Ref: DriveEntry.teamId > Team.id
+
+Ref: DriveEntry.createdById > User.id
+
+Ref: DriveFileVersion.entryId > DriveEntry.id
+
+Ref: DriveFileVersion.createdById > User.id
+
+Ref: WorkHours.userId > User.id
+
+Ref: WorkHours.teamId > Team.id
+
+Ref: Sprint.teamId > Team.id
+
+Ref: Sprint.createdById > User.id
+
+Ref: Epic.teamId > Team.id
+
+Ref: Epic.createdById > User.id
+
+Ref: Subtask.taskId > Task.id [delete: Cascade]
+
+Ref: TaskAttachment.taskId > Task.id [delete: Cascade]
+
+Ref: TaskAttachment.userId > User.id
+
+Ref: MeetingReminder.meetingId > Meeting.id [delete: Cascade]
+
+Ref: Holiday.organizationId > Organization.id
+
+Ref: Workflow.teamId > Team.id
+
+Ref: Workflow.createdBy > User.id
+
+Ref: WorkflowRun.workflowId > Workflow.id [delete: Cascade]
+
+Ref: WorkflowRun.userId > User.id
+
+Ref: WikiArticle.teamId > Team.id
+
+Ref: WikiArticle.createdBy > User.id
+
+Ref: WikiArticleVersion.articleId > WikiArticle.id [delete: Cascade]
+
+Ref: WikiArticleVersion.createdBy > User.id
+
+Ref: WikiComment.articleId > WikiArticle.id [delete: Cascade]
+
+Ref: WikiComment.createdBy > User.id
+
+Ref: Announcement.createdBy > User.id
+
+Ref: AnnouncementRead.announcementId > Announcement.id [delete: Cascade]
+
+Ref: AnnouncementRead.userId > User.id [delete: Cascade]
+
+Ref: Project.teamId > Team.id
+
+Ref: Component.teamId > Team.id
+
+Ref: Version.teamId > Team.id
+
+Ref: TaskTemplate.createdById > User.id [delete: Cascade]
+
+Ref: TaskWatcher.taskId > Task.id [delete: Cascade]
+
+Ref: TaskWatcher.userId > User.id [delete: Cascade]
+
+Ref: IssueLink.sourceId > Task.id [delete: Cascade]
+
+Ref: IssueLink.targetId > Task.id [delete: Cascade]
+
+Ref: RolePermission.organizationId > Organization.id [delete: Cascade]
+
+Ref: TaskWorkflowStatus.teamId > Team.id
+```
+
+Generate a cohesive and extensive set of designs that clearly map to these tables, prioritizing user experience and functional density typical of complex SaaS applications. Make it look fully complete and ready for development.

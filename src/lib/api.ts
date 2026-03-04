@@ -14,8 +14,10 @@ interface QueuedRequest {
 class RequestManager {
   private queue: QueuedRequest[] = [];
   private activeRequests = 0;
-  private readonly maxConcurrent = 1; // Max 1 concurrent request (very conservative to prevent rate limiting)
-  private readonly minDelay = 500; // Minimum 500ms between requests (increased to prevent rate limiting)
+  // Reduce concurrency back to 4 to prevent triggering 429 Too Many Requests on backend 
+  // (Tasks page fires 8 parallel requests on load)
+  private readonly maxConcurrent = 4;
+  private readonly minDelay = 100; // Minimum 100ms between requests to space out the burst
   private lastRequestTime = 0;
   private cache = new Map<string, { data: any; timestamp: number }>();
   private readonly cacheTTL = 60000; // 60 seconds cache (increased to reduce duplicate requests)
@@ -27,10 +29,10 @@ class RequestManager {
     // Create a unique key for this request
     const requestKey = this.getRequestKey(url, options);
     
-    // If the same request is already pending, return the existing promise
+    // If the same request is already pending, return the existing promise with a cloned response
     const pending = this.pendingRequests.get(requestKey);
     if (pending) {
-      return pending;
+      return pending.then(res => res.clone());
     }
 
     // Create new promise for this request
@@ -51,7 +53,7 @@ class RequestManager {
       this.pendingRequests.delete(requestKey);
     });
 
-    return promise;
+    return promise.then(res => res.clone());
   }
 
   private getRequestKey(url: string, options: RequestInit): string {
@@ -75,8 +77,8 @@ class RequestManager {
 
     const now = Date.now();
     const timeSinceLastRequest = now - this.lastRequestTime;
-    // Add extra delay for the first request to give server time to recover
-    const baseDelay = this.lastRequestTime === 0 ? 1000 : this.minDelay;
+    // Use a small, consistent spacing between requests (no artificial 1s delay on first call)
+    const baseDelay = this.minDelay;
     const delay = Math.max(0, baseDelay - timeSinceLastRequest);
 
     if (delay > 0) {
@@ -269,6 +271,22 @@ export async function apiGet<T = any>(url: string): Promise<T> {
         return (isArrayEndpoint ? [] : {}) as T;
       }
       
+      // For 404 errors, gracefully return empty result (resource not found)
+      // This prevents console errors from browser prefetch or missing resources
+      if (res.status === 404) {
+        // Silently handle 404s - don't log to reduce console noise
+        // Determine if this should return array or object based on endpoint
+        const isArrayEndpoint = url.includes('/announcements') || 
+                                url.includes('/teams') || 
+                                url.includes('/tasks') || 
+                                url.includes('/users') ||
+                                url.includes('/channels') ||
+                                url.includes('/meetings') ||
+                                url.includes('/wiki') ||
+                                url.includes('/reports');
+        return (isArrayEndpoint ? [] : null) as T;
+      }
+      
       // For 500 errors, gracefully return empty result instead of crashing
       // This allows the UI to continue working even if backend has issues
       if (res.status === 500) {
@@ -393,16 +411,39 @@ export async function apiGet<T = any>(url: string): Promise<T> {
   }
 }
 
+function unwrapResponse<T>(parsed: any): T {
+  if (parsed && typeof parsed === 'object' && !Array.isArray(parsed) && 'data' in parsed) {
+    return parsed.data as T;
+  }
+  return parsed as T;
+}
+
 export async function apiPost<T = any>(url: string, data?: any): Promise<T> {
   const res = await apiFetch(url, {
     method: 'POST',
     body: JSON.stringify(data),
   });
+  clearApiCache();
   if (!res.ok) {
     const error = await res.json().catch(() => ({ message: `API Error: ${res.status}` }));
     throw new Error(error.message || `API Error: ${res.status}`);
   }
-  return res.json();
+  const parsed = await res.json();
+  return unwrapResponse<T>(parsed);
+}
+
+export async function apiPut<T = any>(url: string, data?: any): Promise<T> {
+  const res = await apiFetch(url, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+  clearApiCache();
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ message: `API Error: ${res.status}` }));
+    throw new Error(error.message || `API Error: ${res.status}`);
+  }
+  const parsed = await res.json();
+  return unwrapResponse<T>(parsed);
 }
 
 export async function apiPatch<T = any>(url: string, data?: any): Promise<T> {
@@ -410,11 +451,13 @@ export async function apiPatch<T = any>(url: string, data?: any): Promise<T> {
     method: 'PATCH',
     body: JSON.stringify(data),
   });
+  clearApiCache();
   if (!res.ok) {
     const error = await res.json().catch(() => ({ message: `API Error: ${res.status}` }));
     throw new Error(error.message || `API Error: ${res.status}`);
   }
-  return res.json();
+  const parsed = await res.json();
+  return unwrapResponse<T>(parsed);
 }
 
 export async function apiDelete<T = any>(url: string, options?: { body?: any }): Promise<T> {
@@ -422,10 +465,12 @@ export async function apiDelete<T = any>(url: string, options?: { body?: any }):
     method: 'DELETE',
     body: options?.body ? JSON.stringify(options.body) : undefined,
   });
+  clearApiCache();
   if (!res.ok) {
     const error = await res.json().catch(() => ({ message: `API Error: ${res.status}` }));
     throw new Error(error.message || `API Error: ${res.status}`);
   }
-  return res.json();
+  const parsed = await res.json();
+  return unwrapResponse<T>(parsed);
 }
 

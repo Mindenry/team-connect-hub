@@ -1,7 +1,7 @@
 import { memo } from "react";
 import {
   Hash, Pin, Users, Search, X, Megaphone, Volume2, Menu,
-  MoreHorizontal,
+  Filter,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -22,7 +22,7 @@ const getInitials = (name: string) =>
 interface Channel {
   id: string;
   name: string;
-  type: "general" | "announcement" | "voice";
+  type: "general" | "announcement" | "voice" | "standup";
   teamId: string;
   team?: { id: string; name: string };
   description?: string;
@@ -74,31 +74,31 @@ function ChatHeader({
   const Icon = currentChannel ? (channelIcons[currentChannel.type] || Hash) : Hash;
 
   return (
-    <div className="shrink-0">
+    <div className="shrink-0 relative">
       {/* ── Main Header ── */}
-      <div className="h-16 flex items-center justify-between px-4 md:px-5 border-b border-border/20 bg-card/40 backdrop-blur-md">
+      <div className="h-[52px] flex items-center justify-between px-5 border-b border-border/20 bg-background">
         {/* Left: identity */}
-        <div className="flex items-center gap-3 min-w-0">
+        <div className="flex items-center gap-2.5 min-w-0">
           {isMobile && onToggleSidebar && (
             <button
               onClick={onToggleSidebar}
-              className="w-9 h-9 rounded-xl flex items-center justify-center text-muted-foreground hover:bg-muted/30 transition-all shrink-0"
+              className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors shrink-0"
             >
-              <Menu className="w-5 h-5" />
+              <Menu className="w-4.5 h-4.5" />
             </button>
           )}
 
           {activeDm && currentDmContact ? (
             <>
               <div className="relative shrink-0">
-                <Avatar className="h-9 w-9 border-2 border-background shadow-sm">
-                  <AvatarFallback className="bg-gradient-to-br from-blue-500 to-violet-600 text-white text-[11px] font-bold">
+                <Avatar className="h-8 w-8">
+                  <AvatarFallback className="bg-primary/10 text-primary text-[10px] font-bold">
                     {currentDmContact.initials}
                   </AvatarFallback>
                 </Avatar>
                 <StatusIndicator
                   status={(currentDmContact.status || "offline") as any}
-                  className="absolute -bottom-0.5 -right-0.5 w-3 h-3 border-[2.5px] border-card"
+                  className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 border-2 border-background"
                 />
               </div>
               <div className="min-w-0">
@@ -106,34 +106,27 @@ function ChatHeader({
                   {currentDmContact.name}
                 </h2>
                 <span className={cn(
-                  "text-[11px] capitalize font-medium",
-                  currentDmContact.status === "online" ? "text-emerald-500" : "text-muted-foreground/60"
+                  "text-[10px] capitalize",
+                  currentDmContact.status === "online" ? "text-emerald-500" : "text-muted-foreground/50"
                 )}>
                   {currentDmContact.status || "offline"}
                 </span>
               </div>
             </>
           ) : currentChannel ? (
-            <>
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500/15 to-violet-600/15 flex items-center justify-center shrink-0">
-                <Icon className="w-4 h-4 text-blue-500" />
-              </div>
-              <div className="min-w-0">
-                <h2 className="text-sm font-semibold text-foreground leading-tight truncate flex items-center gap-1.5">
-                  <span className="text-muted-foreground/40">#</span>
-                  {currentChannel.name}
-                </h2>
-                {currentChannel.description ? (
-                  <span className="text-[11px] text-muted-foreground/50 truncate block max-w-[200px]">
-                    {currentChannel.description}
-                  </span>
-                ) : currentChannel.team ? (
-                  <span className="text-[11px] text-muted-foreground/40">{currentChannel.team.name}</span>
-                ) : null}
-              </div>
-            </>
+            <div className="min-w-0">
+              <h2 className="text-[15px] font-semibold text-foreground leading-tight truncate flex items-center gap-1">
+                <Icon className="w-4 h-4 text-muted-foreground/60 shrink-0" />
+                {currentChannel.name}
+              </h2>
+              {currentChannel.description && (
+                <p className="text-[11px] text-muted-foreground/50 truncate max-w-[300px]">
+                  {currentChannel.description}
+                </p>
+              )}
+            </div>
           ) : (
-            <span className="text-sm text-muted-foreground/60">Select a conversation</span>
+            <span className="text-sm text-muted-foreground/50">Select a conversation</span>
           )}
         </div>
 
@@ -151,13 +144,13 @@ function ChatHeader({
                 onClick={btn.onClick}
                 title={btn.label}
                 className={cn(
-                  "w-9 h-9 rounded-xl flex items-center justify-center transition-all",
+                  "w-8 h-8 rounded-lg flex items-center justify-center transition-colors",
                   btn.active
                     ? "bg-primary/10 text-primary"
-                    : "text-muted-foreground/50 hover:text-foreground hover:bg-muted/30"
+                    : "text-muted-foreground/50 hover:text-foreground hover:bg-muted/50"
                 )}
               >
-                <btn.icon className="w-[18px] h-[18px]" />
+                <btn.icon className="w-4 h-4" />
               </button>
             ))}
         </div>
@@ -171,45 +164,50 @@ function ChatHeader({
             animate={{ height: "auto", opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
             transition={{ duration: 0.15 }}
-            className="overflow-hidden border-b border-border/20 bg-card/60 backdrop-blur-sm"
+            className="overflow-hidden border-b border-border/20 bg-background"
           >
-            <div className="px-4 py-2.5 flex items-center gap-2">
-              <Search className="w-4 h-4 text-muted-foreground/40 shrink-0" />
-              <input
-                value={searchQuery}
-                onChange={(e) => onSearchChange(e.target.value)}
-                placeholder="Search in conversation..."
-                className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/30"
-                autoFocus
-              />
+            <div className="px-5 py-2.5 flex items-center gap-2">
+              <div className="relative flex-1">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground/40 pointer-events-none" />
+                <input
+                  value={searchQuery}
+                  onChange={(e) => onSearchChange(e.target.value)}
+                  placeholder="Search messages..."
+                  className="w-full h-8 pl-8 pr-3 bg-muted/30 border border-border/30 rounded-lg text-xs outline-none focus:border-primary/30 focus:ring-1 focus:ring-primary/20 placeholder:text-muted-foreground/40 transition-all"
+                  autoFocus
+                />
+              </div>
               <button
                 onClick={onCloseSearch}
-                className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground/40 hover:text-foreground hover:bg-muted/30 transition-all"
+                className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground/50 hover:text-foreground hover:bg-muted/50 transition-colors"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
             </div>
 
             {showSearchResults && searchResults.length > 0 && (
-              <div className="max-h-48 overflow-y-auto divide-y divide-border/10 px-2 pb-2">
+              <div className="max-h-48 overflow-y-auto px-3 pb-2">
                 {searchResults.map((r) => (
                   <button
                     key={r.id}
-                    className="w-full text-left px-3 py-2 rounded-xl hover:bg-muted/30 transition-colors"
+                    className="w-full text-left px-3 py-2 rounded-lg hover:bg-muted/40 transition-colors"
                     onClick={onSearchResultClick}
                   >
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-semibold text-primary">{r.sender.name}</span>
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <span className="text-[11px] font-semibold">{r.sender.name}</span>
                       <span className="text-[10px] text-muted-foreground/40">{formatTime(r.createdAt)}</span>
                     </div>
-                    <p className="text-xs text-foreground/60 truncate mt-0.5">{r.text}</p>
+                    <p className="text-xs text-muted-foreground/70 truncate">{r.text}</p>
                   </button>
                 ))}
               </div>
             )}
 
             {showSearchResults && searchResults.length === 0 && searchQuery.length >= 2 && (
-              <div className="px-4 pb-3 text-xs text-muted-foreground/40">No results found</div>
+              <div className="px-5 pb-2.5 text-xs text-muted-foreground/50 flex items-center gap-1.5">
+                <Filter className="w-3 h-3" />
+                No results found
+              </div>
             )}
           </motion.div>
         )}

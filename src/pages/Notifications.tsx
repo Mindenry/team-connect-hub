@@ -42,8 +42,8 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { auth } from "@/lib/auth";
 import { toast } from "sonner";
-import { apiGet, apiPatch, apiDelete } from "@/lib/api";
-import { getSocket } from "@/lib/websocket";
+import { apiGet, apiPatch, apiDelete, clearApiCache } from "@/lib/api";
+import { notificationsSocket } from "@/lib/notifications-socket";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PageHero, PageShell } from "@/components/shared/PageShell";
@@ -61,6 +61,16 @@ interface Notification {
   relatedType?: string;
   link?: string;
 }
+
+type GroupedNotification = Notification & {
+  type: "grouped";
+  notifications: Notification[];
+  count: number;
+  priority?: string;
+  groupedId?: string | null;
+};
+
+type NotificationItem = Notification | GroupedNotification;
 
 const typeIcons: Record<string, React.ElementType> = {
   mention: AtSign,
@@ -87,7 +97,7 @@ const typeColors: Record<string, string> = {
 export default function Notifications() {
   const currentUser = auth.getUser();
   const navigate = useNavigate();
-  const [items, setItems] = useState<Notification[]>([]);
+  const [items, setItems] = useState<NotificationItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [unreadCount, setUnreadCount] = useState(0);
   const [filter, setFilter] = useState<"all" | "unread" | "read">("all");
@@ -157,10 +167,12 @@ export default function Notifications() {
     return () => clearInterval(interval);
   }, [loadNotifications]);
 
-  // WebSocket for real-time notifications
+  // WebSocket for real-time notifications (dedicated notifications namespace)
   useEffect(() => {
     if (!currentUser?.id) return;
-    const socket = getSocket();
+
+    // Ensure notifications socket is connected (no-op if already connected)
+    notificationsSocket.connect();
 
     const playBeep = () => {
       try {
@@ -178,15 +190,26 @@ export default function Notifications() {
         o.stop(ctx.currentTime + 0.08);
         setTimeout(() => ctx.close?.(), 150);
       } catch {
-        // ignore
+        // ignore audio errors
       }
     };
 
-    const handleNewNotification = (notification: Notification) => {
-      // If payload contains userId, filter; if not, fallback to refresh.
+    const handleNotificationEvent = (payload: any) => {
+      if (!payload) return;
+
+      // Special payload used by backend to only update unread count
+      if (payload.type === "unread-count-update" && typeof payload.count === "number") {
+        setUnreadCount(payload.count);
+        return;
+      }
+
+      const notification = payload as Notification;
+
       if (notification.userId && notification.userId !== currentUser.id) return;
-      setItems((prev) => [notification, ...prev]);
-      setUnreadCount((prev) => prev + 1);
+
+      // Refresh notifications so grouping & filters stay accurate
+      loadNotifications();
+
       if (notificationSettings.soundEnabled) playBeep();
       if (notificationSettings.desktopEnabled && "Notification" in window) {
         if (Notification.permission === "default") void Notification.requestPermission();
@@ -194,23 +217,36 @@ export default function Notifications() {
           try {
             new Notification(notification.title, { body: notification.message, icon: "/favicon.ico" });
           } catch {
-            // ignore
+            // ignore Notification errors
           }
         }
       }
     };
 
-    socket.on("notification:created", handleNewNotification);
+    const unsubscribeNotification = notificationsSocket.on("notification", handleNotificationEvent);
+    const unsubscribeUnread = notificationsSocket.on("unread-count", (count: number) => {
+      setUnreadCount(typeof count === "number" ? count : 0);
+    });
 
     return () => {
-      socket.off("notification:created", handleNewNotification);
+      unsubscribeNotification?.();
+      unsubscribeUnread?.();
     };
-  }, [currentUser?.id, notificationSettings]);
+  }, [currentUser?.id, notificationSettings.soundEnabled, notificationSettings.desktopEnabled, loadNotifications]);
+
+  const getNotificationIds = (notification: NotificationItem): string[] => {
+    if ((notification as any).type === "grouped" && Array.isArray((notification as any).notifications)) {
+      return (notification as any).notifications.map((n: Notification) => n.id);
+    }
+    return [notification.id];
+  };
 
   const markAllRead = async () => {
     if (!currentUser?.id) return;
     try {
       await apiPatch(`/notifications/read-all?userId=${currentUser.id}`);
+      // Clear API cache so subsequent GET /notifications returns fresh data
+      clearApiCache();
       await loadNotifications();
       toast.success("All notifications marked as read");
     } catch (err) {
@@ -219,20 +255,36 @@ export default function Notifications() {
     }
   };
 
-  const markRead = async (id: string) => {
+  const markRead = async (notification: NotificationItem) => {
     if (!currentUser?.id) return;
     try {
-      await apiPatch(`/notifications/${id}/read?userId=${currentUser.id}`);
+      const ids = getNotificationIds(notification);
+      await Promise.all(
+        ids.map((id) =>
+          apiPatch(`/notifications/${id}/read?userId=${currentUser.id}`).catch((err) => {
+            console.error("Failed to mark as read:", err);
+          }),
+        ),
+      );
+      clearApiCache();
       await loadNotifications();
     } catch (err) {
       console.error("Failed to mark as read:", err);
     }
   };
 
-  const deleteNotification = async (id: string) => {
+  const deleteNotification = async (notification: NotificationItem) => {
     if (!currentUser?.id) return;
     try {
-      await apiDelete(`/notifications/${id}?userId=${currentUser.id}`);
+      const ids = getNotificationIds(notification);
+      await Promise.all(
+        ids.map((id) =>
+          apiDelete(`/notifications/${id}?userId=${currentUser.id}`).catch((err) => {
+            console.error("Failed to delete notification:", err);
+          }),
+        ),
+      );
+      clearApiCache();
       await loadNotifications();
       toast.success("Notification deleted");
     } catch (err) {
@@ -241,9 +293,9 @@ export default function Notifications() {
     }
   };
 
-  const handleNotificationClick = (notification: Notification) => {
+  const handleNotificationClick = (notification: NotificationItem) => {
     if (!notification.read) {
-      markRead(notification.id);
+      markRead(notification);
     }
     if (notification.link) {
       if (notification.link.startsWith("/")) navigate(notification.link);
@@ -478,7 +530,7 @@ export default function Notifications() {
                                     <DropdownMenuItem
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        markRead(n.id);
+                                        markRead(n);
                                       }}
                                     >
                                       <Check className="h-4 w-4 mr-2" />
@@ -502,7 +554,7 @@ export default function Notifications() {
                                     className="text-destructive"
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      deleteNotification(n.id);
+                                      deleteNotification(n);
                                     }}
                                   >
                                     <Trash2 className="h-4 w-4 mr-2" />
