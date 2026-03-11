@@ -789,6 +789,117 @@ export default function Dashboard() {
             })}
           </motion.div>
 
+          {/* Active Meeting Rooms */}
+          <AnimatePresence>
+            {activeRooms.length > 0 && (
+              <motion.div
+                variants={itemVariants}
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+              >
+                <Card className="border border-emerald-500/20 bg-gradient-to-br from-emerald-500/[0.04] via-card/80 to-card/80 backdrop-blur-xl shadow-sm overflow-hidden">
+                  <CardHeader className="py-3 px-4 border-b border-emerald-500/10">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <div className="relative">
+                          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-500/20 to-emerald-500/10 flex items-center justify-center border border-emerald-500/20">
+                            <Video className="w-4 h-4 text-emerald-600" />
+                          </div>
+                          <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse border-2 border-background" />
+                        </div>
+                        <div>
+                          <CardTitle className="text-sm font-bold">Active Rooms</CardTitle>
+                          <CardDescription className="text-[11px]">
+                            {activeRooms.length} room{activeRooms.length !== 1 ? "s" : ""} with{" "}
+                            {activeRooms.reduce((sum, r) => sum + r.participants.length, 0)} participant{activeRooms.reduce((sum, r) => sum + r.participants.length, 0) !== 1 ? "s" : ""}
+                          </CardDescription>
+                        </div>
+                      </div>
+                      <Link
+                        to="/meetings"
+                        className="text-[11px] font-semibold text-muted-foreground hover:text-primary transition-colors flex items-center gap-1 group"
+                      >
+                        View All
+                        <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                      </Link>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="p-4">
+                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                      {activeRooms.map((room, i) => {
+                        const isQuickHuddle = room.roomId === "quick-huddle";
+                        const myParticipant = room.participants.find((p) => p.userId === currentUser?.id);
+                        return (
+                          <motion.div
+                            key={room.roomId}
+                            initial={{ opacity: 0, scale: 0.98 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            transition={{ delay: i * 0.05, duration: 0.3 }}
+                            className={cn(
+                              "group flex items-center gap-3 rounded-xl border p-3 cursor-pointer transition-all duration-300",
+                              "bg-gradient-to-r from-emerald-500/5 to-transparent border-emerald-500/20",
+                              "hover:border-emerald-500/40 hover:shadow-md hover:shadow-emerald-500/5 hover:-translate-y-0.5"
+                            )}
+                            onClick={() => navigate(`/meeting-lobby/${room.roomId}`)}
+                          >
+                            <div className="relative shrink-0">
+                              <div className={cn(
+                                "w-10 h-10 rounded-lg flex items-center justify-center",
+                                isQuickHuddle ? "bg-amber-500/15 text-amber-600" : "bg-emerald-500/15 text-emerald-600"
+                              )}>
+                                {isQuickHuddle ? <Zap className="w-5 h-5" /> : <Video className="w-5 h-5" />}
+                              </div>
+                              <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-semibold text-foreground truncate">{room.name}</p>
+                              <div className="flex items-center gap-2 mt-1">
+                                <div className="flex -space-x-1.5">
+                                  {room.participants.slice(0, 4).map((p, idx) => (
+                                    <Tooltip key={p.peerId || idx}>
+                                      <TooltipTrigger asChild>
+                                        <Avatar className="h-5 w-5 border-2 border-background">
+                                          <AvatarImage
+                                            src={p.avatar ? (p.avatar.startsWith("/") ? `${import.meta.env.VITE_API_URL || "http://localhost:3000"}${p.avatar}` : p.avatar) : undefined}
+                                            alt={p.name}
+                                          />
+                                          <AvatarFallback className="text-[7px] font-bold bg-emerald-500/10 text-emerald-700">
+                                            {p.name.charAt(0).toUpperCase()}
+                                          </AvatarFallback>
+                                        </Avatar>
+                                      </TooltipTrigger>
+                                      <TooltipContent side="bottom" className="text-xs">{p.name}</TooltipContent>
+                                    </Tooltip>
+                                  ))}
+                                </div>
+                                <span className="text-[10px] text-muted-foreground font-medium truncate">
+                                  {room.participants.slice(0, 2).map((p) => p.name.split(" ")[0]).join(", ")}
+                                  {room.participants.length > 2 && ` +${room.participants.length - 2}`}
+                                </span>
+                              </div>
+                            </div>
+                            <Button
+                              size="sm"
+                              variant={myParticipant ? "default" : "outline"}
+                              className="h-7 px-2.5 text-[11px] font-semibold shrink-0"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                navigate(`/meeting-lobby/${room.roomId}`);
+                              }}
+                            >
+                              {myParticipant ? "Return" : "Join"}
+                            </Button>
+                          </motion.div>
+                        );
+                      })}
+                    </div>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           {/* Main Content Grid */}
           <div className="grid gap-4 lg:grid-cols-12 lg:gap-5">
             {/* Left Column: Meetings + Tasks */}

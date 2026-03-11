@@ -124,7 +124,7 @@ function MeetingCardGrid({
 }) {
   const navigate = useNavigate();
   const currentUser = auth.getUser();
-  const room = activeRooms.find((r) => r.roomId === meeting.id);
+  const room = activeRooms.find((r) => r.roomId === meeting.id || r.roomId === meeting.meetingCode);
   const participantCount = room ? room.participants.length : 0;
 
   const isActuallyLive =
@@ -257,7 +257,7 @@ function MeetingCardList({
 }) {
   const navigate = useNavigate();
   const currentUser = auth.getUser();
-  const room = activeRooms.find((r) => r.roomId === meeting.id);
+  const room = activeRooms.find((r) => r.roomId === meeting.id || r.roomId === meeting.meetingCode);
   const participantCount = room ? room.participants.length : 0;
 
   const isActuallyLive =

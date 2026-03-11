@@ -11,7 +11,6 @@ import { useAuth } from "@/lib/auth";
 import { apiGet } from "@/lib/api";
 import { notificationsSocket } from "@/lib/notifications-socket";
 import { getChatActive, getChatUnreadTotal, incrementChannelUnread, incrementDmUnread } from "@/lib/chat-unread";
-import ActiveMeetingBanner from "@/components/meeting/ActiveMeetingBanner";
 
 // Content-only loader — only shows inside the content pane, sidebar stays intact
 const ContentLoader = () => (
@@ -315,10 +314,6 @@ export default function AppLayout() {
         )}
 
         <main className="flex-1 overflow-auto">
-          {/* Global Active Meeting Banner – hidden on meeting pages to avoid duplication */}
-          {!/^\/(meetings|meeting-lobby|meeting-room)/.test(location.pathname) && (
-            <ActiveMeetingBanner />
-          )}
           <Suspense fallback={<ContentLoader />}>
             <Outlet />
           </Suspense>
