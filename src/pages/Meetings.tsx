@@ -33,6 +33,7 @@ import { auth } from "@/lib/auth";
 import { apiGet, apiPost } from "@/lib/api";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { usePresence } from "@/hooks/usePresence";
 
 interface MeetingHost {
   name: string;
@@ -455,8 +456,8 @@ export default function Meetings() {
   const [items, setItems] = useState<Meeting[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeRooms, setActiveRooms] = useState<ActiveRoom[]>([]);
   const [teams, setTeams] = useState<any[]>([]);
+  const { activeRooms } = usePresence();
 
   useEffect(() => {
     apiGet<any[]>("/teams")
@@ -495,14 +496,6 @@ export default function Meetings() {
       socket.off("meeting:updated");
       socket.off("meeting:deleted");
     };
-  }, []);
-
-  useEffect(() => {
-    const socket = getSocket();
-    socket.emit("rooms:get-active");
-    const onActiveRooms = (rooms: ActiveRoom[]) => setActiveRooms(rooms || []);
-    socket.on("rooms:active", onActiveRooms);
-    return () => { socket.off("rooms:active", onActiveRooms); };
   }, []);
 
   const activeRoomIds = useMemo(() => new Set(activeRooms.map((r) => r.roomId)), [activeRooms]);

@@ -23,18 +23,20 @@ export function usePresence() {
   useEffect(() => {
     const socket = getSocket();
 
-    // Register this user as online
-    if (currentUser) {
-      socket.emit("presence:online", {
-        userId: currentUser.id,
-        name: currentUser.name,
-        avatar: currentUser.avatar,
-      });
-    }
+    const requestData = () => {
+      // Register this user as online
+      if (currentUser) {
+        socket.emit("presence:online", {
+          userId: currentUser.id,
+          name: currentUser.name,
+          avatar: currentUser.avatar,
+        });
+      }
 
-    // Request current presence and active rooms
-    socket.emit("presence:get");
-    socket.emit("rooms:get-active");
+      // Request current presence and active rooms
+      socket.emit("presence:get");
+      socket.emit("rooms:get-active");
+    };
 
     // Listen for presence updates
     const handlePresenceUpdate = (users: OnlineUser[]) => {
@@ -49,9 +51,23 @@ export function usePresence() {
     socket.on("presence:update", handlePresenceUpdate);
     socket.on("rooms:active", handleActiveRooms);
 
+    // Request data immediately if already connected, otherwise wait for connect
+    if (socket.connected) {
+      requestData();
+    }
+    socket.on("connect", requestData);
+
+    // Also re-request on reconnection (socket.io fires 'connect' on reconnect too,
+    // but adding explicit reconnect handler for safety)
+    socket.io.on("reconnect", () => {
+      requestData();
+    });
+
     return () => {
       socket.off("presence:update", handlePresenceUpdate);
       socket.off("rooms:active", handleActiveRooms);
+      socket.off("connect", requestData);
+      socket.io.off("reconnect");
     };
   }, [currentUser?.id]);
 
