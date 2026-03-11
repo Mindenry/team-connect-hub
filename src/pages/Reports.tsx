@@ -11,18 +11,22 @@ import {
   Activity,
   BarChart3,
   Download,
-  BarChart2,
+  FileText,
   MessageSquare,
+  ChevronDown,
+  ArrowUpRight,
+  AlertTriangle,
+  Trophy,
+  Target,
+  Zap,
 } from "lucide-react";
-import * as XLSX from "xlsx";
-import html2canvas from "html2canvas";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/components/ui/use-toast";
 import { apiGet } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -35,9 +39,13 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-type DateRangeKey = "week" | "month" | "quarter" | "year";
+import * as XLSX from "xlsx";
+import html2canvas from "html2canvas";
 
-type ExportFormat = "csv" | "xlsx" | "json" | "pdf";
+// ─── Types ───────────────────────────────────────────────────────────────────
+
+type DateRangeKey = "week" | "month" | "quarter" | "year";
+type ExportFormat = "csv" | "json" | "xlsx" | "pdf";
 
 interface PersonalReportData {
   tasksCompleted?: number;
@@ -59,8 +67,8 @@ interface TeamProductivityReport {
     members: number;
     tasks: {
       total: number;
-      byStatus: Record<string, number>;
-      byPriority: Record<string, number>;
+      byStatus?: Record<string, number>;
+      byPriority?: Record<string, number>;
       completed: number;
       inProgress: number;
     };
@@ -69,8 +77,6 @@ interface TeamProductivityReport {
       completed: number;
       scheduled: number;
       totalDuration: number;
-      withRecordings: number;
-      withMinutes: number;
     };
   };
   members: {
@@ -90,7 +96,6 @@ interface MeetingReport {
     avgDuration: number;
   };
   meetingsByTeam: Record<string, number>;
-  hostStats: Record<string, number>;
   meetings: {
     id: string;
     title: string;
@@ -110,10 +115,8 @@ interface TaskReport {
     completedTasks: number;
     inProgressTasks: number;
   };
-  tasksByStatus: Record<string, number>;
-  tasksByPriority: Record<string, number>;
-  tasksByAssignee: Record<string, number>;
-  tasksByTeam: Record<string, number>;
+  tasksByStatus?: Record<string, number>;
+  tasksByPriority?: Record<string, number>;
   overdueTasks: {
     id: string;
     title: string;
@@ -146,20 +149,12 @@ interface PerformanceDashboard {
     completedTasks: number;
     completionRate: number;
   }[];
-  meetingAttendanceRates: {
+  meetingAttendanceRates?: {
     userId: string;
     userName: string;
     totalMeetings: number;
     attendedMeetings: number;
     attendanceRate: number;
-  }[];
-  chatResponseTimes: {
-    userId: string;
-    userName: string;
-    totalMessages: number;
-    respondedMessages: number;
-    avgResponseTimeMinutes: number | null;
-    avgResponseTimeHours: number | null;
   }[];
   collaborationActivity: {
     userId: string;
@@ -171,191 +166,126 @@ interface PerformanceDashboard {
   }[];
 }
 
-interface TeamOption {
-  id: string;
-  name: string;
-}
+interface TeamOption { id: string; name: string; }
+interface UserOption { id: string; name: string; }
 
-interface UserOption {
-  id: string;
-  name: string;
-}
+type ReportTab = "overview" | "team" | "performance";
 
-type ReportTab = "overview" | "personal" | "team" | "meetings" | "tasks" | "performance";
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function getDateRangeLabel(range: DateRangeKey): string {
   switch (range) {
-    case "week":
-      return "สัปดาห์ที่ผ่านมา";
-    case "month":
-      return "เดือนที่ผ่านมา";
-    case "quarter":
-      return "ไตรมาสที่ผ่านมา";
-    case "year":
-      return "ปีที่ผ่านมา";
-    default:
-      return "";
+    case "week": return "สัปดาห์ที่ผ่านมา";
+    case "month": return "เดือนที่ผ่านมา";
+    case "quarter": return "ไตรมาสที่ผ่านมา";
+    case "year": return "ปีที่ผ่านมา";
   }
 }
 
 function getDateRange(range: DateRangeKey): { start: Date; end: Date } {
   const end = new Date();
   const start = new Date();
-
   switch (range) {
-    case "week":
-      start.setDate(start.getDate() - 7);
-      break;
-    case "month":
-      start.setMonth(start.getMonth() - 1);
-      break;
-    case "quarter":
-      start.setMonth(start.getMonth() - 3);
-      break;
-    case "year":
-      start.setFullYear(start.getFullYear() - 1);
-      break;
+    case "week": start.setDate(start.getDate() - 7); break;
+    case "month": start.setMonth(start.getMonth() - 1); break;
+    case "quarter": start.setMonth(start.getMonth() - 3); break;
+    case "year": start.setFullYear(start.getFullYear() - 1); break;
   }
-
   return { start, end };
-}
-
-function getProductivityColor(score: number) {
-  if (score >= 80) return "text-green-600";
-  if (score >= 60) return "text-blue-600";
-  if (score >= 40) return "text-orange-600";
-  return "text-red-600";
-}
-
-function getProductivityGradient(score: number) {
-  if (score >= 80) return "from-green-500 to-emerald-600";
-  if (score >= 60) return "from-blue-500 to-cyan-600";
-  if (score >= 40) return "from-orange-500 to-amber-600";
-  return "from-red-500 to-rose-600";
 }
 
 function toIsoDate(date: Date): string {
   return date.toISOString();
 }
 
-function formatDateForPdf(date: Date): string {
-  // ใช้รูปแบบ YYYY-MM-DD ให้คงที่และไม่ผูกกับ locale (เลี่ยงปี พ.ศ.)
-  return date.toISOString().slice(0, 10);
+function getProductivityColor(score: number) {
+  if (score >= 80) return "text-emerald-500";
+  if (score >= 50) return "text-blue-500";
+  if (score >= 30) return "text-amber-500";
+  return "text-red-500";
 }
 
-let thaiFontLoaded = false;
-
-async function ensureThaiFont(doc: any) {
-  if (thaiFontLoaded) {
-    doc.setFont("THSarabunNew");
-    return;
-  }
-
-  try {
-    const res = await fetch("/font/THSarabunNew.ttf");
-    if (!res.ok) {
-      console.error("Failed to load THSarabunNew.ttf for PDF", res.status);
-      return;
-    }
-    const buffer = await res.arrayBuffer();
-    const binary = String.fromCharCode(...new Uint8Array(buffer));
-    const base64 = btoa(binary);
-
-    (doc as any).addFileToVFS("THSarabunNew.ttf", base64);
-    (doc as any).addFont("THSarabunNew.ttf", "THSarabunNew", "normal");
-    doc.setFont("THSarabunNew");
-    thaiFontLoaded = true;
-  } catch (err) {
-    console.error("Error loading THSarabunNew font", err);
-  }
+function getProductivityGradient(score: number) {
+  if (score >= 80) return "from-emerald-500 to-teal-500";
+  if (score >= 50) return "from-blue-500 to-cyan-500";
+  if (score >= 30) return "from-amber-500 to-yellow-500";
+  return "from-red-500 to-rose-500";
 }
+
+const priorityColor: Record<string, string> = {
+  urgent: "bg-red-500",
+  high: "bg-orange-500",
+  medium: "bg-blue-500",
+  low: "bg-slate-400",
+};
+
+const priorityLabel: Record<string, string> = {
+  urgent: "เร่งด่วน",
+  high: "สูง",
+  medium: "ปานกลาง",
+  low: "ต่ำ",
+};
+
+const statusColor: Record<string, string> = {
+  done: "bg-emerald-500",
+  in_progress: "bg-blue-500",
+  review: "bg-amber-500",
+  todo: "bg-slate-400",
+};
+
+const statusLabel: Record<string, string> = {
+  done: "เสร็จแล้ว",
+  in_progress: "กำลังทำ",
+  review: "รอรีวิว",
+  todo: "ยังไม่เริ่ม",
+};
+
+// ─── Export Functions ────────────────────────────────────────────────────────
 
 function downloadCsv(filename: string, rows: Record<string, any>[]) {
-  if (!rows || rows.length === 0) {
-    return;
-  }
+  if (!rows || rows.length === 0) return;
   const headers = Array.from(
-    rows.reduce<Set<string>>((set, row) => {
-      Object.keys(row).forEach((key) => set.add(key));
-      return set;
-    }, new Set<string>())
+    rows.reduce<Set<string>>((set, row) => { Object.keys(row).forEach((key) => set.add(key)); return set; }, new Set<string>())
   );
-
   const escape = (value: any) => {
     if (value === null || value === undefined) return "";
     const str = String(value);
-    if (str.includes('"') || str.includes(",") || str.includes("\n")) {
-      return `"${str.replace(/"/g, '""')}"`;
-    }
+    if (str.includes('"') || str.includes(",") || str.includes("\n")) return `"${str.replace(/"/g, '""')}"`;
     return str;
   };
-
-  const csv = [
-    headers.join(","),
-    ...rows.map((row) => headers.map((h) => escape(row[h])).join(",")),
-  ].join("\n");
-
+  const csv = [headers.join(","), ...rows.map((row) => headers.map((h) => escape(row[h])).join(","))].join("\n");
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.setAttribute("download", filename);
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
+  const link = document.createElement("a"); link.href = url; link.setAttribute("download", filename);
+  document.body.appendChild(link); link.click(); document.body.removeChild(link); URL.revokeObjectURL(url);
 }
 
 function downloadJson(filename: string, rows: Record<string, any>[]) {
-  if (!rows || rows.length === 0) {
-    return;
-  }
+  if (!rows || rows.length === 0) return;
   const json = JSON.stringify(rows, null, 2);
   const blob = new Blob([json], { type: "application/json;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.setAttribute("download", filename);
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
+  const link = document.createElement("a"); link.href = url; link.setAttribute("download", filename);
+  document.body.appendChild(link); link.click(); document.body.removeChild(link); URL.revokeObjectURL(url);
 }
 
 function downloadXlsx(filename: string, rows: Record<string, any>[]) {
-  if (!rows || rows.length === 0) {
-    return;
-  }
+  if (!rows || rows.length === 0) return;
   const worksheet = XLSX.utils.json_to_sheet(rows);
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, worksheet, "Report");
   const wbout = XLSX.write(workbook, { bookType: "xlsx", type: "array" });
-  const blob = new Blob([wbout], {
-    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  });
+  const blob = new Blob([wbout], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
   const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.setAttribute("download", filename);
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
+  const link = document.createElement("a"); link.href = url; link.setAttribute("download", filename);
+  document.body.appendChild(link); link.click(); document.body.removeChild(link); URL.revokeObjectURL(url);
 }
 
 async function downloadPdfFromDom(filename: string, element: HTMLElement | null) {
   if (!element) return;
   const { default: jsPDF } = await import("jspdf");
-  const doc = new jsPDF({
-    orientation: "landscape",
-    unit: "pt",
-    format: "a4",
-  });
-
-  const canvas = await html2canvas(element, {
-    scale: 2,
-    useCORS: true,
-  });
+  const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
+  const canvas = await html2canvas(element, { scale: 2, useCORS: true });
   const imgData = canvas.toDataURL("image/png");
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
@@ -364,10 +294,11 @@ async function downloadPdfFromDom(filename: string, element: HTMLElement | null)
   const imgHeight = canvas.height * ratio;
   const x = (pageWidth - imgWidth) / 2;
   const y = (pageHeight - imgHeight) / 2;
-
   doc.addImage(imgData, "PNG", x, y, imgWidth, imgHeight);
   doc.save(filename);
 }
+
+// ─── Main Component ──────────────────────────────────────────────────────────
 
 export default function Reports() {
   const { toast } = useToast();
@@ -377,9 +308,7 @@ export default function Reports() {
   const [dateRange, setDateRange] = useState<DateRangeKey>("month");
 
   const [teams, setTeams] = useState<TeamOption[]>([]);
-  const [users, setUsers] = useState<UserOption[]>([]);
   const [selectedTeamId, setSelectedTeamId] = useState<string | undefined>();
-  const [selectedUserId, setSelectedUserId] = useState<string | undefined>();
 
   const [loading, setLoading] = useState(true);
   const [loadingSecondary, setLoadingSecondary] = useState(false);
@@ -394,360 +323,145 @@ export default function Reports() {
 
   const isManagerOrAbove =
     currentUser?.role === "manager" || currentUser?.role === "admin" || currentUser?.role === "org_owner";
+  const currentRangeLabel = getDateRangeLabel(dateRange);
+  const isLoadingAny = loading || loadingSecondary;
 
-  // Load base data (teams, users, personal report)
+  const selectedTeam = useMemo(
+    () => teams.find((t) => t.id === selectedTeamId) || null,
+    [teams, selectedTeamId]
+  );
+
+  // Load base data
   useEffect(() => {
     const loadBase = async () => {
       try {
         setLoading(true);
         const [{ start, end }] = [getDateRange(dateRange)];
 
-        const [teamsRes, usersRes, personalRes] = await Promise.all([
+        const [teamsRes, personalRes] = await Promise.all([
           apiGet<any[]>("/teams").catch(() => []),
-          isManagerOrAbove ? apiGet<any[]>("/users").catch(() => []) : Promise.resolve([]),
           apiGet<PersonalReportData>(`/reports?range=${dateRange}`).catch(() => ({} as PersonalReportData)),
         ]);
 
-        setTeams(
-          (teamsRes || []).map((t: any) => ({
-            id: t.id,
-            name: t.name,
-          }))
-        );
-
-        setUsers(
-          (usersRes || []).map((u: any) => ({
-            id: u.id,
-            name: u.name || u.email,
-          }))
-        );
-
+        setTeams((teamsRes || []).map((t: any) => ({ id: t.id, name: t.name })));
         setPersonalReport(personalRes && Object.keys(personalRes).length > 0 ? personalRes : null);
 
-        // Default team filter: first team (for manager/admin), otherwise undefined
         if (!selectedTeamId && (teamsRes || []).length > 0) {
           setSelectedTeamId(teamsRes[0].id);
         }
 
-        // Preload some reports for Overview
+        // Preload for overview
         await Promise.all([
           apiGet<MeetingReport>(
-            `/reports/meetings?startDate=${encodeURIComponent(toIsoDate(start))}&endDate=${encodeURIComponent(
-              toIsoDate(end)
-            )}`
-          )
-            .then((data) => setMeetingReport(data))
-            .catch(() => setMeetingReport(null)),
+            `/reports/meetings?startDate=${encodeURIComponent(toIsoDate(start))}&endDate=${encodeURIComponent(toIsoDate(end))}`
+          ).then((data) => setMeetingReport(data)).catch(() => setMeetingReport(null)),
           apiGet<PerformanceDashboard>(
-            `/reports/performance?startDate=${encodeURIComponent(toIsoDate(start))}&endDate=${encodeURIComponent(
-              toIsoDate(end)
-            )}`
-          )
-            .then((data) => setPerformance(data))
-            .catch(() => setPerformance(null)),
+            `/reports/performance?startDate=${encodeURIComponent(toIsoDate(start))}&endDate=${encodeURIComponent(toIsoDate(end))}`
+          ).then((data) => setPerformance(data)).catch(() => setPerformance(null)),
+          apiGet<TaskReport>(
+            `/reports/tasks?startDate=${encodeURIComponent(toIsoDate(start))}&endDate=${encodeURIComponent(toIsoDate(end))}`
+          ).then((data) => setTaskReport(data)).catch(() => setTaskReport(null)),
         ]);
       } catch (error: any) {
         console.error("Failed to load reports:", error);
-        toast({
-          title: "เกิดข้อผิดพลาด",
-          description: error.message || "ไม่สามารถโหลดรายงานได้",
-          variant: "destructive",
-        });
+        toast({ title: "เกิดข้อผิดพลาด", description: error.message || "ไม่สามารถโหลดรายงานได้", variant: "destructive" });
       } finally {
         setLoading(false);
       }
     };
-
     loadBase();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dateRange]);
 
-  // Load tab-specific data when activeTab or filters change
+  // Load tab-specific
   useEffect(() => {
     const loadTabData = async () => {
       const { start, end } = getDateRange(dateRange);
       const startIso = encodeURIComponent(toIsoDate(start));
       const endIso = encodeURIComponent(toIsoDate(end));
-
       try {
         setLoadingSecondary(true);
-
         if (activeTab === "team" && selectedTeamId) {
-          const data = await apiGet<TeamProductivityReport>(
-            `/reports/team-productivity?teamId=${encodeURIComponent(selectedTeamId)}&startDate=${startIso}&endDate=${endIso}`
-          );
-          setTeamReport(data);
-        }
-
-        if (activeTab === "meetings") {
-          const data = await apiGet<MeetingReport>(
-            `/reports/meetings?startDate=${startIso}&endDate=${endIso}${
-              selectedTeamId ? `&teamId=${encodeURIComponent(selectedTeamId)}` : ""
-            }`
-          );
-          setMeetingReport(data);
-        }
-
-        if (activeTab === "tasks") {
-          const [tasksRes, workloadRes] = await Promise.all([
-            apiGet<TaskReport>(
-              `/reports/tasks?startDate=${startIso}&endDate=${endIso}${
-                selectedTeamId ? `&teamId=${encodeURIComponent(selectedTeamId)}` : ""
-              }`
-            ).catch(() => null as any),
-            selectedTeamId
-              ? apiGet<TeamWorkloadReport>(
-                  `/reports/teams/${encodeURIComponent(
-                    selectedTeamId
-                  )}/workload?startDate=${startIso}&endDate=${endIso}`
-                ).catch(() => null as any)
-              : Promise.resolve(null as any),
+          const [teamRes, workloadRes, tasksRes] = await Promise.all([
+            apiGet<TeamProductivityReport>(`/reports/team-productivity?teamId=${encodeURIComponent(selectedTeamId)}&startDate=${startIso}&endDate=${endIso}`).catch(() => null),
+            apiGet<TeamWorkloadReport>(`/reports/teams/${encodeURIComponent(selectedTeamId)}/workload?startDate=${startIso}&endDate=${endIso}`).catch(() => null),
+            apiGet<TaskReport>(`/reports/tasks?startDate=${startIso}&endDate=${endIso}&teamId=${encodeURIComponent(selectedTeamId)}`).catch(() => null),
           ]);
-          setTaskReport(tasksRes);
+          setTeamReport(teamRes);
           setTeamWorkload(workloadRes);
+          setTaskReport(tasksRes);
         }
-
         if (activeTab === "performance") {
-          const data = await apiGet<PerformanceDashboard>(
-            `/reports/performance?startDate=${startIso}&endDate=${endIso}${
-              selectedTeamId ? `&teamId=${encodeURIComponent(selectedTeamId)}` : ""
-            }`
-          );
-          setPerformance(data);
+          const perfRes = await apiGet<PerformanceDashboard>(
+            `/reports/performance?startDate=${startIso}&endDate=${endIso}${selectedTeamId ? `&teamId=${encodeURIComponent(selectedTeamId)}` : ""}`
+          ).catch(() => null);
+          setPerformance(perfRes);
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error("Failed to load tab data:", error);
       } finally {
         setLoadingSecondary(false);
       }
     };
-
-    if (!loading) {
-      loadTabData();
-    }
+    loadTabData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, dateRange, selectedTeamId]);
+  }, [activeTab, selectedTeamId, dateRange]);
 
-  const currentRangeLabel = getDateRangeLabel(dateRange);
-  const { start: pdfStart, end: pdfEnd } = getDateRange(dateRange);
-  const pdfPeriodLabel = `${formatDateForPdf(pdfStart)} – ${formatDateForPdf(pdfEnd)}`;
+  // Export
+  const handleExport = (format: ExportFormat) => {
+    let rows: Record<string, any>[] = [];
+    let filename = "report";
 
-  const performanceSummary = useMemo(() => {
-    if (!performance) return null;
-    const totalUsers = performance.taskCompletionRates.length;
-    const avgCompletionRate =
-      totalUsers > 0
-        ? performance.taskCompletionRates.reduce((sum, r) => sum + r.completionRate, 0) / totalUsers
-        : 0;
-    const totalHours = performance.collaborationActivity.reduce((sum, w) => sum + w.totalInteractions, 0); // Using total interactions instead of hours for metric
-    const avgOutputPerHour =
-      performance.collaborationActivity.length > 0
-        ? performance.collaborationActivity.reduce((sum, w) => sum + w.completedTasks, 0) /
-          performance.collaborationActivity.length
-        : 0;
+    if (activeTab === "overview" && personalReport) {
+      rows = [{ งานที่เสร็จ: personalReport.tasksCompleted, การประชุม: personalReport.meetingsAttended, ข้อความ: personalReport.messagesSent, คะแนน: personalReport.productivityScore }];
+      filename = "overview_report";
+    } else if (activeTab === "team" && teamWorkload) {
+      rows = teamWorkload.workload.map((w) => ({ ชื่อ: w.userName, งานทั้งหมด: w.totalTasks, เสร็จ: w.completed, กำลังทำ: w.inProgress, ค้าง: w.overdue }));
+      filename = "team_report";
+    } else if (activeTab === "performance" && performance) {
+      rows = performance.taskCompletionRates.map((r) => ({ ชื่อ: r.userName, งานทั้งหมด: r.totalTasks, เสร็จ: r.completedTasks, "Completion_%": r.completionRate }));
+      filename = "performance_report";
+    }
 
-    return {
-      totalUsers,
-      avgCompletionRate,
-      totalHours,
-      avgOutputPerHour,
-    };
-  }, [performance]);
+    if (rows.length === 0) {
+      toast({ title: "ไม่มีข้อมูล", description: "ไม่มีข้อมูลให้ดาวน์โหลดสำหรับมุมมองนี้" });
+      return;
+    }
 
-  // แสดง loading เต็มหน้าจอเฉพาะตอนโหลดครั้งแรกเท่านั้น
-  // เวลาเปลี่ยนแท็บให้ใช้ loadingSecondary แบบเบาๆ (ไม่ดัน layout กระโดด)
-  const isLoadingAny = loading;
-
-  const handleExport = async (format: ExportFormat) => {
-    const { start, end } = getDateRange(dateRange);
-    const periodStart = toIsoDate(start);
-    const periodEnd = toIsoDate(end);
-    const periodLabelForPdf = `${formatDateForPdf(start)} – ${formatDateForPdf(end)}`;
-    const baseMeta = {
-      periodStart,
-      periodEnd,
-      periodLabel: currentRangeLabel,
-      rangeKey: dateRange,
-      team: selectedTeam?.name ?? "",
-      tab: activeTab,
-    };
-
-    const timestamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
-    const suffix = `${dateRange}-${timestamp}`;
-
-    try {
-      let rows: Record<string, any>[] | null = null;
-      let filename = "";
-
-      if (activeTab === "personal" && personalReport) {
-        rows = [];
-        rows.push({
-          ...baseMeta,
-          type: "summary",
-          tasksCompleted: personalReport.tasksCompleted ?? 0,
-          meetingsAttended: personalReport.meetingsAttended ?? 0,
-          messagesSent: personalReport.messagesSent ?? 0,
-          productivityScore: personalReport.productivityScore ?? 0,
-        });
-        if (personalReport.teamMetrics && personalReport.teamMetrics.length > 0) {
-          personalReport.teamMetrics.forEach((t) =>
-            rows!.push({
-              ...baseMeta,
-              type: "team",
-              teamName: t.teamName,
-              tasksCompleted: t.tasksCompleted ?? 0,
-              meetingsAttended: t.meetingsAttended ?? 0,
-              messagesSent: t.messagesSent ?? 0,
-            })
-          );
-        }
-        filename = `personal-report-${suffix}`;
-      } else if (activeTab === "team" && teamReport) {
-        rows = teamReport.members.map((m) => ({
-          ...baseMeta,
-          userId: m.user.id,
-          name: m.user.name,
-          email: m.user.email,
-          totalTasks: m.tasks.total,
-          completedTasks: m.tasks.completed,
-          inProgressTasks: m.tasks.inProgress,
-          messagesSent: m.messagesSent,
-          meetingsAttended: m.meetingsAttended,
-        }));
-        filename = `team-productivity-${suffix}`;
-      } else if (activeTab === "meetings" && meetingReport) {
-        rows = meetingReport.meetings.map((m) => ({
-          ...baseMeta,
-          id: m.id,
-          title: m.title,
-          team: m.team ?? "",
-          host: m.host,
-          startTime: m.startTime,
-          endTime: m.endTime ?? "",
-          durationMinutes: m.duration,
-          participants: m.participants,
-        }));
-        filename = `meetings-${suffix}`;
-      } else if (activeTab === "tasks") {
-        if (teamWorkload && teamWorkload.workload.length > 0) {
-          rows = teamWorkload.workload.map((w) => ({
-            ...baseMeta,
-            userId: w.userId,
-            userName: w.userName,
-            totalTasks: w.totalTasks,
-            completed: w.completed,
-            inProgress: w.inProgress,
-            todo: w.todo,
-            overdue: w.overdue,
-          }));
-          filename = `team-workload-${suffix}`;
-        } else if (taskReport && taskReport.overdueTasks.length > 0) {
-          rows = taskReport.overdueTasks.map((t) => ({
-            ...baseMeta,
-            id: t.id,
-            title: t.title,
-            dueDate: t.dueDate ?? "",
-            assignee: t.assignee ?? "",
-            team: t.team ?? "",
-            priority: t.priority,
-          }));
-          filename = `tasks-overdue-${suffix}`;
-        }
-      } else if (activeTab === "performance" && performance) {
-        const completionByUser = new Map(
-          performance.taskCompletionRates.map((r) => [r.userId, r])
-        );
-        rows = performance.collaborationActivity.map((w) => {
-          const completion = completionByUser.get(w.userId);
-          return {
-            ...baseMeta,
-            userId: w.userId,
-            userName: w.userName,
-            completedTasks: completion?.completedTasks ?? w.completedTasks,
-            completionRate: completion?.completionRate ?? 0,
-            attendedMeetings: w.attendedMeetings,
-            messagesSent: w.messagesSent,
-            totalInteractions: w.totalInteractions,
-          };
-        });
-        filename = `performance-${suffix}`;
-      } else if (personalReport) {
-        // Overview or fallback: export basic personal+team metrics if available
-        rows = [
-          {
-            ...baseMeta,
-            type: "personal-summary",
-            tasksCompleted: personalReport.tasksCompleted ?? 0,
-            meetingsAttended: personalReport.meetingsAttended ?? 0,
-            messagesSent: personalReport.messagesSent ?? 0,
-            productivityScore: personalReport.productivityScore ?? 0,
-          },
-        ];
-        filename = `reports-overview-${suffix}`;
-      }
-
-      if (format === "pdf") {
-        await downloadPdfFromDom(`${filename}.pdf`, printRef.current);
-        return;
-      }
-
-      if (!rows || rows.length === 0) {
-        toast({
-          title: "ไม่มีข้อมูลให้ Export",
-          description: "ลองเปลี่ยนช่วงเวลา หรือเลือก team/user อื่น",
-        });
-        return;
-      }
-
-      if (format === "csv") {
-        downloadCsv(`${filename}.csv`, rows);
-      } else if (format === "xlsx") {
-        downloadXlsx(`${filename}.xlsx`, rows);
-      } else if (format === "json") {
-        downloadJson(`${filename}.json`, rows);
-      }
-    } catch (error: any) {
-      console.error("Export failed:", error);
-      toast({
-        title: "Export ไม่สำเร็จ",
-        description: error.message || "ไม่สามารถสร้างไฟล์รายงานได้",
-        variant: "destructive",
-      });
+    const fname = `${filename}_${new Date().toISOString().slice(0, 10)}`;
+    switch (format) {
+      case "csv": downloadCsv(`${fname}.csv`, rows); break;
+      case "json": downloadJson(`${fname}.json`, rows); break;
+      case "xlsx": downloadXlsx(`${fname}.xlsx`, rows); break;
+      case "pdf": downloadPdfFromDom(`${fname}.pdf`, printRef.current); break;
     }
   };
 
-  const selectedTeam = useMemo(
-    () => teams.find((t) => t.id === selectedTeamId),
-    [teams, selectedTeamId]
-  );
+  // ─── Render ──────────────────────────────────────────────────────────────
 
   return (
     <TooltipProvider>
       <div className="flex flex-col h-screen bg-gradient-to-br from-background via-background to-muted/20">
         {/* Header */}
-        <div className="border-b border-border/50 bg-background/95 backdrop-blur-xl supports-[backdrop-filter]:bg-background/80">
-          <div className="max-w-[1920px] mx-auto px-6 lg:px-8">
-            <div className="h-20 flex items-center justify-between gap-6">
-              <div className="flex items-center gap-4 min-w-0 flex-1">
-                <div className="relative">
-                  <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-primary/20 via-primary/10 to-primary/5 flex items-center justify-center shadow-lg shadow-primary/5 ring-1 ring-primary/10">
-                    <FileBarChart className="w-6 h-6 text-primary" />
-                  </div>
-                  <div className="absolute -top-1 -right-1 w-4 h-4 bg-primary rounded-full border-2 border-background animate-pulse-soft" />
+        <div className="flex-none border-b border-border/50 bg-card/50 backdrop-blur-sm">
+          <div className="px-6 py-5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center shadow-lg shadow-blue-500/20">
+                  <BarChart3 className="w-5 h-5 text-white" />
                 </div>
-                <div className="min-w-0 flex-1">
-                  <h1 className="text-xl font-bold text-foreground tracking-tight">Reports & Analytics</h1>
-                  <p className="text-xs text-muted-foreground mt-0.5 truncate">
-                    รายงานผลงาน · วิเคราะห์ประสิทธิภาพ · สถิติทีม · ข้อมูลเชิงลึก
+                <div>
+                  <h1 className="text-xl font-bold text-foreground">Reports & Analytics</h1>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    รายงานผลงาน · วิเคราะห์ประสิทธิภาพ · สถิติทีม
                   </p>
                 </div>
               </div>
-
-              {/* Global date range */}
               <div className="flex items-center gap-3">
-                <Select value={dateRange} onValueChange={(value) => setDateRange(value as DateRangeKey)}>
-                  <SelectTrigger className="w-[180px] h-9 border-border/50 bg-background/50 hover:bg-background text-xs">
-                    <SelectValue placeholder="เลือกช่วงเวลา" />
+                {/* Date Range Filter */}
+                <Select value={dateRange} onValueChange={(v) => setDateRange(v as DateRangeKey)}>
+                  <SelectTrigger className="w-[160px] h-9 text-xs">
+                    <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="week">สัปดาห์ที่ผ่านมา</SelectItem>
@@ -756,894 +470,553 @@ export default function Reports() {
                     <SelectItem value="year">ปีที่ผ่านมา</SelectItem>
                   </SelectContent>
                 </Select>
+
+                {/* Export */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="default" size="sm" className="h-9 gap-2 bg-gradient-to-r from-red-500 to-rose-500 hover:from-red-600 hover:to-rose-600 text-white shadow-lg shadow-red-500/20">
+                      <Download className="w-3.5 h-3.5" />
+                      <span>Export</span>
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuLabel className="text-xs">ดาวน์โหลดรายงาน</DropdownMenuLabel>
+                    <DropdownMenuItem className="text-xs" onClick={() => handleExport("csv")} disabled={isLoadingAny}>CSV (.csv)</DropdownMenuItem>
+                    <DropdownMenuItem className="text-xs" onClick={() => handleExport("xlsx")} disabled={isLoadingAny}>Excel (.xlsx)</DropdownMenuItem>
+                    <DropdownMenuItem className="text-xs" onClick={() => handleExport("json")} disabled={isLoadingAny}>JSON (.json)</DropdownMenuItem>
+                    <DropdownMenuItem className="text-xs" onClick={() => handleExport("pdf")} disabled={isLoadingAny}>PDF (.pdf)</DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             </div>
           </div>
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-hidden flex flex-col">
-          {/* Top Sticky Tabs */}
-          <div className="bg-background border-b border-border/50 sticky top-0 z-10 px-6 lg:px-8 py-3 w-full overflow-x-auto hide-scrollbar">
-            <Tabs value={activeTab} onValueChange={(val) => setActiveTab(val as ReportTab)} className="w-full">
-              <TabsList className="bg-muted/60 border border-border/60 h-10 inline-flex min-w-max justify-start">
-                <TabsTrigger value="overview" className="text-[13px] px-4">
-                  ภาพรวม
+        <div className="flex-1 overflow-y-auto">
+          <div className="px-6 py-4 space-y-4">
+            {/* Tabs */}
+            <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as ReportTab)}>
+              <TabsList className="bg-muted/50 h-10">
+                <TabsTrigger value="overview" className="text-xs gap-1.5 px-4">
+                  <BarChart3 className="w-3.5 h-3.5" /> ภาพรวม
                 </TabsTrigger>
-                <TabsTrigger value="personal" className="text-[13px] px-4">
-                  รายบุคคล
+                <TabsTrigger value="team" className="text-xs gap-1.5 px-4">
+                  <Users className="w-3.5 h-3.5" /> ทีม & งาน
                 </TabsTrigger>
-                <TabsTrigger value="team" className="text-[13px] px-4">
-                  ทีม
-                </TabsTrigger>
-                <TabsTrigger value="meetings" className="text-[13px] px-4">
-                  Meetings
-                </TabsTrigger>
-                <TabsTrigger value="tasks" className="text-[13px] px-4">
-                  Tasks & Workload
-                </TabsTrigger>
-                <TabsTrigger value="performance" className="text-[13px] px-4">
-                  Performance
+                <TabsTrigger value="performance" className="text-xs gap-1.5 px-4">
+                  <TrendingUp className="w-3.5 h-3.5" /> ประสิทธิภาพ
                 </TabsTrigger>
               </TabsList>
-            </Tabs>
-          </div>
 
-          {/* Main Scrollable Content */}
-          <div
-            className="max-w-[1920px] w-full mx-auto px-6 lg:px-8 py-4 h-full flex flex-col overflow-y-auto"
-            style={{ scrollbarGutter: "stable" }}
-          >
-            {/* Filter and Action Bar */}
-            <div className="mb-4 flex flex-col gap-3 bg-card/40 border border-border/50 rounded-xl p-3">
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 w-full">
-                {/* Dynamic Filters (Left Side of Filter Bar) */}
-                <div className="flex flex-wrap items-center gap-2 text-xs">
-                  {isManagerOrAbove &&
-                    (activeTab === "team" ||
-                      activeTab === "meetings" ||
-                      activeTab === "tasks" ||
-                      activeTab === "performance") && (
-                    <div className="flex items-center gap-1.5 bg-background/50 rounded-md p-1 border border-border/50">
-                      <span className="text-muted-foreground/80 px-2 font-medium">มุมมองทีม:</span>
-                      <Select
-                        value={selectedTeamId ?? "__all__"}
-                        onValueChange={(val) =>
-                          setSelectedTeamId(val === "__all__" ? undefined : val)
-                        }
-                      >
-                        <SelectTrigger className="w-[180px] h-8 text-xs border-0 bg-transparent shadow-none focus:ring-0">
-                          <SelectValue placeholder="ทุกทีม" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="__all__">ทุกทีม</SelectItem>
-                          {teams.map((team) => (
-                            <SelectItem key={team.id} value={team.id}>
-                              {team.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  )}
-
-                  {isManagerOrAbove && activeTab === "personal" && (
-                    <div className="flex items-center gap-1.5 bg-background/50 rounded-md p-1 border border-border/50">
-                      <span className="text-muted-foreground/80 px-2 font-medium">พนักงาน:</span>
-                      <Select
-                        value={selectedUserId || currentUser?.id}
-                        onValueChange={(val) => setSelectedUserId(val)}
-                      >
-                        <SelectTrigger className="w-[200px] h-8 text-xs border-0 bg-transparent shadow-none focus:ring-0">
-                          <SelectValue placeholder="เลือกพนักงาน" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {currentUser && (
-                            <SelectItem value={currentUser.id}>
-                              ฉันเอง ({currentUser.name || currentUser.email})
-                            </SelectItem>
-                          )}
-                          {users.map((u) => (
-                            <SelectItem key={u.id} value={u.id}>
-                              {u.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  )}
-
-                  <div className="hidden lg:block text-muted-foreground/60 text-[11px] ml-2">
-                    ข้อมูลคำนวณจากกิจกรรมจริงในระบบ
+              {isLoadingAny ? (
+                <div className="flex-1 flex items-center justify-center min-h-[400px]">
+                  <div className="flex flex-col items-center gap-4">
+                    <Loader2 className="w-10 h-10 text-primary animate-spin" />
+                    <span className="text-sm text-muted-foreground font-medium animate-pulse">กำลังจัดเตรียมรายงาน...</span>
                   </div>
                 </div>
-
-                {/* Export Actions (Right Side) */}
-                <div className="flex items-center gap-3 shrink-0 auto-ml shrink-0 ml-auto md:ml-0">
-                  <div className="hidden xl:flex text-[11px] text-muted-foreground items-center gap-2 pr-2 border-r border-border/50">
-                    <BarChart2 className="w-3.5 h-3.5" />
-                    <span>
-                      ช่วงเวลา: <span className="font-medium text-foreground">{currentRangeLabel}</span>
-                    </span>
-                    {selectedTeam && activeTab !== 'personal' && activeTab !== 'overview' && (
-                      <>
-                        <span className="text-muted-foreground/40">|</span>
-                        <span>
-                          ทีม: <span className="font-medium text-foreground">{selectedTeam.name}</span>
-                        </span>
-                      </>
-                    )}
-                  </div>
-                  <Tooltip>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <TooltipTrigger asChild>
-                          <Button
-                            size="sm"
-                            className="h-9 gap-2 text-xs font-medium shadow-sm"
-                            disabled={isLoadingAny}
-                          >
-                            <Download className="w-4 h-4" />
-                            <span>Export</span>
-                          </Button>
-                        </TooltipTrigger>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuLabel className="text-[11px]">รูปแบบไฟล์</DropdownMenuLabel>
-                        <DropdownMenuItem
-                          className="text-xs"
-                          onClick={() => handleExport("csv")}
-                          disabled={isLoadingAny}
-                        >
-                          CSV (.csv)
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          className="text-xs"
-                          onClick={() => handleExport("xlsx")}
-                          disabled={isLoadingAny}
-                        >
-                          Excel (.xlsx)
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          className="text-xs"
-                          onClick={() => handleExport("json")}
-                          disabled={isLoadingAny}
-                        >
-                          JSON (.json)
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          className="text-xs"
-                          onClick={() => handleExport("pdf")}
-                          disabled={isLoadingAny}
-                        >
-                          PDF (.pdf)
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                    <TooltipContent>
-                      ดาวน์โหลดข้อมูลรายงานตามมุมมองปัจจุบัน เลือกรูปแบบไฟล์ได้
-                    </TooltipContent>
-                  </Tooltip>
-                </div>
-              </div>
-            </div>
-
-            {/* Main content per tab */}
-            {isLoadingAny ? (
-              <div className="flex-1 flex items-center justify-center min-h-[400px]">
-                <div className="flex flex-col items-center gap-4">
-                  <Loader2 className="w-10 h-10 text-primary animate-spin" />
-                  <span className="text-sm text-muted-foreground font-medium animate-pulse">กำลังจัดเตรียมรายงาน...</span>
-                </div>
-              </div>
-            ) : (
-              <Tabs value={activeTab} className="flex-1 flex flex-col min-h-0 w-full">
-                {/* Overview */}
-                <TabsContent value="overview" className="mt-0 flex-1 flex flex-col gap-4 w-full">
-                  {/* Reuse personal summary cards as high-level overview */}
-                  {personalReport ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                      <SummaryCard
-                        title="งานที่เสร็จแล้ว"
-                        icon={CheckSquare}
-                        iconColor="text-primary"
-                        bgColor="bg-primary/10"
-                        value={personalReport.tasksCompleted ?? 0}
-                        suffix="งาน"
-                      />
-                      <SummaryCard
-                        title="การประชุมที่เข้าร่วม"
-                        icon={Calendar}
-                        iconColor="text-blue-600"
-                        bgColor="bg-blue-500/10"
-                        value={personalReport.meetingsAttended ?? 0}
-                        suffix="การประชุม"
-                      />
-                      <SummaryCard
-                        title="ข้อความที่ส่ง"
-                        icon={MessageSquare}
-                        iconColor="text-orange-600"
-                        bgColor="bg-orange-500/10"
-                        value={personalReport.messagesSent ?? 0}
-                        suffix="ข้อความ"
-                      />
-                      <ProductivityCard score={personalReport.productivityScore ?? 0} />
-                    </div>
-                  ) : (
-                    <EmptyState message="ยังไม่มีข้อมูลภาพรวมสำหรับช่วงเวลานี้" />
-                  )}
-
-                  {/* Simple high-level blocks using meetingReport & performance if available */}
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                    <Card className="border-border/50 bg-card/70">
-                      <CardHeader className="flex flex-row items-center justify-between pb-3">
-                        <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                          <BarChart3 className="w-4 h-4 text-primary" />
-                          Meetings overview
-                        </CardTitle>
-                        <Badge variant="outline" className="text-[11px]">
-                          {currentRangeLabel}
-                        </Badge>
-                      </CardHeader>
-                      <CardContent className="text-xs space-y-2">
-                        {meetingReport ? (
-                          <>
-                            <div className="flex gap-4">
-                              <div>
-                                <div className="text-muted-foreground/80">จำนวนประชุม</div>
-                                <div className="text-lg font-semibold">
-                                  {meetingReport.summary.totalMeetings}
-                                </div>
-                              </div>
-                              <div>
-                                <div className="text-muted-foreground/80">ระยะเวลาเฉลี่ย</div>
-                                <div className="text-lg font-semibold">
-                                  {meetingReport.summary.avgDuration.toFixed(1)} นาที
-                                </div>
-                              </div>
-                            </div>
-                            <div className="mt-2">
-                              <div className="text-muted-foreground/80 mb-1">ประชุมตามทีม (Top 3)</div>
-                              <div className="space-y-1">
-                                {Object.entries(meetingReport.meetingsByTeam)
-                                  .sort((a, b) => (b[1] as number) - (a[1] as number))
-                                  .slice(0, 3)
-                                  .map(([team, count]) => (
-                                    <div key={team} className="flex justify-between text-[11px]">
-                                      <span className="truncate mr-2">{team}</span>
-                                      <span className="font-medium">{count}</span>
-                                    </div>
-                                  ))}
-                              </div>
-                            </div>
-                          </>
-                        ) : (
-                          <p className="text-muted-foreground text-xs">
-                            ยังไม่มีข้อมูลการประชุมสำหรับช่วงเวลานี้
-                          </p>
-                        )}
-                      </CardContent>
-                    </Card>
-
-                    <Card className="border-border/50 bg-card/70">
-                      <CardHeader className="flex flex-row items-center justify-between pb-3">
-                        <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                          <Activity className="w-4 h-4 text-primary" />
-                          Productivity snapshot
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent className="text-xs space-y-2">
-                        {performance ? (
-                          <>
-                            <div className="flex gap-4">
-                              <div>
-                                <div className="text-muted-foreground/80">ผู้ใช้งานที่ติดตาม</div>
-                                <div className="text-lg font-semibold">
-                                  {performance.taskCompletionRates.length}
-                                </div>
-                              </div>
-                              <div>
-                                <div className="text-muted-foreground/80">อัตราสำเร็จงานเฉลี่ย</div>
-                                <div className="text-lg font-semibold">
-                                  {(
-                                    performance.taskCompletionRates.reduce(
-                                      (sum, r) => sum + r.completionRate,
-                                      0
-                                    ) / (performance.taskCompletionRates.length || 1)
-                                  ).toFixed(1)}
-                                  %
-                                </div>
-                              </div>
-                            </div>
-                            <div className="mt-2">
-                              <div className="text-muted-foreground/80 mb-1">
-                                Top 3 ตามอัตราสำเร็จงาน
-                              </div>
-                              <div className="space-y-1">
-                                {performance.taskCompletionRates
-                                  .slice()
-                                  .sort((a, b) => b.completionRate - a.completionRate)
-                                  .slice(0, 3)
-                                  .map((r) => (
-                                    <div
-                                      key={r.userId}
-                                      className="flex justify-between text-[11px]"
-                                    >
-                                      <span className="truncate mr-2">{r.userName}</span>
-                                      <span className="font-medium">
-                                        {r.completionRate.toFixed(1)}%
-                                      </span>
-                                    </div>
-                                  ))}
-                              </div>
-                            </div>
-                          </>
-                        ) : (
-                          <p className="text-muted-foreground text-xs">
-                            ยังไม่มีข้อมูลประสิทธิภาพสำหรับช่วงเวลานี้
-                          </p>
-                        )}
-                      </CardContent>
-                    </Card>
-                  </div>
-                </TabsContent>
-
-                {/* Personal */}
-                <TabsContent value="personal" className="mt-0 flex-1 flex flex-col">
-                  {personalReport ? (
-                    <>
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-                        <SummaryCard
+              ) : (
+                <>
+                  {/* ─── Tab: ภาพรวม ──────────────────────────────────────────── */}
+                  <TabsContent value="overview" className="mt-4 space-y-4">
+                    {/* KPI Cards */}
+                    {personalReport && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                        <KpiCard
                           title="งานที่เสร็จแล้ว"
-                          icon={CheckSquare}
-                          iconColor="text-primary"
-                          bgColor="bg-primary/10"
                           value={personalReport.tasksCompleted ?? 0}
                           suffix="งาน"
+                          icon={CheckSquare}
+                          gradient="from-emerald-500 to-teal-500"
+                          shadowColor="shadow-emerald-500/20"
                         />
-                        <SummaryCard
+                        <KpiCard
                           title="การประชุมที่เข้าร่วม"
-                          icon={Calendar}
-                          iconColor="text-blue-600"
-                          bgColor="bg-blue-500/10"
                           value={personalReport.meetingsAttended ?? 0}
                           suffix="การประชุม"
+                          icon={Calendar}
+                          gradient="from-blue-500 to-cyan-500"
+                          shadowColor="shadow-blue-500/20"
                         />
-                        <SummaryCard
+                        <KpiCard
                           title="ข้อความที่ส่ง"
-                          icon={MessageSquare}
-                          iconColor="text-orange-600"
-                          bgColor="bg-orange-500/10"
                           value={personalReport.messagesSent ?? 0}
                           suffix="ข้อความ"
+                          icon={MessageSquare}
+                          gradient="from-violet-500 to-purple-500"
+                          shadowColor="shadow-violet-500/20"
                         />
-                        <ProductivityCard score={personalReport.productivityScore ?? 0} />
+                        <ProductivityScoreCard score={personalReport.productivityScore ?? 0} />
                       </div>
+                    )}
 
-                      {personalReport.teamMetrics && personalReport.teamMetrics.length > 0 && (
-                        <Card className="border-border/50 bg-card/70">
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                      {/* Task Status Breakdown */}
+                      {taskReport && (
+                        <Card className="border-border/50 bg-card/80 backdrop-blur-sm lg:col-span-1">
                           <CardHeader className="pb-3">
                             <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                              <Users className="w-4 h-4 text-primary" />
-                              สถิติทีมที่คุณอยู่
+                              <Target className="w-4 h-4 text-blue-500" />
+                              สถานะงานทั้งหมด
                             </CardTitle>
                           </CardHeader>
-                          <CardContent className="space-y-2 text-xs">
+                          <CardContent className="space-y-4">
+                            <div className="text-center">
+                              <div className="text-3xl font-bold text-foreground">{taskReport.summary.totalTasks}</div>
+                              <div className="text-xs text-muted-foreground">งานทั้งหมด</div>
+                            </div>
+                            <div className="space-y-2.5">
+                              {Object.entries(taskReport.tasksByStatus || {
+                                done: taskReport.summary.completedTasks,
+                                in_progress: taskReport.summary.inProgressTasks,
+                                todo: Math.max(0, taskReport.summary.totalTasks - taskReport.summary.completedTasks - taskReport.summary.inProgressTasks),
+                              }).map(([status, count]) => (
+                                <StatusBarRow
+                                  key={status}
+                                  label={statusLabel[status] || status}
+                                  count={count as number}
+                                  total={taskReport.summary.totalTasks}
+                                  color={statusColor[status] || "bg-slate-400"}
+                                />
+                              ))}
+                            </div>
+                          </CardContent>
+                        </Card>
+                      )}
+
+                      {/* Top Performers */}
+                      {performance && performance.taskCompletionRates.length > 0 && (
+                        <Card className="border-border/50 bg-card/80 backdrop-blur-sm lg:col-span-1">
+                          <CardHeader className="pb-3">
+                            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                              <Trophy className="w-4 h-4 text-amber-500" />
+                              Top Performers
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent className="space-y-3">
+                            {performance.taskCompletionRates
+                              .slice()
+                              .sort((a, b) => b.completionRate - a.completionRate)
+                              .slice(0, 5)
+                              .map((r, i) => (
+                                <div key={r.userId} className="flex items-center gap-3">
+                                  <div className={cn(
+                                    "w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white",
+                                    i === 0 ? "bg-amber-500" : i === 1 ? "bg-slate-400" : i === 2 ? "bg-orange-600" : "bg-muted-foreground/40"
+                                  )}>
+                                    {i + 1}
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="text-xs font-medium truncate">{r.userName}</div>
+                                    <div className="flex items-center gap-2 mt-1">
+                                      <Progress value={r.completionRate} className="h-1.5 flex-1" />
+                                      <span className="text-[10px] text-muted-foreground font-medium w-10 text-right">
+                                        {r.completionRate.toFixed(0)}%
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                          </CardContent>
+                        </Card>
+                      )}
+
+                      {/* Meeting Overview */}
+                      {meetingReport && (
+                        <Card className="border-border/50 bg-card/80 backdrop-blur-sm lg:col-span-1">
+                          <CardHeader className="pb-3">
+                            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                              <Calendar className="w-4 h-4 text-blue-500" />
+                              สรุปการประชุม
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent className="space-y-4">
+                            <div className="grid grid-cols-2 gap-3">
+                              <MiniStat label="จำนวนประชุม" value={meetingReport.summary.totalMeetings} />
+                              <MiniStat label="ระยะเวลาเฉลี่ย" value={`${meetingReport.summary.avgDuration.toFixed(0)} นาที`} />
+                              <MiniStat label="ผู้เข้าร่วมรวม" value={meetingReport.summary.totalParticipants} />
+                              <MiniStat label="ผู้เข้าร่วม/ห้อง" value={meetingReport.summary.avgParticipants.toFixed(1)} />
+                            </div>
+                            {Object.keys(meetingReport.meetingsByTeam).length > 0 && (
+                              <div>
+                                <div className="text-[10px] text-muted-foreground mb-2 font-medium uppercase tracking-wider">ประชุมตามทีม</div>
+                                <div className="space-y-1.5">
+                                  {Object.entries(meetingReport.meetingsByTeam)
+                                    .sort((a, b) => (b[1] as number) - (a[1] as number))
+                                    .slice(0, 4)
+                                    .map(([team, count]) => (
+                                      <div key={team} className="flex items-center justify-between text-xs">
+                                        <span className="text-muted-foreground truncate mr-2">{team}</span>
+                                        <Badge variant="secondary" className="text-[10px] h-5 px-2">{count as number}</Badge>
+                                      </div>
+                                    ))}
+                                </div>
+                              </div>
+                            )}
+                          </CardContent>
+                        </Card>
+                      )}
+                    </div>
+
+                    {/* Team Metrics */}
+                    {personalReport?.teamMetrics && personalReport.teamMetrics.length > 0 && (
+                      <Card className="border-border/50 bg-card/80 backdrop-blur-sm">
+                        <CardHeader className="pb-3">
+                          <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                            <Users className="w-4 h-4 text-primary" />
+                            สถิติทีมที่คุณอยู่
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                             {personalReport.teamMetrics.map((t) => (
-                              <div
-                                key={t.teamName}
-                                className="flex flex-wrap items-center justify-between gap-2 border-b border-border/40 pb-2 last:border-0 last:pb-0"
-                              >
-                                <div className="font-medium">{t.teamName}</div>
+                              <div key={t.teamName} className="p-3 rounded-xl bg-muted/30 border border-border/40">
+                                <div className="font-medium text-xs mb-2">{t.teamName}</div>
                                 <div className="flex gap-4 text-[11px] text-muted-foreground">
-                                  <span>งาน: {t.tasksCompleted ?? 0}</span>
-                                  <span>ประชุม: {t.meetingsAttended ?? 0}</span>
-                                  <span>แชท: {t.messagesSent ?? 0}</span>
+                                  <div className="flex items-center gap-1">
+                                    <CheckSquare className="w-3 h-3 text-emerald-500" />
+                                    <span>{t.tasksCompleted ?? 0} งาน</span>
+                                  </div>
+                                  <div className="flex items-center gap-1">
+                                    <Calendar className="w-3 h-3 text-blue-500" />
+                                    <span>{t.meetingsAttended ?? 0} ประชุม</span>
+                                  </div>
+                                  <div className="flex items-center gap-1">
+                                    <MessageSquare className="w-3 h-3 text-violet-500" />
+                                    <span>{t.messagesSent ?? 0} แชท</span>
+                                  </div>
                                 </div>
                               </div>
                             ))}
-                          </CardContent>
-                        </Card>
-                      )}
-                    </>
-                  ) : (
-                    <EmptyState message="ยังไม่มีข้อมูลสำหรับผู้ใช้ในช่วงเวลานี้" />
-                  )}
-                </TabsContent>
-
-                {/* Team */}
-                <TabsContent value="team" className="mt-0 flex-1 flex flex-col">
-                  {teamReport && selectedTeam ? (
-                    <div className="space-y-4">
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <SummaryCard
-                          title="จำนวนสมาชิกทีม"
-                          icon={Users}
-                          iconColor="text-primary"
-                          bgColor="bg-primary/10"
-                          value={teamReport.summary.members}
-                        />
-                        <SummaryCard
-                          title="งานทั้งหมด"
-                          icon={CheckSquare}
-                          iconColor="text-blue-600"
-                          bgColor="bg-blue-500/10"
-                          value={teamReport.summary.tasks.total}
-                        />
-                        <SummaryCard
-                          title="จำนวนประชุม"
-                          icon={Calendar}
-                          iconColor="text-emerald-600"
-                          bgColor="bg-emerald-500/10"
-                          value={teamReport.summary.meetings.total}
-                        />
-                      </div>
-
-                      <Card className="border-border/50 bg-card/70">
-                        <CardHeader className="pb-3 flex flex-row items-center justify-between">
-                          <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                            <BarChart3 className="w-4 h-4 text-primary" />
-                            ภาระงานและผลงานรายคนในทีม {selectedTeam.name}
-                          </CardTitle>
-                        </CardHeader>
-                        <CardContent className="text-xs overflow-x-auto">
-                          <table className="w-full border-collapse text-[11px]">
-                            <thead className="bg-muted/60">
-                              <tr>
-                                <th className="text-left px-2 py-1 font-medium">ชื่อ</th>
-                                <th className="text-right px-2 py-1 font-medium">งานทั้งหมด</th>
-                                <th className="text-right px-2 py-1 font-medium">เสร็จแล้ว</th>
-                                <th className="text-right px-2 py-1 font-medium">กำลังทำ</th>
-                                <th className="text-right px-2 py-1 font-medium">ข้อความที่ส่ง</th>
-                                <th className="text-right px-2 py-1 font-medium">จำนวนประชุมที่เข้าร่วม</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {teamReport.members.map((m) => (
-                                <tr key={m.user.id} className="border-t border-border/40">
-                                  <td className="px-2 py-1">{m.user.name}</td>
-                                  <td className="px-2 py-1 text-right">{m.tasks.total}</td>
-                                  <td className="px-2 py-1 text-right">{m.tasks.completed}</td>
-                                  <td className="px-2 py-1 text-right">{m.tasks.inProgress}</td>
-                                  <td className="px-2 py-1 text-right">
-                                    {m.messagesSent}
-                                  </td>
-                                  <td className="px-2 py-1 text-right">{m.meetingsAttended}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
+                          </div>
                         </CardContent>
                       </Card>
-                    </div>
-                  ) : (
-                    <EmptyState message="เลือกทีมเพื่อดูรายงาน หรือยังไม่มีข้อมูลสำหรับทีมนี้" />
-                  )}
-                </TabsContent>
+                    )}
+                  </TabsContent>
 
-                {/* Meetings */}
-                <TabsContent value="meetings" className="mt-0 flex-1 flex flex-col">
-                  {meetingReport ? (
-                    <div className="space-y-4">
-                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                        <SummaryCard
-                          title="จำนวนประชุม"
-                          icon={Calendar}
-                          iconColor="text-primary"
-                          bgColor="bg-primary/10"
-                          value={meetingReport.summary.totalMeetings}
-                        />
-                        <SummaryCard
-                          title="ระยะเวลารวม"
-                          icon={Clock}
-                          iconColor="text-blue-600"
-                          bgColor="bg-blue-500/10"
-                          value={meetingReport.summary.totalDuration.toFixed(1)}
-                          suffix="นาที"
-                        />
-                        <SummaryCard
-                          title="ผู้เข้าร่วมทั้งหมด"
-                          icon={Users}
-                          iconColor="text-emerald-600"
-                          bgColor="bg-emerald-500/10"
-                          value={meetingReport.summary.totalParticipants}
-                        />
-                        <SummaryCard
-                          title="ผู้เข้าร่วมเฉลี่ย"
-                          icon={Users}
-                          iconColor="text-orange-600"
-                          bgColor="bg-orange-500/10"
-                          value={meetingReport.summary.avgParticipants.toFixed(1)}
-                        />
+                  {/* ─── Tab: ทีม & งาน ───────────────────────────────────────── */}
+                  <TabsContent value="team" className="mt-4 space-y-4">
+                    {/* Team Selector */}
+                    {teams.length > 0 && (
+                      <div className="flex items-center gap-3">
+                        <Select value={selectedTeamId} onValueChange={setSelectedTeamId}>
+                          <SelectTrigger className="w-[200px] h-9 text-xs">
+                            <SelectValue placeholder="เลือกทีม" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {teams.map((t) => (
+                              <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Badge variant="outline" className="text-[10px]">{currentRangeLabel}</Badge>
                       </div>
+                    )}
 
-                      <Card className="border-border/50 bg-card/70">
-                        <CardHeader className="pb-3">
-                          <CardTitle className="text-sm font-semibold">
-                            รายการประชุมในช่วง {currentRangeLabel}
-                          </CardTitle>
-                        </CardHeader>
-                        <CardContent className="text-xs overflow-x-auto">
-                          <table className="w-full border-collapse text-[11px]">
-                            <thead className="bg-muted/60">
-                              <tr>
-                                <th className="text-left px-2 py-1 font-medium">ชื่อประชุม</th>
-                                <th className="text-left px-2 py-1 font-medium">ทีม</th>
-                                <th className="text-left px-2 py-1 font-medium">Host</th>
-                                <th className="text-left px-2 py-1 font-medium">เริ่ม</th>
-                                <th className="text-right px-2 py-1 font-medium">ระยะเวลา (นาที)</th>
-                                <th className="text-right px-2 py-1 font-medium">ผู้เข้าร่วม</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {meetingReport.meetings.map((m) => (
-                                <tr key={m.id} className="border-t border-border/40">
-                                  <td className="px-2 py-1 max-w-[200px] truncate">{m.title}</td>
-                                  <td className="px-2 py-1">{m.team ?? "-"}</td>
-                                  <td className="px-2 py-1">{m.host}</td>
-                                  <td className="px-2 py-1">
-                                    {m.startTime ? new Date(m.startTime).toLocaleString() : "-"}
-                                  </td>
-                                  <td className="px-2 py-1 text-right">
-                                    {m.duration.toFixed(1)}
-                                  </td>
-                                  <td className="px-2 py-1 text-right">{m.participants}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </CardContent>
-                      </Card>
-                    </div>
-                  ) : (
-                    <EmptyState message="ยังไม่มีข้อมูลการประชุมสำหรับช่วงเวลานี้" />
-                  )}
-                </TabsContent>
+                    {teamReport && selectedTeam ? (
+                      <>
+                        {/* Team Summary Cards */}
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                          <KpiCard title="สมาชิกทีม" value={teamReport.summary.members} icon={Users} gradient="from-primary to-blue-500" shadowColor="shadow-primary/20" />
+                          <KpiCard title="งานทั้งหมด" value={teamReport.summary.tasks.total} icon={CheckSquare} gradient="from-blue-500 to-cyan-500" shadowColor="shadow-blue-500/20" />
+                          <KpiCard title="งานเสร็จแล้ว" value={teamReport.summary.tasks.completed} icon={Target} gradient="from-emerald-500 to-teal-500" shadowColor="shadow-emerald-500/20" />
+                          <KpiCard title="จำนวนประชุม" value={teamReport.summary.meetings.total} icon={Calendar} gradient="from-violet-500 to-purple-500" shadowColor="shadow-violet-500/20" />
+                        </div>
 
-                {/* Tasks & Workload */}
-                <TabsContent value="tasks" className="mt-0 flex-1 flex flex-col">
-                  {taskReport ? (
-                    <div className="space-y-4">
-                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                        <SummaryCard
-                          title="งานทั้งหมด"
-                          icon={CheckSquare}
-                          iconColor="text-primary"
-                          bgColor="bg-primary/10"
-                          value={taskReport.summary.totalTasks}
-                        />
-                        <SummaryCard
-                          title="งานเสร็จแล้ว"
-                          icon={CheckSquare}
-                          iconColor="text-emerald-600"
-                          bgColor="bg-emerald-500/10"
-                          value={taskReport.summary.completedTasks}
-                        />
-                        <SummaryCard
-                          title="กำลังทำ"
-                          icon={CheckSquare}
-                          iconColor="text-blue-600"
-                          bgColor="bg-blue-500/10"
-                          value={taskReport.summary.inProgressTasks}
-                        />
-                        <SummaryCard
-                          title="งานค้าง (Overdue)"
-                          icon={CheckSquare}
-                          iconColor="text-red-600"
-                          bgColor="bg-red-500/10"
-                          value={taskReport.summary.overdueTasks}
-                        />
+                        {/* Member Workload */}
+                        {teamWorkload && teamWorkload.workload.length > 0 && (
+                          <Card className="border-border/50 bg-card/80 backdrop-blur-sm">
+                            <CardHeader className="pb-3">
+                              <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                                <Activity className="w-4 h-4 text-primary" />
+                                ภาระงานรายสมาชิก – {selectedTeam.name}
+                              </CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                              <div className="space-y-3">
+                                {teamWorkload.workload.map((w) => {
+                                  const completionRate = w.totalTasks > 0 ? (w.completed / w.totalTasks) * 100 : 0;
+                                  return (
+                                    <div key={w.userId} className="p-3 rounded-xl bg-muted/20 border border-border/30">
+                                      <div className="flex items-center justify-between mb-2">
+                                        <div className="text-xs font-medium">{w.userName}</div>
+                                        <div className="flex gap-2">
+                                          <Badge variant="secondary" className="text-[10px] h-5">{w.totalTasks} งาน</Badge>
+                                          {w.overdue > 0 && (
+                                            <Badge variant="destructive" className="text-[10px] h-5 gap-1">
+                                              <AlertTriangle className="w-2.5 h-2.5" /> {w.overdue} ค้าง
+                                            </Badge>
+                                          )}
+                                        </div>
+                                      </div>
+                                      <div className="flex items-center gap-2">
+                                        <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden flex">
+                                          {w.completed > 0 && (
+                                            <div className="bg-emerald-500 h-full" style={{ width: `${(w.completed / Math.max(w.totalTasks, 1)) * 100}%` }} />
+                                          )}
+                                          {w.inProgress > 0 && (
+                                            <div className="bg-blue-500 h-full" style={{ width: `${(w.inProgress / Math.max(w.totalTasks, 1)) * 100}%` }} />
+                                          )}
+                                          {w.todo > 0 && (
+                                            <div className="bg-slate-400 h-full" style={{ width: `${(w.todo / Math.max(w.totalTasks, 1)) * 100}%` }} />
+                                          )}
+                                        </div>
+                                        <span className="text-[10px] text-muted-foreground font-medium w-10 text-right">
+                                          {completionRate.toFixed(0)}%
+                                        </span>
+                                      </div>
+                                      <div className="flex gap-3 mt-2 text-[10px] text-muted-foreground">
+                                        <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-emerald-500" />{w.completed} เสร็จ</span>
+                                        <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-blue-500" />{w.inProgress} กำลังทำ</span>
+                                        <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-slate-400" />{w.todo} ยังไม่เริ่ม</span>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </CardContent>
+                          </Card>
+                        )}
+
+                        {/* Overdue Tasks */}
+                        {taskReport && taskReport.overdueTasks.length > 0 && (
+                          <Card className="border-border/50 bg-card/80 backdrop-blur-sm border-l-4 border-l-red-500">
+                            <CardHeader className="pb-3">
+                              <CardTitle className="text-sm font-semibold flex items-center gap-2 text-red-500">
+                                <AlertTriangle className="w-4 h-4" />
+                                งานที่ค้างเกินกำหนด ({taskReport.overdueTasks.length})
+                              </CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                              <div className="space-y-2">
+                                {taskReport.overdueTasks.slice(0, 10).map((t) => (
+                                  <div key={t.id} className="flex items-center justify-between p-2.5 rounded-lg bg-red-500/5 border border-red-500/10">
+                                    <div className="flex-1 min-w-0 mr-3">
+                                      <div className="text-xs font-medium truncate">{t.title}</div>
+                                      <div className="text-[10px] text-muted-foreground mt-0.5 flex gap-2">
+                                        <span>{t.assignee || "ไม่มีผู้รับผิดชอบ"}</span>
+                                        {t.dueDate && <span>· กำหนด: {new Date(t.dueDate).toLocaleDateString("th-TH")}</span>}
+                                      </div>
+                                    </div>
+                                    <Badge className={cn("text-[10px] h-5 text-white", priorityColor[t.priority] || "bg-slate-400")}>
+                                      {priorityLabel[t.priority] || t.priority}
+                                    </Badge>
+                                  </div>
+                                ))}
+                              </div>
+                            </CardContent>
+                          </Card>
+                        )}
+                      </>
+                    ) : (
+                      <EmptyState message="เลือกทีมเพื่อดูรายงาน หรือยังไม่มีข้อมูลสำหรับทีมนี้" />
+                    )}
+                  </TabsContent>
+
+                  {/* ─── Tab: ประสิทธิภาพ ─────────────────────────────────────── */}
+                  <TabsContent value="performance" className="mt-4 space-y-4">
+                    {/* Team filter for performance */}
+                    {teams.length > 0 && (
+                      <div className="flex items-center gap-3">
+                        <Select value={selectedTeamId || "all"} onValueChange={(v) => setSelectedTeamId(v === "all" ? undefined : v)}>
+                          <SelectTrigger className="w-[200px] h-9 text-xs">
+                            <SelectValue placeholder="ทุกทีม" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">ทุกทีม</SelectItem>
+                            {teams.map((t) => (
+                              <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Badge variant="outline" className="text-[10px]">{currentRangeLabel}</Badge>
                       </div>
+                    )}
 
-                      {teamWorkload && teamWorkload.workload.length > 0 && (
-                        <Card className="border-border/50 bg-card/70">
+                    {performance ? (
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                        {/* Task Completion Rate */}
+                        <Card className="border-border/50 bg-card/80 backdrop-blur-sm">
                           <CardHeader className="pb-3">
-                            <CardTitle className="text-sm font-semibold">
-                              ภาระงานรายคนในทีม {teamWorkload.team.name}
+                            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                              <Target className="w-4 h-4 text-emerald-500" />
+                              อัตราสำเร็จงาน (Task Completion)
                             </CardTitle>
                           </CardHeader>
-                          <CardContent className="text-xs overflow-x-auto">
-                            <table className="w-full border-collapse text-[11px]">
-                              <thead className="bg-muted/60">
-                                <tr>
-                                  <th className="text-left px-2 py-1 font-medium">ชื่อ</th>
-                                  <th className="text-right px-2 py-1 font-medium">งานทั้งหมด</th>
-                                  <th className="text-right px-2 py-1 font-medium">เสร็จแล้ว</th>
-                                  <th className="text-right px-2 py-1 font-medium">กำลังทำ</th>
-                                  <th className="text-right px-2 py-1 font-medium">ยังไม่เริ่ม</th>
-                                  <th className="text-right px-2 py-1 font-medium">ค้าง</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {teamWorkload.workload.map((w) => (
-                                  <tr key={w.userId} className="border-t border-border/40">
-                                    <td className="px-2 py-1">{w.userName}</td>
-                                    <td className="px-2 py-1 text-right">{w.totalTasks}</td>
-                                    <td className="px-2 py-1 text-right">{w.completed}</td>
-                                    <td className="px-2 py-1 text-right">{w.inProgress}</td>
-                                    <td className="px-2 py-1 text-right">{w.todo}</td>
-                                    <td className="px-2 py-1 text-right">{w.overdue}</td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
+                          <CardContent className="space-y-3">
+                            {performance.taskCompletionRates
+                              .slice()
+                              .sort((a, b) => b.completionRate - a.completionRate)
+                              .map((r) => (
+                                <div key={r.userId} className="space-y-1">
+                                  <div className="flex items-center justify-between text-xs">
+                                    <span className="font-medium truncate mr-2">{r.userName}</span>
+                                    <span className="text-muted-foreground">
+                                      {r.completedTasks}/{r.totalTasks} ({r.completionRate.toFixed(0)}%)
+                                    </span>
+                                  </div>
+                                  <div className="h-2 bg-muted rounded-full overflow-hidden">
+                                    <div
+                                      className={cn(
+                                        "h-full rounded-full transition-all duration-500",
+                                        r.completionRate >= 80 ? "bg-emerald-500" :
+                                        r.completionRate >= 50 ? "bg-blue-500" :
+                                        r.completionRate >= 30 ? "bg-amber-500" : "bg-red-500"
+                                      )}
+                                      style={{ width: `${r.completionRate}%` }}
+                                    />
+                                  </div>
+                                </div>
+                              ))}
                           </CardContent>
                         </Card>
-                      )}
 
-                      {taskReport.overdueTasks.length > 0 && (
-                        <Card className="border-border/50 bg-card/70">
+                        {/* Collaboration Activity */}
+                        <Card className="border-border/50 bg-card/80 backdrop-blur-sm">
                           <CardHeader className="pb-3">
-                            <CardTitle className="text-sm font-semibold">
-                              งานที่ค้างเกินกำหนด (Overdue)
+                            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                              <Zap className="w-4 h-4 text-amber-500" />
+                              กิจกรรมการทำงานร่วมกัน
                             </CardTitle>
                           </CardHeader>
-                          <CardContent className="text-xs overflow-x-auto">
-                            <table className="w-full border-collapse text-[11px]">
-                              <thead className="bg-muted/60">
-                                <tr>
-                                  <th className="text-left px-2 py-1 font-medium">ชื่อเรื่อง</th>
-                                  <th className="text-left px-2 py-1 font-medium">ผู้รับผิดชอบ</th>
-                                  <th className="text-left px-2 py-1 font-medium">ทีม</th>
-                                  <th className="text-left px-2 py-1 font-medium">Priority</th>
-                                  <th className="text-left px-2 py-1 font-medium">Due date</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {taskReport.overdueTasks.map((t) => (
-                                  <tr key={t.id} className="border-t border-border/40">
-                                    <td className="px-2 py-1 max-w-[220px] truncate">{t.title}</td>
-                                    <td className="px-2 py-1">{t.assignee ?? "-"}</td>
-                                    <td className="px-2 py-1">{t.team ?? "-"}</td>
-                                    <td className="px-2 py-1">{t.priority}</td>
-                                    <td className="px-2 py-1">
-                                      {t.dueDate ? new Date(t.dueDate).toLocaleDateString() : "-"}
-                                    </td>
-                                  </tr>
+                          <CardContent>
+                            <div className="space-y-2.5">
+                              {performance.collaborationActivity
+                                .slice()
+                                .sort((a, b) => b.totalInteractions - a.totalInteractions)
+                                .map((w) => (
+                                  <div key={w.userId} className="p-2.5 rounded-lg bg-muted/20 border border-border/30">
+                                    <div className="flex items-center justify-between mb-1.5">
+                                      <span className="text-xs font-medium">{w.userName}</span>
+                                      <Badge variant="secondary" className="text-[10px] h-5 font-bold">
+                                        {w.totalInteractions} รวม
+                                      </Badge>
+                                    </div>
+                                    <div className="flex gap-3 text-[10px] text-muted-foreground">
+                                      <span className="flex items-center gap-1">
+                                        <CheckSquare className="w-2.5 h-2.5 text-emerald-500" /> {w.completedTasks} งาน
+                                      </span>
+                                      <span className="flex items-center gap-1">
+                                        <Calendar className="w-2.5 h-2.5 text-blue-500" /> {w.attendedMeetings} ประชุม
+                                      </span>
+                                      <span className="flex items-center gap-1">
+                                        <MessageSquare className="w-2.5 h-2.5 text-violet-500" /> {w.messagesSent} แชท
+                                      </span>
+                                    </div>
+                                  </div>
                                 ))}
-                              </tbody>
-                            </table>
+                            </div>
                           </CardContent>
                         </Card>
-                      )}
-                    </div>
-                  ) : (
-                    <EmptyState message="ยังไม่มีข้อมูลงานสำหรับช่วงเวลานี้ หรือยังไม่ได้เลือกทีม" />
-                  )}
-                </TabsContent>
 
-                {/* Performance */}
-                <TabsContent value="performance" className="mt-0 flex-1 flex flex-col">
-                  {performance ? (
-                    <div className="space-y-4">
-                      <Card className="border-border/50 bg-card/70">
-                        <CardHeader className="pb-3">
-                          <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                            <BarChart3 className="w-4 h-4 text-primary" />
-                            Task completion rate
-                          </CardTitle>
-                        </CardHeader>
-                        <CardContent className="text-xs overflow-x-auto">
-                          <table className="w-full border-collapse text-[11px]">
-                            <thead className="bg-muted/60">
-                              <tr>
-                                <th className="text-left px-2 py-1 font-medium">ชื่อ</th>
-                                <th className="text-right px-2 py-1 font-medium">งานทั้งหมด</th>
-                                <th className="text-right px-2 py-1 font-medium">เสร็จแล้ว</th>
-                                <th className="text-right px-2 py-1 font-medium">Completion rate</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {performance.taskCompletionRates.map((r) => (
-                                <tr key={r.userId} className="border-t border-border/40">
-                                  <td className="px-2 py-1">{r.userName}</td>
-                                  <td className="px-2 py-1 text-right">{r.totalTasks}</td>
-                                  <td className="px-2 py-1 text-right">{r.completedTasks}</td>
-                                  <td className="px-2 py-1 text-right">
-                                    {r.completionRate.toFixed(1)}%
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </CardContent>
-                      </Card>
-
-                      <Card className="border-border/50 bg-card/70">
-                        <CardHeader className="pb-3">
-                          <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                            <Activity className="w-4 h-4 text-primary" />
-                            Collaboration Activity
-                          </CardTitle>
-                        </CardHeader>
-                        <CardContent className="text-xs overflow-x-auto">
-                          <table className="w-full border-collapse text-[11px]">
-                            <thead className="bg-muted/60">
-                              <tr>
-                                <th className="text-left px-2 py-1 font-medium">ชื่อ</th>
-                                <th className="text-right px-2 py-1 font-medium">งานที่เสร็จ</th>
-                                <th className="text-right px-2 py-1 font-medium">ประชุมที่เข้าร่วม</th>
-                                <th className="text-right px-2 py-1 font-medium">ข้อความแชท</th>
-                                <th className="text-right px-2 py-1 font-medium">รวมการมีส่วนร่วม</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {performance.collaborationActivity.map((w) => (
-                                <tr key={w.userId} className="border-t border-border/40">
-                                  <td className="px-2 py-1">{w.userName}</td>
-                                  <td className="px-2 py-1 text-right">{w.completedTasks}</td>
-                                  <td className="px-2 py-1 text-right">{w.attendedMeetings}</td>
-                                  <td className="px-2 py-1 text-right">{w.messagesSent}</td>
-                                  <td className="px-2 py-1 text-right font-semibold">
-                                    {w.totalInteractions}
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </CardContent>
-                      </Card>
-                    </div>
-                  ) : (
-                    <EmptyState message="ยังไม่มีข้อมูล performance สำหรับช่วงเวลานี้" />
-                  )}
-                </TabsContent>
-              </Tabs>
-            )}
+                        {/* Meeting Attendance */}
+                        {performance.meetingAttendanceRates && performance.meetingAttendanceRates.length > 0 && (
+                          <Card className="border-border/50 bg-card/80 backdrop-blur-sm lg:col-span-2">
+                            <CardHeader className="pb-3">
+                              <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                                <Calendar className="w-4 h-4 text-blue-500" />
+                                อัตราเข้าร่วมประชุม (Meeting Attendance)
+                              </CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                                {performance.meetingAttendanceRates
+                                  .slice()
+                                  .sort((a, b) => b.attendanceRate - a.attendanceRate)
+                                  .map((r) => (
+                                    <div key={r.userId} className="p-3 rounded-lg bg-muted/20 border border-border/30">
+                                      <div className="flex items-center justify-between mb-1.5">
+                                        <span className="text-xs font-medium truncate mr-2">{r.userName}</span>
+                                        <span className={cn("text-xs font-bold", r.attendanceRate >= 80 ? "text-emerald-500" : r.attendanceRate >= 50 ? "text-blue-500" : "text-amber-500")}>
+                                          {r.attendanceRate.toFixed(0)}%
+                                        </span>
+                                      </div>
+                                      <Progress value={r.attendanceRate} className="h-1.5" />
+                                      <div className="text-[10px] text-muted-foreground mt-1">
+                                        {r.attendedMeetings}/{r.totalMeetings} ครั้ง
+                                      </div>
+                                    </div>
+                                  ))}
+                              </div>
+                            </CardContent>
+                          </Card>
+                        )}
+                      </div>
+                    ) : (
+                      <EmptyState message="ยังไม่มีข้อมูลประสิทธิภาพสำหรับช่วงเวลานี้" />
+                    )}
+                  </TabsContent>
+                </>
+              )}
+            </Tabs>
           </div>
         </div>
-      </div>
 
-      {/* Hidden print layout for PDF export (document-style) */}
-      <div
-        ref={printRef}
-        className="fixed top-0 left-[-9999px] bg-white text-black p-10"
-        style={{ width: "1123px" }}
-      >
-        {activeTab === "performance" && performance && (
-          <div className="space-y-6">
-            <div className="flex items-start justify-between border-b border-slate-200 pb-4">
-              <div>
-                <h1 className="text-2xl font-semibold text-slate-900">
-                  Team Connect – Performance Dashboard
-                </h1>
-                <p className="text-sm text-slate-700 mt-1">
-                  Period: {pdfPeriodLabel}
-                  {selectedTeam ? ` · Team: ${selectedTeam.name}` : ""}
-                </p>
+        {/* Hidden print layout */}
+        <div ref={printRef} className="fixed top-0 left-[-9999px] bg-white text-black p-10" style={{ width: "1123px" }}>
+          {performance && (
+            <div className="space-y-6">
+              <div className="flex items-start justify-between border-b border-slate-200 pb-4">
+                <div>
+                  <h1 className="text-2xl font-semibold text-slate-900">Team Connect – Performance Report</h1>
+                  <p className="text-sm text-slate-700 mt-1">Period: {currentRangeLabel} {selectedTeam ? ` · Team: ${selectedTeam.name}` : ""}</p>
+                </div>
+                <div className="text-xs text-slate-500 text-right">
+                  <div>Generated at</div>
+                  <div>{new Date().toLocaleString()}</div>
+                </div>
               </div>
-              <div className="text-xs text-slate-500 text-right">
-                <div>Generated at</div>
-                <div>{new Date().toLocaleString()}</div>
-              </div>
-            </div>
-
-            {/* Task completion rate */}
-            <section className="space-y-2">
-              <h2 className="text-lg font-semibold text-slate-900">
-                Task completion rate
-              </h2>
               <table className="w-full border border-slate-300 border-collapse text-sm">
                 <thead>
                   <tr className="bg-slate-100">
-                    <th className="px-3 py-2 text-left font-semibold border-b border-slate-300">
-                      ชื่อ
-                    </th>
-                    <th className="px-3 py-2 text-right font-semibold border-b border-slate-300">
-                      งานทั้งหมด
-                    </th>
-                    <th className="px-3 py-2 text-right font-semibold border-b border-slate-300">
-                      เสร็จแล้ว
-                    </th>
-                    <th className="px-3 py-2 text-right font-semibold border-b border-slate-300">
-                      Completion rate (%)
-                    </th>
+                    <th className="px-3 py-2 text-left font-semibold border-b border-slate-300">ชื่อ</th>
+                    <th className="px-3 py-2 text-right font-semibold border-b border-slate-300">งานทั้งหมด</th>
+                    <th className="px-3 py-2 text-right font-semibold border-b border-slate-300">เสร็จแล้ว</th>
+                    <th className="px-3 py-2 text-right font-semibold border-b border-slate-300">Completion %</th>
                   </tr>
                 </thead>
                 <tbody>
                   {performance.taskCompletionRates.map((r, idx) => (
-                    <tr
-                      key={r.userId}
-                      className={idx % 2 === 1 ? "bg-slate-50" : undefined}
-                    >
-                      <td className="px-3 py-2 border-t border-slate-200">
-                        {r.userName}
-                      </td>
-                      <td className="px-3 py-2 text-right border-t border-slate-200">
-                        {r.totalTasks}
-                      </td>
-                      <td className="px-3 py-2 text-right border-t border-slate-200">
-                        {r.completedTasks}
-                      </td>
-                      <td className="px-3 py-2 text-right border-t border-slate-200">
-                        {r.completionRate.toFixed(1)}
-                      </td>
+                    <tr key={r.userId} className={idx % 2 === 1 ? "bg-slate-50" : undefined}>
+                      <td className="px-3 py-2 border-t border-slate-200">{r.userName}</td>
+                      <td className="px-3 py-2 text-right border-t border-slate-200">{r.totalTasks}</td>
+                      <td className="px-3 py-2 text-right border-t border-slate-200">{r.completedTasks}</td>
+                      <td className="px-3 py-2 text-right border-t border-slate-200">{r.completionRate.toFixed(1)}%</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-            </section>
-
-            {/* Collaboration Activity */}
-            <section className="space-y-2">
-              <h2 className="text-lg font-semibold text-slate-900">
-                Collaboration Activity
-              </h2>
-              <table className="w-full border border-slate-300 border-collapse text-sm">
-                <thead>
-                  <tr className="bg-slate-100">
-                    <th className="px-3 py-2 text-left font-semibold border-b border-slate-300">
-                      ชื่อ
-                    </th>
-                    <th className="px-3 py-2 text-right font-semibold border-b border-slate-300">
-                      งานที่เสร็จ
-                    </th>
-                    <th className="px-3 py-2 text-right font-semibold border-b border-slate-300">
-                      ประชุมที่เข้าร่วม
-                    </th>
-                    <th className="px-3 py-2 text-right font-semibold border-b border-slate-300">
-                      ข้อความแชท
-                    </th>
-                    <th className="px-3 py-2 text-right font-semibold border-b border-slate-300">
-                      รวมการมีส่วนร่วม
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {performance.collaborationActivity.map((w, idx) => (
-                    <tr
-                      key={w.userId}
-                      className={idx % 2 === 1 ? "bg-slate-50" : undefined}
-                    >
-                      <td className="px-3 py-2 border-t border-slate-200">
-                        {w.userName}
-                      </td>
-                      <td className="px-3 py-2 text-right border-t border-slate-200">
-                        {w.completedTasks}
-                      </td>
-                      <td className="px-3 py-2 text-right border-t border-slate-200">
-                        {w.attendedMeetings}
-                      </td>
-                      <td className="px-3 py-2 text-right border-t border-slate-200">
-                        {w.messagesSent}
-                      </td>
-                      <td className="px-3 py-2 text-right font-bold border-t border-slate-200">
-                        {w.totalInteractions}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </section>
-          </div>
-        )}
+            </div>
+          )}
+        </div>
       </div>
     </TooltipProvider>
   );
 }
 
-interface SummaryCardProps {
+// ─── Sub Components ──────────────────────────────────────────────────────────
+
+function KpiCard({ title, value, suffix, icon: Icon, gradient, shadowColor }: {
   title: string;
-  icon: React.ElementType;
-  iconColor: string;
-  bgColor: string;
   value: string | number;
   suffix?: string;
-}
-
-function SummaryCard({ title, icon: Icon, iconColor, bgColor, value, suffix }: SummaryCardProps) {
+  icon: React.ElementType;
+  gradient: string;
+  shadowColor: string;
+}) {
   return (
-    <Card className="border-border/50 bg-card/70 hover:bg-card hover:border-border/80 transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5">
+    <Card className="border-border/50 bg-card/80 backdrop-blur-sm hover:bg-card hover:border-border/80 transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5">
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
           <CardTitle className="text-sm font-medium text-muted-foreground">{title}</CardTitle>
-          <div className={cn("w-9 h-9 rounded-xl flex items-center justify-center", bgColor)}>
-            <Icon className={cn("w-4.5 h-4.5", iconColor)} />
+          <div className={cn("w-9 h-9 rounded-xl flex items-center justify-center bg-gradient-to-br shadow-lg", gradient, shadowColor)}>
+            <Icon className="w-4.5 h-4.5 text-white" />
           </div>
         </div>
       </CardHeader>
       <CardContent>
-        <div className="text-2xl font-bold text-foreground mb-1 flex items-baseline gap-1">
+        <div className="text-2xl font-bold text-foreground flex items-baseline gap-1">
           <span>{value}</span>
           {suffix && <span className="text-xs text-muted-foreground font-normal">{suffix}</span>}
         </div>
@@ -1652,45 +1025,58 @@ function SummaryCard({ title, icon: Icon, iconColor, bgColor, value, suffix }: S
   );
 }
 
-function ProductivityCard({ score }: { score: number }) {
+function ProductivityScoreCard({ score }: { score: number }) {
   return (
-    <Card
-      className={cn(
-        "border-border/50 bg-card/70 hover:bg-card hover:border-border/80 transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5",
-        "bg-gradient-to-br from-background via-background to-primary/5"
-      )}
-    >
+    <Card className={cn(
+      "border-border/50 bg-card/80 backdrop-blur-sm hover:bg-card hover:border-border/80 transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5",
+      "bg-gradient-to-br from-background via-background to-primary/5"
+    )}>
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
           <CardTitle className="text-sm font-medium text-muted-foreground">คะแนนประสิทธิภาพ</CardTitle>
-          <div
-            className={cn(
-              "w-9 h-9 rounded-xl flex items-center justify-center",
-              "bg-gradient-to-br",
-              getProductivityGradient(score)
-            )}
-          >
+          <div className={cn("w-9 h-9 rounded-xl flex items-center justify-center bg-gradient-to-br shadow-lg", getProductivityGradient(score), "shadow-primary/20")}>
             <TrendingUp className="w-4.5 h-4.5 text-white" />
           </div>
         </div>
       </CardHeader>
       <CardContent>
-        <div className={cn("text-2xl font-bold mb-2", getProductivityColor(score))}>
-          {Math.round(score)}%
-        </div>
+        <div className={cn("text-2xl font-bold mb-2", getProductivityColor(score))}>{Math.round(score)}%</div>
         <Progress value={score} className="h-2" />
-        <div className="flex items-center gap-1 text-[11px] text-muted-foreground mt-2">
+        <div className="flex items-center gap-1 text-[10px] text-muted-foreground mt-2">
           <Activity className="w-3 h-3" />
-          <span>ยิ่งเข้าใกล้ 100% แสดงว่าทำงานได้คุ้มค่าต่อชั่วโมงมากขึ้น</span>
+          <span>ยิ่งเข้าใกล้ 100% แสดงว่าทำงานได้คุ้มค่ามากขึ้น</span>
         </div>
       </CardContent>
     </Card>
   );
 }
 
+function StatusBarRow({ label, count, total, color }: { label: string; count: number; total: number; color: string }) {
+  const pct = total > 0 ? (count / total) * 100 : 0;
+  return (
+    <div className="flex items-center gap-3">
+      <div className={cn("w-2.5 h-2.5 rounded-full", color)} />
+      <span className="text-xs text-muted-foreground w-20 truncate">{label}</span>
+      <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+        <div className={cn("h-full rounded-full transition-all duration-500", color)} style={{ width: `${pct}%` }} />
+      </div>
+      <span className="text-[10px] text-muted-foreground font-medium w-12 text-right">{count} ({pct.toFixed(0)}%)</span>
+    </div>
+  );
+}
+
+function MiniStat({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="text-center p-2 rounded-lg bg-muted/30">
+      <div className="text-lg font-bold text-foreground">{value}</div>
+      <div className="text-[10px] text-muted-foreground">{label}</div>
+    </div>
+  );
+}
+
 function EmptyState({ message }: { message: string }) {
   return (
-    <Card className="border-border/50 bg-card/70 flex-1">
+    <Card className="border-border/50 bg-card/80 backdrop-blur-sm">
       <CardContent className="flex flex-col items-center justify-center py-16">
         <div className="w-16 h-16 rounded-2xl bg-muted/50 flex items-center justify-center mb-4">
           <FileBarChart className="w-8 h-8 text-muted-foreground" />

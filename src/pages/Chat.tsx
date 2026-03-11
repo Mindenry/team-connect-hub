@@ -101,6 +101,19 @@ const getDmStorageKey = (userA: string, userB: string) => {
   return `dm:${a}:${b}`;
 };
 
+const getRecentDmOrder = (userId: string): string[] => {
+  try { return JSON.parse(localStorage.getItem(`dm-recent-order-${userId}`) || "[]"); }
+  catch { return []; }
+};
+
+const updateRecentDmOrder = (userId: string, contactId: string) => {
+  try {
+    const order = getRecentDmOrder(userId);
+    const newOrder = [contactId, ...order.filter(id => id !== contactId)].slice(0, 50);
+    localStorage.setItem(`dm-recent-order-${userId}`, JSON.stringify(newOrder));
+  } catch {}
+};
+
 const normalizeAttachmentUrl = (att: { url: string; name: string; type: string }) => {
   if (!att?.url) return att;
   const url = att.url;
@@ -368,6 +381,7 @@ export default function Chat() {
         setAllUsers(safeUsers);
 
         // Set DM contacts
+        const recentOrder = getRecentDmOrder(currentUser.id);
         setDmContacts(
           safeUsers
             .filter((u: any) => u.id !== currentUser?.id)
@@ -378,7 +392,16 @@ export default function Chat() {
               status: "offline", 
               unread: (unreadState.dms as any)?.[u.id] || 0,
               lastMsg: "",
+              avatar: u.avatar || null,
             }))
+            .sort((a, b) => {
+              const idxA = recentOrder.indexOf(a.id);
+              const idxB = recentOrder.indexOf(b.id);
+              if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+              if (idxA !== -1) return -1;
+              if (idxB !== -1) return 1;
+              return a.name.localeCompare(b.name);
+            })
         );
         
       } catch (err) {
@@ -593,6 +616,7 @@ export default function Chat() {
         if (bump > 0 && currentUser?.id) {
           incrementDmUnread(currentUser.id, otherUserId, bump);
         }
+        updateRecentDmOrder(currentUser.id, otherUserId);
         return [{ ...base, lastMsg: data.text, unread: isActive ? 0 : (base.unread || 0) + bump }, ...updated];
       });
 
@@ -827,6 +851,7 @@ export default function Chat() {
         text: messageText,
         senderId: currentUser.id,
         senderName: currentUser.name,
+        senderAvatar: (currentUser as any).avatar,
         receiverId: activeDm,
         createdAt: new Date().toISOString(),
         attachments: attachments.length > 0 ? attachments : undefined,
@@ -837,7 +862,7 @@ export default function Chat() {
         id: msg.id,
         text: msg.text,
         senderId: msg.senderId,
-        sender: { id: currentUser.id, name: currentUser.name, email: currentUser.email || "" },
+        sender: { id: currentUser.id, name: currentUser.name, email: currentUser.email || "", avatar: (currentUser as any).avatar },
         channelId: "dm",
         isPinned: false,
         isSystem: false,
@@ -857,7 +882,19 @@ export default function Chat() {
         });
         return sorted;
       });
-      setDmContacts((prev) => prev.map((c) => (c.id === activeDm ? { ...c, lastMsg: msg.text, unread: 0 } : c)));
+      updateRecentDmOrder(currentUser.id, activeDm);
+      const recentOrder = getRecentDmOrder(currentUser.id);
+      setDmContacts((prev) => {
+        const updated = prev.map((c) => (c.id === activeDm ? { ...c, lastMsg: msg.text, unread: 0 } : c));
+        return updated.sort((a, b) => {
+          const idxA = recentOrder.indexOf(a.id);
+          const idxB = recentOrder.indexOf(b.id);
+          if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+          if (idxA !== -1) return -1;
+          if (idxB !== -1) return 1;
+          return a.name.localeCompare(b.name);
+        });
+      });
       setMessageInput("");
       setAttachments([]);
       setSending(false);
@@ -925,6 +962,7 @@ export default function Chat() {
                 id: dm.sender?.id ?? dm.senderId,
                 name: dm.sender?.name ?? "User",
                 email: dm.sender?.email ?? "",
+                avatar: dm.sender?.avatar || null,
               },
               channelId: "dm",
               isPinned: dm.isPinned ?? false,

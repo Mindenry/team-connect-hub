@@ -101,7 +101,6 @@ export default function InviteUserDialog({ open, onOpenChange, teamId, onInviteS
                       <SelectContent>
                         <SelectItem value="lead">Team Lead</SelectItem>
                         <SelectItem value="member">Member</SelectItem>
-                        <SelectItem value="viewer">Viewer</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>

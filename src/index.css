@@ -362,4 +362,84 @@
   .safe-right {
     padding-right: env(safe-area-inset-right);
   }
+
+  /* ── Meeting Dialog ── */
+  .meeting-dialog-header {
+    background: linear-gradient(135deg, hsl(217 91% 50%), hsl(199 89% 48%), hsl(217 91% 55%));
+    background-size: 200% 200%;
+    animation: gradient-shift 6s ease infinite;
+  }
+
+  .meeting-input {
+    background: hsl(var(--background)) !important;
+    border: 1.5px solid hsl(var(--border)) !important;
+    color: hsl(var(--foreground)) !important;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .dark .meeting-input {
+    background: hsl(222 35% 13%) !important;
+    border-color: hsl(222 20% 28%) !important;
+  }
+
+  .meeting-input::placeholder {
+    color: hsl(var(--muted-foreground)) !important;
+    opacity: 0.7;
+  }
+
+  .meeting-input:focus,
+  .meeting-input:focus-within {
+    border-color: hsl(var(--primary)) !important;
+    box-shadow: 0 0 0 3px hsl(var(--primary) / 0.15) !important;
+    outline: none;
+  }
+
+  .meeting-section {
+    background: hsl(var(--muted) / 0.3);
+    border: 1px solid hsl(var(--border) / 0.5);
+    border-radius: 0.75rem;
+    padding: 1rem;
+  }
+
+  .dark .meeting-section {
+    background: hsl(222 35% 10% / 0.6);
+    border-color: hsl(222 20% 22%);
+  }
+
+  .meeting-toggle-item {
+    padding: 0.75rem;
+    border-radius: 0.625rem;
+    transition: background 0.2s ease;
+  }
+
+  .meeting-toggle-item:hover {
+    background: hsl(var(--muted) / 0.5);
+  }
+
+  .dark .meeting-toggle-item:hover {
+    background: hsl(222 35% 14%);
+  }
+
+  .meeting-btn-create {
+    background: linear-gradient(135deg, hsl(217 91% 50%), hsl(199 89% 48%));
+    color: white;
+    border: none;
+    font-weight: 600;
+    transition: box-shadow 0.3s ease, transform 0.15s ease;
+  }
+
+  .meeting-btn-create:hover {
+    box-shadow: 0 4px 20px hsl(217 91% 50% / 0.4), 0 0 40px hsl(217 91% 50% / 0.1);
+    transform: translateY(-1px);
+  }
+
+  .meeting-btn-create:active {
+    transform: translateY(0);
+  }
+
+  .meeting-btn-create:disabled {
+    opacity: 0.5;
+    transform: none;
+    box-shadow: none;
+  }
 }

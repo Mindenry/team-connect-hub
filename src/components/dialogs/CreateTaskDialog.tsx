@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { AnimatePresence } from "framer-motion";
 import {
-  CheckSquare, Calendar, User, Tag, Flag, Link as LinkIcon, Target, Zap, X, Package, Layers, AlertCircle, FileText, Clock, Plus,
+  CheckSquare, Calendar, User, Tag, Flag, Link as LinkIcon, Target, Zap, X, Package, Layers, AlertCircle, FileText, Clock, Plus, ChevronsUpDown, Check, Users
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,6 +9,9 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem } from "@/components/ui/command";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   AnimatedDialog as Dialog,
   AnimatedDialogContent as DialogContent,
@@ -444,24 +447,76 @@ export default function CreateTaskDialog({
                     </SelectContent>
                   </Select>
 
-                  <Label className="text-[11px] font-medium text-muted-foreground mt-2 block">Additional Assignees</Label>
-                  <div className="max-h-20 overflow-y-auto border rounded-md p-2 space-y-1">
-                    {users.length === 0 && <div className="text-[11px] text-muted-foreground">No users</div>}
-                    {users.map((user) => (
-                      <button
-                        key={user.id}
-                        type="button"
-                        onClick={() => toggleAssignee(user.id)}
-                        className={cn(
-                          "w-full text-left text-[11px] px-2 py-1 rounded",
-                          assigneeIds.includes(user.id)
-                            ? "bg-primary/15 text-primary font-medium"
-                            : "hover:bg-muted"
-                        )}
-                      >
-                        {user.name}
-                      </button>
-                    ))}
+                  <div className="mt-3">
+                    <Label className="text-[11px] font-medium text-muted-foreground block mb-1">Additional Assignees</Label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          role="combobox"
+                          className={cn(
+                            "w-full justify-between h-9 text-xs font-normal",
+                            !assigneeIds.length && "text-muted-foreground"
+                          )}
+                        >
+                          {assigneeIds.length > 0 ? (
+                            <div className="flex gap-1 overflow-hidden">
+                              {assigneeIds.slice(0, 3).map(id => {
+                                const user = users.find(u => u.id === id);
+                                return user ? (
+                                  <Badge variant="secondary" key={id} className="text-[10px] h-5 rounded-sm px-1.5 font-normal">
+                                    {user.name.split(' ')[0]}
+                                  </Badge>
+                                ) : null;
+                              })}
+                              {assigneeIds.length > 3 && (
+                                <Badge variant="secondary" className="text-[10px] h-5 rounded-sm px-1.5 font-normal">
+                                  +{assigneeIds.length - 3} more
+                                </Badge>
+                              )}
+                            </div>
+                          ) : (
+                            "Select members..."
+                          )}
+                          <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-[300px] p-0" align="start">
+                        <Command>
+                          <CommandInput placeholder="Search users..." className="h-9 text-xs" />
+                          <CommandList>
+                            <CommandEmpty className="text-xs py-4 text-center text-muted-foreground">No users found.</CommandEmpty>
+                            <CommandGroup className="max-h-60 overflow-y-auto">
+                              {users.map((user) => {
+                                const isSelected = assigneeIds.includes(user.id);
+                                return (
+                                  <CommandItem
+                                    key={user.id}
+                                    value={user.name}
+                                    onSelect={() => toggleAssignee(user.id)}
+                                    className="flex items-center gap-2 px-2 py-1.5 text-xs cursor-pointer"
+                                  >
+                                    <div className={cn(
+                                      "mr-1 flex h-3.5 w-3.5 items-center justify-center rounded-[3px] border",
+                                      isSelected ? "bg-primary border-primary text-primary-foreground" : "border-muted-foreground/30 opacity-50"
+                                    )}>
+                                      {isSelected && <Check className="h-2.5 w-2.5" />}
+                                    </div>
+                                    <Avatar className="h-5 w-5 rounded-full border border-border/50">
+                                      <AvatarImage src={user.avatar} />
+                                      <AvatarFallback className="text-[8px] bg-primary/10 text-primary">
+                                        {user.name?.charAt(0)}
+                                      </AvatarFallback>
+                                    </Avatar>
+                                    <span>{user.name}</span>
+                                  </CommandItem>
+                                );
+                              })}
+                            </CommandGroup>
+                          </CommandList>
+                        </Command>
+                      </PopoverContent>
+                    </Popover>
                   </div>
                 </div>
                 

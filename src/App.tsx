@@ -27,7 +27,6 @@ const Login = lazy(() => import("./pages/Login"));
 const ResetPassword = lazy(() => import("./pages/ResetPassword"));
 const InviteSetup = lazy(() => import("./pages/InviteSetup"));
 const SharedDrive = lazy(() => import("./pages/SharedDrive"));
-const AuditTrail = lazy(() => import("./pages/AuditTrail"));
 const KnowledgeBase = lazy(() => import("./pages/KnowledgeBase"));
 const Announcements = lazy(() => import("./pages/Announcements"));
 const Reports = lazy(() => import("./pages/Reports"));
@@ -69,35 +68,36 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <CommandPalette />
-        <Routes>
-          {/* Standalone routes — each has its own Suspense */}
-          <Route path="/login" element={<Suspense fallback={<PageLoader />}><Login /></Suspense>} />
-          <Route path="/reset-password" element={<Suspense fallback={<PageLoader />}><ResetPassword /></Suspense>} />
-          <Route path="/invite" element={<Suspense fallback={<PageLoader />}><InviteSetup /></Suspense>} />
-          <Route path="/meeting-lobby/:id" element={<Suspense fallback={<PageLoader />}><ProtectedRoute><MeetingLobby /></ProtectedRoute></Suspense>} />
-          <Route path="/meeting-room" element={<Suspense fallback={<PageLoader />}><ProtectedRoute><MeetingRoom /></ProtectedRoute></Suspense>} />
-          <Route path="/meeting-room/:id" element={<Suspense fallback={<PageLoader />}><ProtectedRoute><MeetingRoom /></ProtectedRoute></Suspense>} />
+        <Suspense fallback={<PageLoader />}>
+          <Routes>
+            {/* Standalone routes — each has its own Suspense */}
+            <Route path="/login" element={<Suspense fallback={<PageLoader />}><Login /></Suspense>} />
+            <Route path="/reset-password" element={<Suspense fallback={<PageLoader />}><ResetPassword /></Suspense>} />
+            <Route path="/invite" element={<Suspense fallback={<PageLoader />}><InviteSetup /></Suspense>} />
+            <Route path="/meeting-lobby/:id" element={<Suspense fallback={<PageLoader />}><ProtectedRoute><MeetingLobby /></ProtectedRoute></Suspense>} />
+            <Route path="/meeting-room" element={<Suspense fallback={<PageLoader />}><ProtectedRoute><MeetingRoom /></ProtectedRoute></Suspense>} />
+            <Route path="/meeting-room/:id" element={<Suspense fallback={<PageLoader />}><ProtectedRoute><MeetingRoom /></ProtectedRoute></Suspense>} />
 
-          {/* Layout routes — Suspense is inside AppLayout, sidebar stays stable */}
-          <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/meetings" element={<Meetings />} />
-            <Route path="/calendar" element={<CalendarPage />} />
-            <Route path="/drive" element={<SharedDrive />} />
-            <Route path="/chat" element={<Chat />} />
-            <Route path="/tasks" element={<Tasks />} />
-            <Route path="/teams" element={<Teams />} />
-            <Route path="/directory" element={<Directory />} />
-            <Route path="/reminders" element={<Reminders />} />
-            <Route path="/notifications" element={<Notifications />} />
-            <Route path="/settings" element={<SettingsPage />} />
-            <Route path="/audit-trail" element={<AuditTrail />} />
-            <Route path="/wiki" element={<KnowledgeBase />} />
-            <Route path="/announcements" element={<Announcements />} />
-            <Route path="/reports" element={<Reports />} />
-          </Route>
-          <Route path="*" element={auth.isAuthenticated() ? <NotFound /> : <Navigate to="/login" replace />} />
-        </Routes>
+            {/* Layout routes — Suspense is inside AppLayout, sidebar stays stable */}
+            <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
+              <Route path="/" element={<Dashboard />} />
+              <Route path="/meetings" element={<Meetings />} />
+              <Route path="/calendar" element={<CalendarPage />} />
+              <Route path="/drive" element={<SharedDrive />} />
+              <Route path="/chat" element={<Chat />} />
+              <Route path="/tasks" element={<Tasks />} />
+              <Route path="/teams" element={<Teams />} />
+              <Route path="/directory" element={<Directory />} />
+              <Route path="/reminders" element={<Reminders />} />
+              <Route path="/notifications" element={<Notifications />} />
+              <Route path="/settings" element={<SettingsPage />} />
+              <Route path="/wiki" element={<KnowledgeBase />} />
+              <Route path="/announcements" element={<Announcements />} />
+              <Route path="/reports" element={<Reports />} />
+            </Route>
+            <Route path="*" element={auth.isAuthenticated() ? <NotFound /> : <Navigate to="/login" replace />} />
+          </Routes>
+        </Suspense>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>

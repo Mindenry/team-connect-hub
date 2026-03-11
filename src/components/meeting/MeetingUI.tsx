@@ -98,7 +98,13 @@ export default function MeetingUI({
                 
                 {/* User Info Label */}
                 <div className="absolute bottom-4 left-4 flex items-center gap-2 bg-black/50 backdrop-blur-md px-3 py-1.5 rounded-full ring-1 ring-white/10">
-                  <span className="text-sm font-medium text-white">
+                  <Avatar className="w-5 h-5 border border-white/20 shadow-sm shrink-0">
+                    <AvatarImage src={trackReference.participant.metadata || undefined} />
+                    <AvatarFallback className="bg-primary/30 text-[10px] text-white">
+                      {trackReference.participant.name?.[0] || 'U'}
+                    </AvatarFallback>
+                  </Avatar>
+                  <span className="text-sm font-medium text-white truncate max-w-[150px]">
                     {trackReference.participant.name || trackReference.participant.identity}
                     {trackReference.participant.isLocal && " (You)"}
                   </span>
@@ -139,7 +145,8 @@ export default function MeetingUI({
               <p className="text-xs font-semibold uppercase text-muted-foreground px-2">In Meeting</p>
               {allParticipants.map((p) => (
                 <div key={p.identity} className="flex items-center gap-2 p-2 rounded-lg hover:bg-meeting-bg/50 transition-colors">
-                  <Avatar className="h-8 w-8">
+                  <Avatar className="h-8 w-8 shrink-0">
+                    <AvatarImage src={p.metadata || undefined} />
                     <AvatarFallback className="bg-primary/20 text-primary-foreground text-xs">{p.name?.[0] || 'U'}</AvatarFallback>
                   </Avatar>
                   <div className="flex-1 min-w-0">

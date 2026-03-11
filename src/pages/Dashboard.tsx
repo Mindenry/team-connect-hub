@@ -7,21 +7,14 @@ import {
   MessageSquare,
   CheckSquare,
   Users,
-  MapPin,
-  Target,
   Eye,
-  Timer,
   Hash,
-  BarChart3,
   Sparkles,
   Zap,
   Clock,
   Plus,
   ChevronRight,
-  Rocket,
   LayoutDashboard,
-  ArrowUpRight,
-  ArrowDownRight,
   PlayCircle,
   CheckCircle2,
   Circle,
@@ -32,16 +25,15 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Progress } from "@/components/ui/progress";
+
 import StatusIndicator from "@/components/shared/StatusIndicator";
 import CreateMeetingDialog from "@/components/dialogs/CreateMeetingDialog";
 import CreateTaskDialog from "@/components/dialogs/CreateTaskDialog";
 import TaskDetailDialog from "@/components/dialogs/TaskDetailDialog";
 import JoinMeetingByCodeDialog from "@/components/dialogs/JoinMeetingByCodeDialog";
-import FocusTimer from "@/components/widgets/FocusTimer";
-import WorkHoursTracker from "@/components/widgets/WorkHoursTracker";
+
 import { auth } from "@/lib/auth";
 import { usePresence } from "@/hooks/usePresence";
 import { apiGet, apiPatch } from "@/lib/api";
@@ -549,8 +541,6 @@ export default function Dashboard() {
       iconBg: "bg-blue-500/10",
       iconColor: "text-blue-600",
       borderColor: "border-blue-500/20",
-      trend: "+12%",
-      trendUp: true,
     },
     { 
       label: "Open Tasks", 
@@ -560,8 +550,6 @@ export default function Dashboard() {
       iconBg: "bg-amber-500/10",
       iconColor: "text-amber-600",
       borderColor: "border-amber-500/20",
-      trend: "+5",
-      trendUp: true,
     },
     { 
       label: "Unread Messages", 
@@ -571,8 +559,6 @@ export default function Dashboard() {
       iconBg: "bg-purple-500/10",
       iconColor: "text-purple-600",
       borderColor: "border-purple-500/20",
-      trend: null,
-      trendUp: null,
     },
     { 
       label: "Team Online", 
@@ -582,8 +568,6 @@ export default function Dashboard() {
       iconBg: "bg-green-500/10",
       iconColor: "text-green-600",
       borderColor: "border-green-500/20",
-      trend: `${onlineCount} active`,
-      trendUp: true,
     },
   ];
 
@@ -639,126 +623,106 @@ export default function Dashboard() {
             }
           />
 
-          {/* Hero Header Section */}
-          <motion.div 
-            variants={itemVariants}
-            className="relative group"
-          >
-            <div className="absolute inset-0 bg-gradient-to-r from-primary/10 via-blue-500/5 to-purple-500/10 rounded-3xl blur-xl opacity-50 group-hover:opacity-75 transition-opacity duration-500" />
-            <Card className="relative border-0 bg-gradient-to-br from-card/80 via-card/60 to-card/40 backdrop-blur-xl shadow-2xl overflow-hidden">
-              <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:24px_24px]" />
-              <CardContent className="relative p-6 sm:p-8 lg:p-10">
-                <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
-                  <div className="space-y-4 flex-1">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center border border-primary/20">
-                        <LayoutDashboard className="w-5 h-5 text-primary" />
-                      </div>
-                      <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                        <Calendar className="w-4 h-4" />
-                        <span>
-                          {new Date().toLocaleDateString("th-TH", { 
-                            weekday: "long", 
-                            month: "long", 
-                            day: "numeric",
-                            year: "numeric"
-                          })}
-                        </span>
-                      </div>
-                    </div>
-                    <div>
-                      <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight bg-gradient-to-r from-foreground via-foreground to-foreground/80 bg-clip-text text-transparent mb-2">
-                        {greeting}, <span className="bg-gradient-to-r from-primary to-blue-600 bg-clip-text text-transparent">{currentUser?.name || "User"}</span>
-                      </h1>
-                      <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground mt-3">
-                        {nextMeeting ? (
-                          <>
-                            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/20">
-                              <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
-                              <span className="font-medium text-foreground">Next:</span>
-                              <span className="text-foreground">{nextMeeting.title}</span>
-                            </div>
-                            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-muted/50">
-                              <Clock className="w-4 h-4" />
-                              <span>{new Date(nextMeeting.startTime).toLocaleTimeString("th-TH", { hour: "numeric", minute: "2-digit" })}</span>
-                            </div>
-                          </>
-                        ) : (
-                          <div className="px-3 py-1.5 rounded-lg bg-muted/50">
-                            <span>No meetings scheduled for today</span>
-                          </div>
-                        )}
-                        <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-500/10 border border-green-500/20">
-                          <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                          <span className="font-medium text-green-600">{onlineCount}</span>
-                          <span className="text-muted-foreground">online</span>
-                        </div>
-                      </div>
-                    </div>
+          {/* Compact Hero Header */}
+          <motion.div variants={itemVariants}>
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center border border-primary/20">
+                    <LayoutDashboard className="w-4 h-4 text-primary" />
                   </div>
-
-                  <div className="flex flex-wrap gap-3 lg:flex-nowrap">
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button 
-                          variant="outline" 
-                          size="lg" 
-                          onClick={() => setShowJoinByCode(true)} 
-                          className="h-12 gap-2 border-2 bg-background/50 backdrop-blur-sm hover:bg-background hover:border-primary/50 hover:shadow-lg transition-all group"
-                        >
-                          <Hash className="h-4 w-4 group-hover:rotate-12 transition-transform" />
-                          <span className="hidden sm:inline">Join by Code</span>
-                          <span className="sm:hidden">Join</span>
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>เข้าร่วมการประชุมด้วยรหัส</TooltipContent>
-                    </Tooltip>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button 
-                          variant="outline" 
-                          size="lg" 
-                          onClick={() => setShowCreateTask(true)} 
-                          className="h-12 gap-2 border-2 bg-background/50 backdrop-blur-sm hover:bg-background hover:border-amber-500/50 hover:shadow-lg transition-all group"
-                        >
-                          <CheckSquare className="h-4 w-4 group-hover:scale-110 transition-transform" />
-                          <span className="hidden sm:inline">New Task</span>
-                          <span className="sm:hidden">Task</span>
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>สร้างงานใหม่</TooltipContent>
-                    </Tooltip>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button 
-                          variant="outline" 
-                          size="lg" 
-                          onClick={() => setShowCreateMeeting(true)} 
-                          className="h-12 gap-2 border-2 bg-background/50 backdrop-blur-sm hover:bg-background hover:border-blue-500/50 hover:shadow-lg transition-all group"
-                        >
-                          <Calendar className="h-4 w-4 group-hover:scale-110 transition-transform" />
-                          <span className="hidden sm:inline">Schedule</span>
-                          <span className="sm:hidden">Meet</span>
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>กำหนดการประชุม</TooltipContent>
-                    </Tooltip>
-                    <Button 
-                      size="lg" 
-                      className="h-12 gap-2 bg-gradient-to-r from-primary via-blue-600 to-purple-600 hover:from-primary/90 hover:via-blue-500 hover:to-purple-500 shadow-xl hover:shadow-2xl transition-all group" 
-                      asChild
-                    >
-                      <Link to="/meeting-lobby/quick-huddle">
-                        <Video className="h-4 w-4 group-hover:scale-110 transition-transform" />
-                        <span className="hidden sm:inline">Start Meeting</span>
-                        <span className="sm:hidden">Start</span>
-                        <Rocket className="h-4 w-4 ml-1 group-hover:translate-x-1 transition-transform" />
-                      </Link>
-                    </Button>
+                  <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">
+                    {greeting}, <span className="bg-gradient-to-r from-primary to-blue-600 bg-clip-text text-transparent">{currentUser?.name || "User"}</span>
+                  </h1>
+                </div>
+                <div className="flex flex-wrap items-center gap-2.5 text-xs text-muted-foreground ml-[42px]">
+                  <div className="flex items-center gap-1.5">
+                    <Calendar className="w-3.5 h-3.5" />
+                    <span>
+                      {new Date().toLocaleDateString("th-TH", { 
+                        weekday: "long", 
+                        month: "long", 
+                        day: "numeric",
+                        year: "numeric"
+                      })}
+                    </span>
+                  </div>
+                  {nextMeeting && (
+                    <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-primary/10 border border-primary/20">
+                      <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+                      <span className="font-medium text-foreground text-xs">Next: {nextMeeting.title}</span>
+                      <span className="text-muted-foreground">
+                        {new Date(nextMeeting.startTime).toLocaleTimeString("th-TH", { hour: "numeric", minute: "2-digit" })}
+                      </span>
+                    </div>
+                  )}
+                  <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-green-500/10 border border-green-500/20">
+                    <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                    <span className="font-medium text-green-600">{onlineCount}</span>
+                    <span>online</span>
                   </div>
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+
+              <div className="flex flex-wrap gap-2 lg:flex-nowrap">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={() => setShowJoinByCode(true)} 
+                      className="h-9 gap-1.5 text-xs bg-background/50 hover:bg-background hover:border-primary/50 transition-all group"
+                    >
+                      <Hash className="h-3.5 w-3.5 group-hover:rotate-12 transition-transform" />
+                      <span className="hidden sm:inline">Join by Code</span>
+                      <span className="sm:hidden">Join</span>
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>เข้าร่วมการประชุมด้วยรหัส</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={() => setShowCreateTask(true)} 
+                      className="h-9 gap-1.5 text-xs bg-background/50 hover:bg-background hover:border-amber-500/50 transition-all group"
+                    >
+                      <CheckSquare className="h-3.5 w-3.5 group-hover:scale-110 transition-transform" />
+                      <span className="hidden sm:inline">New Task</span>
+                      <span className="sm:hidden">Task</span>
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>สร้างงานใหม่</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={() => setShowCreateMeeting(true)} 
+                      className="h-9 gap-1.5 text-xs bg-background/50 hover:bg-background hover:border-blue-500/50 transition-all group"
+                    >
+                      <Calendar className="h-3.5 w-3.5 group-hover:scale-110 transition-transform" />
+                      <span className="hidden sm:inline">Schedule</span>
+                      <span className="sm:hidden">Meet</span>
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>กำหนดการประชุม</TooltipContent>
+                </Tooltip>
+                <Button 
+                  size="sm" 
+                  className="h-9 gap-1.5 text-xs bg-gradient-to-r from-primary to-blue-600 hover:from-primary/90 hover:to-blue-500 shadow-md hover:shadow-lg transition-all group" 
+                  asChild
+                >
+                  <Link to="/meeting-lobby/quick-huddle">
+                    <Video className="h-3.5 w-3.5 group-hover:scale-110 transition-transform" />
+                    <span className="hidden sm:inline">Start Meeting</span>
+                    <span className="sm:hidden">Start</span>
+                  </Link>
+                </Button>
+              </div>
+            </div>
           </motion.div>
 
           {loadError && (
@@ -791,48 +755,31 @@ export default function Dashboard() {
                   custom={index}
                 >
                   <Card
-                    className="group relative h-full border-2 bg-gradient-to-br from-card/90 via-card/70 to-card/50 backdrop-blur-xl overflow-hidden hover:shadow-2xl transition-all duration-300 cursor-pointer"
+                    className="group relative h-full border bg-card/80 backdrop-blur-xl overflow-hidden hover:shadow-lg transition-all duration-300 cursor-pointer"
                     onClick={() => handleKpiClick(kpi.label)}
                   >
                     <div className={cn("absolute inset-0 bg-gradient-to-br opacity-0 group-hover:opacity-100 transition-opacity duration-500", kpi.gradient)} />
-                    <CardContent className="relative p-6">
-                      <div className="flex items-start justify-between gap-4 mb-4">
+                    <CardContent className="relative p-4">
+                      <div className="flex items-center justify-between gap-3">
                         <div className="flex-1 min-w-0">
-                          <p className="text-xs font-semibold text-muted-foreground mb-3 uppercase tracking-wider">
+                          <p className="text-[11px] font-semibold text-muted-foreground mb-1.5 uppercase tracking-wider">
                             {kpi.label}
                           </p>
                           {loading ? (
-                            <Skeleton className="h-10 w-24 mb-2" />
+                            <Skeleton className="h-7 w-16" />
                           ) : (
-                            <div className="flex items-baseline gap-3">
-                              <p className="text-3xl sm:text-4xl font-bold tracking-tight text-foreground">
-                                {kpi.value}
-                              </p>
-                              {kpi.trend && (
-                                <div className={cn(
-                                  "flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full border",
-                                  kpi.trendUp 
-                                    ? "bg-green-500/10 text-green-600 border-green-500/30" 
-                                    : "bg-red-500/10 text-red-600 border-red-500/30"
-                                )}>
-                                  {kpi.trendUp ? (
-                                    <ArrowUpRight className="w-3 h-3" />
-                                  ) : (
-                                    <ArrowDownRight className="w-3 h-3" />
-                                  )}
-                                  <span>{kpi.trend}</span>
-                                </div>
-                              )}
-                            </div>
+                            <p className="text-2xl font-bold tracking-tight text-foreground">
+                              {kpi.value}
+                            </p>
                           )}
                         </div>
                         <div className={cn(
-                          "w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 border-2 transition-all duration-300 group-hover:scale-110 group-hover:rotate-6",
+                          "w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border transition-all duration-300 group-hover:scale-110",
                           kpi.iconBg,
                           kpi.borderColor,
                           kpi.iconColor
                         )}>
-                          <Icon className="w-7 h-7" />
+                          <Icon className="w-5 h-5" />
                         </div>
                       </div>
                     </CardContent>
@@ -843,35 +790,37 @@ export default function Dashboard() {
           </motion.div>
 
           {/* Main Content Grid */}
-          <div className="grid gap-6 lg:grid-cols-12 lg:gap-8">
-            {/* Meetings Section - Left Column */}
-            <motion.div variants={itemVariants} className="lg:col-span-7">
-              <Card className="h-full border-2 bg-gradient-to-br from-card/90 via-card/70 to-card/50 backdrop-blur-xl shadow-xl hover:shadow-2xl transition-all duration-300">
-                <CardHeader className="pb-4 border-b-2 border-border/50 bg-gradient-to-r from-muted/30 via-muted/20 to-transparent">
-                  <div className="flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500/20 to-blue-500/10 flex items-center justify-center border border-blue-500/20">
-                        <Video className="w-6 h-6 text-blue-600" />
+          <div className="grid gap-4 lg:grid-cols-12 lg:gap-5">
+            {/* Left Column: Meetings + Tasks */}
+            <div className="lg:col-span-8 space-y-4">
+            {/* Meetings Section */}
+            <motion.div variants={itemVariants}>
+              <Card className="border bg-card/80 backdrop-blur-xl shadow-sm hover:shadow-md transition-all duration-300">
+                <CardHeader className="py-3 px-4 border-b border-border/50">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500/20 to-blue-500/10 flex items-center justify-center border border-blue-500/20">
+                        <Video className="w-4 h-4 text-blue-600" />
                       </div>
                       <div>
-                        <CardTitle className="text-xl font-bold">Today's Meetings</CardTitle>
-                        <CardDescription className="text-xs mt-1">Upcoming and live meetings</CardDescription>
+                        <CardTitle className="text-sm font-bold">Today's Meetings</CardTitle>
+                        <CardDescription className="text-[11px]">Upcoming and live</CardDescription>
                       </div>
                     </div>
                     <Link 
                       to="/meetings" 
-                      className="text-xs font-semibold text-muted-foreground hover:text-primary transition-colors flex items-center gap-1.5 group"
+                      className="text-[11px] font-semibold text-muted-foreground hover:text-primary transition-colors flex items-center gap-1 group"
                     >
                       View Schedule
                       <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
                     </Link>
                   </div>
                 </CardHeader>
-                <CardContent className="p-6 space-y-4">
+                <CardContent className="p-4 space-y-3">
                   {loading ? (
-                    <div className="space-y-4">
+                    <div className="space-y-3">
                       {[0, 1, 2].map((k) => (
-                        <div key={k} className="flex items-center gap-4 rounded-xl border-2 border-border/50 bg-background/40 p-4">
+                        <div key={k} className="flex items-center gap-3 rounded-lg border border-border/50 bg-background/40 p-3">
                           <Skeleton className="h-14 w-14 rounded-xl" />
                           <div className="flex-1 space-y-2">
                             <Skeleton className="h-5 w-48" />
@@ -882,18 +831,18 @@ export default function Dashboard() {
                       ))}
                     </div>
                   ) : todayMeetings.length === 0 ? (
-                    <div className="rounded-2xl border-2 border-dashed border-border/50 bg-muted/20 p-12 text-center">
-                      <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-muted/50 to-muted/30 flex items-center justify-center mx-auto mb-6">
-                        <Calendar className="w-10 h-10 text-muted-foreground" />
+                    <div className="rounded-xl border border-dashed border-border/50 bg-muted/20 p-8 text-center">
+                      <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-muted/50 to-muted/30 flex items-center justify-center mx-auto mb-4">
+                        <Calendar className="w-7 h-7 text-muted-foreground" />
                       </div>
-                      <p className="text-base font-bold text-foreground mb-2">No upcoming meetings today</p>
-                      <p className="text-sm text-muted-foreground mb-6">Schedule one, or start a quick meeting</p>
-                      <div className="flex flex-wrap justify-center gap-3">
-                        <Button size="lg" variant="outline" onClick={() => setShowCreateMeeting(true)} className="gap-2">
+                      <p className="text-sm font-bold text-foreground mb-1">No upcoming meetings today</p>
+                      <p className="text-xs text-muted-foreground mb-4">Schedule one, or start a quick meeting</p>
+                      <div className="flex flex-wrap justify-center gap-2">
+                        <Button size="sm" variant="outline" onClick={() => setShowCreateMeeting(true)} className="gap-1.5 h-8 text-xs">
                           <Calendar className="h-4 w-4" />
-                          Schedule Meeting
+                          Schedule
                         </Button>
-                        <Button size="lg" className="gap-2 bg-gradient-to-r from-primary to-blue-600" asChild>
+                        <Button size="sm" className="gap-1.5 h-8 text-xs bg-gradient-to-r from-primary to-blue-600" asChild>
                           <Link to="/meeting-lobby/quick-huddle">
                             <Video className="h-4 w-4" />
                             Start Meeting
@@ -910,22 +859,22 @@ export default function Dashboard() {
                           animate={{ opacity: 1, x: 0 }}
                           exit={{ opacity: 0, x: 20 }}
                           transition={{ delay: i * 0.1 }}
-                          className="group flex items-center gap-4 rounded-xl border-2 border-border/50 bg-gradient-to-r from-background via-background to-muted/20 p-5 hover:border-primary/50 hover:shadow-xl transition-all duration-300"
+                          className="group flex items-center gap-3 rounded-lg border border-border/50 bg-gradient-to-r from-background to-muted/10 p-3 hover:border-primary/40 hover:shadow-md transition-all duration-300"
                         >
                           <div className={cn(
-                            "w-14 h-14 rounded-xl flex items-center justify-center shrink-0 border-2 transition-all duration-300 group-hover:scale-110",
+                            "w-10 h-10 rounded-lg flex items-center justify-center shrink-0 border transition-all duration-300 group-hover:scale-105",
                             m.isLive 
                               ? "bg-gradient-to-br from-red-500/20 to-red-500/10 border-red-500/30" 
                               : "bg-gradient-to-br from-blue-500/20 to-blue-500/10 border-blue-500/30"
                           )}>
                             <Video className={cn(
-                              "w-6 h-6",
+                              "w-4 h-4",
                               m.isLive ? "text-red-600" : "text-blue-600"
                             )} />
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-2">
-                              <p className="text-base font-bold text-foreground truncate">{m.title}</p>
+                              <p className="text-sm font-semibold text-foreground truncate">{m.title}</p>
                               {m.isLive && (
                                 <Badge className="h-6 bg-gradient-to-r from-red-500 to-red-600 text-white border-0 text-xs px-2.5 animate-pulse">
                                   <div className="w-1.5 h-1.5 rounded-full bg-white mr-1.5 animate-pulse" />
@@ -948,10 +897,10 @@ export default function Dashboard() {
                             </div>
                           </div>
                           <Button 
-                            size="lg" 
+                            size="sm" 
                             variant={m.isLive ? "default" : "outline"} 
                             className={cn(
-                              "h-11 gap-2 min-w-[100px]",
+                              "h-8 gap-1.5 text-xs min-w-[80px]",
                               m.isLive && "bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 shadow-lg"
                             )} 
                             asChild
@@ -978,23 +927,23 @@ export default function Dashboard() {
               </Card>
             </motion.div>
 
-            {/* Tasks Section - Right Column */}
-            <motion.div variants={itemVariants} className="lg:col-span-5">
-              <Card className="h-full border-2 bg-gradient-to-br from-card/90 via-card/70 to-card/50 backdrop-blur-xl shadow-xl hover:shadow-2xl transition-all duration-300">
-                <CardHeader className="pb-4 border-b-2 border-border/50 bg-gradient-to-r from-muted/30 via-muted/20 to-transparent">
-                  <div className="flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-500/20 to-amber-500/10 flex items-center justify-center border border-amber-500/20">
-                        <CheckSquare className="w-6 h-6 text-amber-600" />
+            {/* Tasks Section */}
+            <motion.div variants={itemVariants}>
+              <Card className="border bg-card/80 backdrop-blur-xl shadow-sm hover:shadow-md transition-all duration-300">
+                <CardHeader className="py-3 px-4 border-b border-border/50">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-500/20 to-amber-500/10 flex items-center justify-center border border-amber-500/20">
+                        <CheckSquare className="w-4 h-4 text-amber-600" />
                       </div>
                       <div>
-                        <CardTitle className="text-xl font-bold">My Tasks</CardTitle>
-                        <CardDescription className="text-xs mt-1">Active and pending tasks</CardDescription>
+                        <CardTitle className="text-sm font-bold">My Tasks</CardTitle>
+                        <CardDescription className="text-[11px]">Active and pending</CardDescription>
                       </div>
                     </div>
                     <Link 
                       to="/tasks" 
-                      className="text-xs font-semibold text-muted-foreground hover:text-primary transition-colors flex items-center gap-1.5 group"
+                      className="text-[11px] font-semibold text-muted-foreground hover:text-primary transition-colors flex items-center gap-1 group"
                     >
                       View All
                       <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
@@ -1005,7 +954,7 @@ export default function Dashboard() {
                   {loading ? (
                     <div className="space-y-3">
                       {[0, 1, 2, 3].map((k) => (
-                        <div key={k} className="flex items-center gap-3 rounded-xl border-2 border-border/50 bg-background/40 p-4">
+                        <div key={k} className="flex items-center gap-3 rounded-lg border border-border/50 bg-background/40 p-3">
                           <Skeleton className="h-5 w-5 rounded" />
                           <div className="flex-1 space-y-2">
                             <Skeleton className="h-4 w-56" />
@@ -1016,13 +965,13 @@ export default function Dashboard() {
                       ))}
                     </div>
                   ) : recentTasks.length === 0 ? (
-                    <div className="rounded-2xl border-2 border-dashed border-border/50 bg-muted/20 p-12 text-center">
-                      <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-muted/50 to-muted/30 flex items-center justify-center mx-auto mb-6">
-                        <CheckSquare className="w-10 h-10 text-muted-foreground" />
+                    <div className="rounded-xl border border-dashed border-border/50 bg-muted/20 p-8 text-center">
+                      <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-muted/50 to-muted/30 flex items-center justify-center mx-auto mb-4">
+                        <CheckSquare className="w-7 h-7 text-muted-foreground" />
                       </div>
-                      <p className="text-base font-bold text-foreground mb-2">No tasks assigned</p>
-                      <p className="text-sm text-muted-foreground mb-6">Create one to track your next actions</p>
-                      <Button size="lg" variant="outline" onClick={() => setShowCreateTask(true)} className="gap-2">
+                      <p className="text-sm font-bold text-foreground mb-1">No tasks assigned</p>
+                      <p className="text-xs text-muted-foreground mb-4">Create one to track your next actions</p>
+                      <Button size="sm" variant="outline" onClick={() => setShowCreateTask(true)} className="gap-1.5 h-8 text-xs">
                         <Plus className="h-4 w-4" />
                         New Task
                       </Button>
@@ -1037,7 +986,7 @@ export default function Dashboard() {
                           initial={{ opacity: 0, x: 20 }}
                           animate={{ opacity: 1, x: 0 }}
                           transition={{ delay: i * 0.05 }}
-                          className="group flex items-center gap-4 rounded-xl border-2 border-border/50 bg-gradient-to-r from-background to-muted/10 p-4 hover:border-primary/50 hover:shadow-lg transition-all duration-300 cursor-pointer"
+                          className="group flex items-center gap-3 rounded-lg border border-border/50 bg-gradient-to-r from-background to-muted/10 p-3 hover:border-primary/40 hover:shadow-md transition-all duration-300 cursor-pointer"
                           onClick={() => setSelectedTask(t)}
                         >
                           <div className={cn(
@@ -1132,51 +1081,44 @@ export default function Dashboard() {
                 </CardContent>
               </Card>
             </motion.div>
-          </div>
+            </div>{/* close left column */}
 
-          {/* Second Row */}
-          <div className="grid gap-6 lg:grid-cols-12 lg:gap-8">
+            {/* Right Column: Team Pulse + Active Rooms + Standup */}
+            <div className="lg:col-span-4 space-y-4">
             {/* Team Pulse */}
-            <motion.div variants={itemVariants} className="lg:col-span-4">
-              <Card className="h-full border-2 bg-gradient-to-br from-card/90 via-card/70 to-card/50 backdrop-blur-xl shadow-xl hover:shadow-2xl transition-all duration-300">
-                <CardHeader className="pb-4 border-b-2 border-border/50 bg-gradient-to-r from-muted/30 via-muted/20 to-transparent">
-                  <div className="flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-green-500/20 to-green-500/10 flex items-center justify-center border border-green-500/20">
-                        <Eye className="w-6 h-6 text-green-600" />
+            <motion.div variants={itemVariants}>
+              <Card className="border bg-card/80 backdrop-blur-xl shadow-sm hover:shadow-md transition-all duration-300">
+                <CardHeader className="py-3 px-4 border-b border-border/50">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-green-500/20 to-green-500/10 flex items-center justify-center border border-green-500/20">
+                        <Eye className="w-4 h-4 text-green-600" />
                       </div>
                       <div>
-                        <CardTitle className="text-xl font-bold">Team Pulse</CardTitle>
-                        <CardDescription className="text-xs mt-1">Who's online and active</CardDescription>
+                        <CardTitle className="text-sm font-bold">Team Pulse</CardTitle>
+                        <CardDescription className="text-[11px]">Who's online</CardDescription>
                       </div>
                     </div>
-                    <Link 
-                      to="/virtual-office" 
-                      className="text-xs font-semibold text-muted-foreground hover:text-primary transition-colors flex items-center gap-1.5 group"
-                    >
-                      <MapPin className="w-4 h-4" />
-                      Office
-                    </Link>
                   </div>
                 </CardHeader>
-                <CardContent className="p-6 space-y-3">
+                <CardContent className="p-4 space-y-2">
                   {loading ? (
-                    <div className="space-y-3">
+                    <div className="space-y-2">
                       {[0, 1, 2, 3].map((k) => (
                         <div key={k} className="flex items-center gap-3">
-                          <Skeleton className="h-12 w-12 rounded-full" />
-                          <div className="flex-1 space-y-2">
-                            <Skeleton className="h-4 w-28" />
-                            <Skeleton className="h-3 w-40" />
+                          <Skeleton className="h-9 w-9 rounded-full" />
+                          <div className="flex-1 space-y-1.5">
+                            <Skeleton className="h-3.5 w-24" />
+                            <Skeleton className="h-3 w-32" />
                           </div>
-                          <Skeleton className="h-7 w-24 rounded-md" />
+                          <Skeleton className="h-6 w-20 rounded-md" />
                         </div>
                       ))}
                     </div>
                   ) : teamPulseMembers.length === 0 ? (
-                    <p className="text-sm text-muted-foreground text-center py-8">No team members online</p>
+                    <p className="text-xs text-muted-foreground text-center py-6">No team members online</p>
                   ) : (
-                    teamPulseMembers.map((m, i) => {
+                    teamPulseMembers.slice(0, 6).map((m, i) => {
                       const presenceStatus: "online" | "busy" | "away" | "offline" | "dnd" = m.status as any;
 
                       const roomNames: Record<string, string> = {
@@ -1211,16 +1153,16 @@ export default function Dashboard() {
                           initial={{ opacity: 0, y: 10 }}
                           animate={{ opacity: 1, y: 0 }}
                           transition={{ delay: i * 0.05 }}
-                          className="group flex items-center gap-4 rounded-xl border-2 border-border/50 bg-gradient-to-r from-background to-muted/10 p-4 hover:border-primary/50 hover:shadow-lg transition-all duration-300"
+                          className="group flex items-center gap-3 rounded-lg border border-border/50 bg-gradient-to-r from-background to-muted/10 p-2.5 hover:border-primary/40 hover:shadow-md transition-all duration-300"
                         >
                           <div className="relative">
                             <Avatar className={cn(
-                              "h-12 w-12 ring-2 transition-all duration-300 group-hover:ring-4",
-                              m.isOnline ? "ring-green-500/30 group-hover:ring-green-500/50" : "ring-background"
+                              "h-9 w-9 ring-2 transition-all duration-300",
+                              m.isOnline ? "ring-green-500/30" : "ring-background"
                             )}>
                               <AvatarImage src={(m as any).avatar} alt={m.name || "Avatar"} />
                               <AvatarFallback className={cn(
-                                "bg-gradient-to-br text-foreground text-sm font-bold transition-colors",
+                                "bg-gradient-to-br text-foreground text-xs font-bold transition-colors",
                                 m.isOnline ? "from-green-500/20 to-green-500/10" : "from-muted/80 to-muted/60"
                               )}>
                                 {m.initials}
@@ -1232,8 +1174,8 @@ export default function Dashboard() {
                             />
                           </div>
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm font-bold text-foreground truncate mb-1">{m.name}</p>
-                            <p className="text-xs text-muted-foreground truncate">
+                            <p className="text-xs font-bold text-foreground truncate">{m.name}</p>
+                            <p className="text-[11px] text-muted-foreground truncate">
                               {m.activity && presenceStatus !== "offline"
                                 ? m.activity
                                 : statusLabels[presenceStatus]}
@@ -1242,7 +1184,7 @@ export default function Dashboard() {
                           <Badge 
                             variant="outline" 
                             className={cn(
-                              "text-xs px-3 py-1 h-7 font-semibold border-2",
+                              "text-[10px] px-2 py-0.5 h-5 font-semibold border",
                               statusColors[presenceStatus]
                             )}
                           >
@@ -1259,30 +1201,30 @@ export default function Dashboard() {
             </motion.div>
 
             {/* Active Rooms */}
-            <motion.div variants={itemVariants} className="lg:col-span-4">
-              <Card className="h-full border-2 bg-gradient-to-br from-card/90 via-card/70 to-card/50 backdrop-blur-xl shadow-xl hover:shadow-2xl transition-all duration-300">
-                <CardHeader className="pb-4 border-b-2 border-border/50 bg-gradient-to-r from-muted/30 via-muted/20 to-transparent">
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center border border-primary/20">
-                      <Video className="w-6 h-6 text-primary" />
+            <motion.div variants={itemVariants}>
+              <Card className="border bg-card/80 backdrop-blur-xl shadow-sm hover:shadow-md transition-all duration-300">
+                <CardHeader className="py-3 px-4 border-b border-border/50">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center border border-primary/20">
+                      <Video className="w-4 h-4 text-primary" />
                     </div>
                     <div>
-                      <CardTitle className="text-xl font-bold">Active Rooms</CardTitle>
-                      <CardDescription className="text-xs mt-1">Live meetings and spaces</CardDescription>
+                      <CardTitle className="text-sm font-bold">Active Rooms</CardTitle>
+                      <CardDescription className="text-[11px]">Live meetings</CardDescription>
                     </div>
                   </div>
                 </CardHeader>
-                <CardContent className="p-6 space-y-4">
+                <CardContent className="p-4 space-y-2">
                   {activeRooms.length === 0 ? (
-                    <div className="rounded-2xl border-2 border-dashed border-border/50 bg-muted/20 p-12 text-center">
-                      <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-muted/50 to-muted/30 flex items-center justify-center mx-auto mb-6">
-                        <Video className="w-10 h-10 text-muted-foreground" />
+                    <div className="rounded-xl border border-dashed border-border/50 bg-muted/20 p-6 text-center">
+                      <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-muted/50 to-muted/30 flex items-center justify-center mx-auto mb-3">
+                        <Video className="w-6 h-6 text-muted-foreground" />
                       </div>
-                      <p className="text-base font-bold text-foreground mb-2">No live rooms right now</p>
-                      <p className="text-sm text-muted-foreground mb-6">Start a quick meeting to get moving</p>
-                      <Button size="lg" className="gap-2 bg-gradient-to-r from-primary to-blue-600" asChild>
+                      <p className="text-sm font-bold text-foreground mb-1">No live rooms</p>
+                      <p className="text-xs text-muted-foreground mb-3">Start a quick meeting</p>
+                      <Button size="sm" className="gap-1.5 h-8 text-xs bg-gradient-to-r from-primary to-blue-600" asChild>
                         <Link to="/meeting-lobby/quick-huddle">
-                          <Video className="h-4 w-4" />
+                          <Video className="h-3.5 w-3.5" />
                           Start Meeting
                         </Link>
                       </Button>
@@ -1294,21 +1236,21 @@ export default function Dashboard() {
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: i * 0.05 }}
-                        className="group flex items-center gap-4 rounded-xl border-2 border-border/50 bg-gradient-to-r from-background via-background to-muted/20 p-5 hover:border-primary/50 hover:shadow-xl transition-all duration-300"
+                        className="group flex items-center gap-3 rounded-lg border border-border/50 bg-gradient-to-r from-background to-muted/10 p-3 hover:border-primary/40 hover:shadow-md transition-all duration-300"
                       >
-                        <div className="w-14 h-14 rounded-xl flex items-center justify-center shrink-0 bg-gradient-to-br from-primary/20 to-primary/10 border-2 border-primary/30 transition-transform duration-300 group-hover:scale-110">
-                          <Video className="w-6 h-6 text-primary" />
+                        <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 bg-gradient-to-br from-primary/20 to-primary/10 border border-primary/30">
+                          <Video className="w-4 h-4 text-primary" />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-base font-bold text-foreground truncate mb-2">{room.name}</p>
-                          <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                            <Users className="w-4 h-4" />
-                            <span>{room.participants?.length || 0} participants</span>
+                          <p className="text-xs font-bold text-foreground truncate">{room.name}</p>
+                          <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                            <Users className="w-3 h-3" />
+                            <span>{room.participants?.length || 0}</span>
                           </div>
                         </div>
-                        <Button size="lg" variant="outline" className="h-11 gap-2 min-w-[100px] border-2" asChild>
+                        <Button size="sm" variant="outline" className="h-7 gap-1 text-[11px] px-2" asChild>
                           <Link to={`/meeting-lobby/${room.roomId}`}>
-                            <Zap className="w-4 h-4" />
+                            <Zap className="w-3 h-3" />
                             Join
                           </Link>
                         </Button>
@@ -1320,22 +1262,22 @@ export default function Dashboard() {
             </motion.div>
 
             {/* Daily Standup */}
-            <motion.div variants={itemVariants} className="lg:col-span-4">
-              <Card className="h-full border-2 bg-gradient-to-br from-card/90 via-card/70 to-card/50 backdrop-blur-xl shadow-xl hover:shadow-2xl transition-all duration-300">
-                <CardHeader className="pb-4 border-b-2 border-border/50 bg-gradient-to-r from-muted/30 via-muted/20 to-transparent">
-                  <div className="flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500/20 to-blue-500/10 flex items-center justify-center border border-blue-500/20">
-                        <Hash className="w-6 h-6 text-blue-600" />
+            <motion.div variants={itemVariants}>
+              <Card className="border bg-card/80 backdrop-blur-xl shadow-sm hover:shadow-md transition-all duration-300">
+                <CardHeader className="py-3 px-4 border-b border-border/50">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500/20 to-blue-500/10 flex items-center justify-center border border-blue-500/20">
+                        <Hash className="w-4 h-4 text-blue-600" />
                       </div>
                       <div>
-                        <CardTitle className="text-xl font-bold">Daily Standup</CardTitle>
-                        <CardDescription className="text-xs mt-1">Team updates and blockers</CardDescription>
+                        <CardTitle className="text-sm font-bold">Daily Standup</CardTitle>
+                        <CardDescription className="text-[11px]">Updates & blockers</CardDescription>
                       </div>
                     </div>
                     {teams.length > 0 && (
                       <select
-                        className="text-xs px-3 py-2 border-2 border-border/60 rounded-lg bg-background text-foreground hover:bg-muted transition-colors font-medium"
+                        className="text-[11px] px-2 py-1 border border-border/60 rounded-md bg-background text-foreground hover:bg-muted transition-colors font-medium"
                         value={standupTeamId ?? ""}
                         onChange={(e) => setStandupTeamId(e.target.value || null)}
                       >
@@ -1348,48 +1290,48 @@ export default function Dashboard() {
                     )}
                   </div>
                 </CardHeader>
-                <CardContent className="p-6 space-y-3">
+                <CardContent className="p-4 space-y-2">
                   {standupLoading ? (
-                    <div className="space-y-3">
+                    <div className="space-y-2">
                       {[0, 1, 2].map((k) => (
                         <div key={k} className="flex items-center gap-3">
-                          <Skeleton className="h-12 w-12 rounded-full" />
-                          <div className="flex-1 space-y-2">
-                            <Skeleton className="h-4 w-32" />
-                            <Skeleton className="h-3 w-44" />
+                          <Skeleton className="h-9 w-9 rounded-full" />
+                          <div className="flex-1 space-y-1.5">
+                            <Skeleton className="h-3.5 w-28" />
+                            <Skeleton className="h-3 w-36" />
                           </div>
                         </div>
                       ))}
                     </div>
                   ) : !standupTeamId || teams.length === 0 ? (
-                    <div className="rounded-2xl border-2 border-dashed border-border/50 bg-muted/20 p-8 text-center">
-                      <p className="text-sm text-muted-foreground">
-                        No teams configured yet. Create a team and a #standup channel to start daily standups.
+                    <div className="rounded-xl border border-dashed border-border/50 bg-muted/20 p-6 text-center">
+                      <p className="text-xs text-muted-foreground">
+                        No teams configured yet. Create a team and a #standup channel to start.
                       </p>
                     </div>
                   ) : standupEntries.length === 0 ? (
-                    <div className="rounded-2xl border-2 border-dashed border-border/50 bg-muted/20 p-12 text-center">
-                      <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-muted/50 to-muted/30 flex items-center justify-center mx-auto mb-6">
-                        <Hash className="w-10 h-10 text-muted-foreground" />
+                    <div className="rounded-xl border border-dashed border-border/50 bg-muted/20 p-6 text-center">
+                      <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-muted/50 to-muted/30 flex items-center justify-center mx-auto mb-3">
+                        <Hash className="w-6 h-6 text-muted-foreground" />
                       </div>
-                      <p className="text-base font-bold text-foreground mb-2">No standup updates yet today</p>
-                      <p className="text-sm text-muted-foreground">
-                        Ask your team to post their updates in the <span className="font-bold">#standup</span> channel
+                      <p className="text-sm font-bold text-foreground mb-1">No updates yet</p>
+                      <p className="text-xs text-muted-foreground">
+                        Post updates in <span className="font-bold">#standup</span>
                       </p>
                     </div>
                   ) : (
-                    standupEntries.slice(0, 6).map((entry, i) => (
+                    standupEntries.slice(0, 4).map((entry, i) => (
                       <motion.div
                         key={entry.id}
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: i * 0.05 }}
-                        className="group rounded-xl border-2 border-border/50 bg-gradient-to-r from-background to-muted/10 p-4 hover:border-primary/50 hover:shadow-lg transition-all duration-300"
+                        className="group rounded-lg border border-border/50 bg-gradient-to-r from-background to-muted/10 p-3 hover:border-primary/40 hover:shadow-md transition-all duration-300"
                       >
-                        <div className="flex items-start gap-4">
-                          <Avatar className="h-11 w-11 ring-2 ring-background shrink-0">
+                        <div className="flex items-start gap-3">
+                          <Avatar className="h-8 w-8 ring-2 ring-background shrink-0">
                             <AvatarImage src={entry.user.avatar || undefined} alt={entry.user.name || "Avatar"} />
-                            <AvatarFallback className="bg-gradient-to-br from-muted/80 to-muted/60 text-foreground text-xs font-bold">
+                            <AvatarFallback className="bg-gradient-to-br from-muted/80 to-muted/60 text-foreground text-[10px] font-bold">
                               {(entry.user.name || "?")
                                 .split(" ")
                                 .map((n) => n[0])
@@ -1398,31 +1340,31 @@ export default function Dashboard() {
                                 .toUpperCase()}
                             </AvatarFallback>
                           </Avatar>
-                          <div className="flex-1 min-w-0 space-y-2">
+                          <div className="flex-1 min-w-0 space-y-1">
                             <div className="flex items-center justify-between gap-2">
-                              <p className="text-sm font-bold text-foreground truncate">{entry.user.name}</p>
-                              <div className="flex items-center gap-1.5 flex-wrap">
-                                <Badge variant="outline" className="h-5 px-2 text-[10px] bg-green-500/10 text-green-600 border-green-500/30 font-semibold">
+                              <p className="text-xs font-bold text-foreground truncate">{entry.user.name}</p>
+                              <div className="flex items-center gap-1 flex-wrap">
+                                <Badge variant="outline" className="h-4 px-1.5 text-[9px] bg-green-500/10 text-green-600 border-green-500/30 font-semibold">
                                   {entry.yesterday.length} done
                                 </Badge>
-                                <Badge variant="outline" className="h-5 px-2 text-[10px] bg-blue-500/10 text-blue-600 border-blue-500/30 font-semibold">
+                                <Badge variant="outline" className="h-4 px-1.5 text-[9px] bg-blue-500/10 text-blue-600 border-blue-500/30 font-semibold">
                                   {entry.today.length} today
                                 </Badge>
                                 {entry.blockers.length > 0 && (
-                                  <Badge variant="outline" className="h-5 px-2 text-[10px] bg-red-500/10 text-red-600 border-red-500/30 font-semibold">
-                                    {entry.blockers.length} blockers
+                                  <Badge variant="outline" className="h-4 px-1.5 text-[9px] bg-red-500/10 text-red-600 border-red-500/30 font-semibold">
+                                    {entry.blockers.length} blocked
                                   </Badge>
                                 )}
                               </div>
                             </div>
                             {entry.today.length > 0 && (
-                              <p className="text-xs text-muted-foreground truncate">
+                              <p className="text-[11px] text-muted-foreground truncate">
                                 📝 {entry.today[0]}
                                 {entry.today.length > 1 ? " +" + (entry.today.length - 1) + " more" : ""}
                               </p>
                             )}
                             {entry.blockers.length > 0 && (
-                              <p className="text-xs text-red-600/80 truncate">
+                              <p className="text-[11px] text-red-600/80 truncate">
                                 ⚠️ {entry.blockers[0]}
                                 {entry.blockers.length > 1 ? " +" + (entry.blockers.length - 1) + " more" : ""}
                               </p>
@@ -1435,44 +1377,8 @@ export default function Dashboard() {
                 </CardContent>
               </Card>
             </motion.div>
-          </div>
-
-          {/* Productivity Widget */}
-          <motion.div variants={itemVariants} className="lg:col-span-4">
-            <Card className="border-2 bg-gradient-to-br from-card/90 via-card/70 to-card/50 backdrop-blur-xl shadow-xl hover:shadow-2xl transition-all duration-300">
-              <CardHeader className="pb-4 border-b-2 border-border/50 bg-gradient-to-r from-muted/30 via-muted/20 to-transparent">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500/20 to-purple-500/10 flex items-center justify-center border border-purple-500/20">
-                    <Target className="w-6 h-6 text-purple-600" />
-                  </div>
-                  <div>
-                    <CardTitle className="text-xl font-bold">Productivity</CardTitle>
-                    <CardDescription className="text-xs mt-1">Focus time and work hours</CardDescription>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="p-6">
-                <Tabs defaultValue="focus" className="w-full">
-                  <TabsList className="grid w-full grid-cols-2 bg-muted/40 mb-6 border-2">
-                    <TabsTrigger value="focus" className="gap-2 data-[state=active]:bg-background data-[state=active]:shadow-sm font-semibold">
-                      <Timer className="h-4 w-4" />
-                      Focus
-                    </TabsTrigger>
-                    <TabsTrigger value="hours" className="gap-2 data-[state=active]:bg-background data-[state=active]:shadow-sm font-semibold">
-                      <BarChart3 className="h-4 w-4" />
-                      Hours
-                    </TabsTrigger>
-                  </TabsList>
-                  <TabsContent value="focus" className="mt-0">
-                    <FocusTimer />
-                  </TabsContent>
-                  <TabsContent value="hours" className="mt-0">
-                    <WorkHoursTracker />
-                  </TabsContent>
-                </Tabs>
-              </CardContent>
-            </Card>
-          </motion.div>
+            </div>{/* close right column */}
+          </div>{/* close main grid */}
 
           {/* Notification Digest */}
           {digest && !digest.isRead && (

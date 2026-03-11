@@ -24,6 +24,7 @@ import {
   Share2,
   Copy,
   Check,
+  Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -44,8 +45,18 @@ import {
 } from "@/components/ui/breadcrumb";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/ui/use-toast";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { auth } from "@/lib/auth";
-import { apiGet, apiPost, apiFetch } from "@/lib/api";
+import { apiGet, apiPost, apiFetch, apiDelete } from "@/lib/api";
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
 
@@ -152,6 +163,7 @@ export default function SharedDrive() {
   const [copiedLink, setCopiedLink] = useState<string | null>(null);
   const [imageError, setImageError] = useState(false);
   const [imageLoading, setImageLoading] = useState(true);
+  const [entryToDelete, setEntryToDelete] = useState<DriveEntry | null>(null);
 
   const loadTeams = async () => {
     try {
@@ -349,6 +361,28 @@ export default function SharedDrive() {
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
+  };
+
+  const handleDeleteEntry = async (entryId: string) => {
+    try {
+      await apiDelete(`/drive/entries/${entryId}`);
+      if (previewEntry?.id === entryId) {
+        setPreviewEntry(null);
+        setVersionsData(null);
+      }
+      await loadEntries();
+      toast({
+        title: "ลบสำเร็จ",
+        description: "รายการถูกลบออกจาก Shared Drive แล้ว",
+      });
+    } catch (e: any) {
+      console.error("Delete error:", e);
+      toast({
+        variant: "destructive",
+        title: "ลบไม่สำเร็จ",
+        description: e?.message || "โปรดลองใหม่อีกครั้ง",
+      });
+    }
   };
 
   return (
@@ -926,7 +960,23 @@ export default function SharedDrive() {
                           <span>ดาวน์โหลด</span>
                         </Button>
                       </TooltipTrigger>
-                      <TooltipContent>ดาวน์โหลดไฟล์</TooltipContent>
+                      <TooltipContent>ดาวน์โหลดไฟล์นี้</TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="destructive"
+                          size="icon"
+                          className="h-9 w-9 bg-red-500 hover:bg-red-600 text-white"
+                          onClick={() => {
+                            if (!previewEntry) return;
+                            setEntryToDelete(previewEntry);
+                          }}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>ลบข้อมูลนี้</TooltipContent>
                     </Tooltip>
                   </div>
                 )}
@@ -1168,6 +1218,32 @@ export default function SharedDrive() {
             </div>
           </DialogContent>
         </Dialog>
+
+        {/* Delete Confirmation Alert Dialog */}
+        <AlertDialog open={!!entryToDelete} onOpenChange={(open) => !open && setEntryToDelete(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>ยืนยันการลบ{entryToDelete?.isFolder ? 'โฟลเดอร์' : 'ไฟล์'}</AlertDialogTitle>
+              <AlertDialogDescription>
+                คุณแน่ใจหรือไม่ว่าต้องการลบ "{entryToDelete?.name}"?
+                การกระทำนี้ไม่สามารถกู้คืนได้ และข้อมูลทั้งหมดที่เกี่ยวข้องจะถูกลบออกจากระบบอย่างถาวร
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>ยกเลิก</AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                onClick={() => {
+                  if (entryToDelete) {
+                    handleDeleteEntry(entryToDelete.id);
+                  }
+                }}
+              >
+                ลบข้อมูล
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </TooltipProvider>
   );

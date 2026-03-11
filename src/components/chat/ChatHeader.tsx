@@ -4,7 +4,7 @@ import {
   Filter,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { AnimatePresence, motion } from "framer-motion";
 import StatusIndicator from "@/components/shared/StatusIndicator";
 
@@ -31,7 +31,7 @@ interface Channel {
 interface ChatHeaderProps {
   currentChannel: Channel | null;
   activeDm: string | null;
-  currentDmContact: { name: string; initials: string; status: string } | null;
+  currentDmContact: { name: string; initials: string; status: string; avatar?: string | null } | null;
   showPinned: boolean;
   showMembers: boolean;
   showSearchBar: boolean;
@@ -92,6 +92,7 @@ function ChatHeader({
             <>
               <div className="relative shrink-0">
                 <Avatar className="h-8 w-8">
+                  <AvatarImage src={currentDmContact.avatar || undefined} />
                   <AvatarFallback className="bg-primary/10 text-primary text-[10px] font-bold">
                     {currentDmContact.initials}
                   </AvatarFallback>

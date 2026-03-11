@@ -11,6 +11,7 @@ import { useAuth } from "@/lib/auth";
 import { apiGet } from "@/lib/api";
 import { notificationsSocket } from "@/lib/notifications-socket";
 import { getChatActive, getChatUnreadTotal, incrementChannelUnread, incrementDmUnread } from "@/lib/chat-unread";
+import ActiveMeetingBanner from "@/components/meeting/ActiveMeetingBanner";
 
 // Content-only loader — only shows inside the content pane, sidebar stays intact
 const ContentLoader = () => (
@@ -307,13 +308,17 @@ export default function AppLayout() {
               <Menu className="w-4 h-4 sm:w-5 sm:h-5" />
             </Button>
             <div className="flex-1 min-w-0">
-              <h1 className="text-xs sm:text-sm font-bold text-foreground truncate">CollabHub</h1>
-              <p className="text-[9px] sm:text-[10px] text-muted-foreground truncate">Acme Corp</p>
+              <h1 className="text-xs sm:text-sm font-bold text-foreground truncate">Team Connect</h1>
+              <p className="text-[9px] sm:text-[10px] text-muted-foreground truncate">Enterprise</p>
             </div>
           </div>
         )}
 
         <main className="flex-1 overflow-auto">
+          {/* Global Active Meeting Banner – hidden on meeting pages to avoid duplication */}
+          {!/^\/(meetings|meeting-lobby|meeting-room)/.test(location.pathname) && (
+            <ActiveMeetingBanner />
+          )}
           <Suspense fallback={<ContentLoader />}>
             <Outlet />
           </Suspense>

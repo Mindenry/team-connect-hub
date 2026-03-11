@@ -29,6 +29,10 @@ import {
   Send,
   Clock,
   AlertCircle,
+  FileSearch,
+  Calendar,
+  UserCircle,
+  Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import InviteUserDialog from "@/components/dialogs/InviteUserDialog";
@@ -61,6 +65,20 @@ import { toast } from "sonner";
 import { apiGet, apiPatch, apiDelete, apiPut, apiPost } from "@/lib/api";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Skeleton } from "@/components/ui/skeleton";
+
+interface AuditLog {
+  id: string;
+  action: string;
+  entity: string;
+  entityId: string;
+  userId: string | null;
+  userName: string | null;
+  details: any;
+  ipAddress: string | null;
+  userAgent: string | null;
+  createdAt: string;
+}
 
 interface UserRecord {
   id: string;
@@ -146,6 +164,148 @@ export default function Directory() {
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
   const [invites, setInvites] = useState<any[]>([]);
   const [invitesLoading, setInvitesLoading] = useState(false);
+
+  // Audit Logs State
+  const canAccess = useMemo(() => {
+    const r = (user?.role || "").toLowerCase();
+    return r === "org_owner" || r === "admin";
+  }, [user?.role]);
+
+  const [auditLogsLoading, setAuditLogsLoading] = useState(false);
+  const [auditLogsError, setAuditLogsError] = useState<string | null>(null);
+  const [auditFilters, setAuditFilters] = useState({
+    entity: "",
+    userId: "",
+    action: "",
+    search: "",
+  });
+  const auditLimit = 200;
+
+  const loadAuditLogs = async () => {
+    setAuditLogsLoading(true);
+    setAuditLogsError(null);
+    try {
+      const params = new URLSearchParams();
+      if (auditFilters.entity) params.append("entity", auditFilters.entity);
+      if (auditFilters.userId) params.append("userId", auditFilters.userId);
+      if (auditFilters.action) params.append("action", auditFilters.action);
+      params.append("limit", auditLimit.toString());
+
+      const data = await apiGet<AuditLog[]>(`/audit-logs?${params.toString()}`);
+      setAuditLogs(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error("Failed to load audit logs:", error);
+      setAuditLogsError("ไม่สามารถโหลด Audit Logs ได้ กรุณาลองใหม่อีกครั้ง");
+    } finally {
+      setAuditLogsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeSection === "security" && canAccess) {
+      loadAuditLogs();
+    }
+  }, [auditFilters.entity, auditFilters.userId, auditFilters.action, activeSection, canAccess]);
+
+  const getActionColor = (action: string) => {
+    switch (action.toLowerCase()) {
+      case "create": return "bg-green-100 text-green-800 dark:bg-green-500/20 dark:text-green-400 border-green-200 dark:border-green-500/30";
+      case "update": return "bg-blue-100 text-blue-800 dark:bg-blue-500/20 dark:text-blue-400 border-blue-200 dark:border-blue-500/30";
+      case "delete": return "bg-red-100 text-red-800 dark:bg-red-500/20 dark:text-red-400 border-red-200 dark:border-red-500/30";
+      case "upload": return "bg-purple-100 text-purple-800 dark:bg-purple-500/20 dark:text-purple-400 border-purple-200 dark:border-purple-500/30";
+      case "login": return "bg-indigo-100 text-indigo-800 dark:bg-indigo-500/20 dark:text-indigo-400 border-indigo-200 dark:border-indigo-500/30";
+      case "logout": return "bg-gray-100 text-gray-800 dark:bg-gray-500/20 dark:text-gray-400 border-gray-200 dark:border-gray-500/30";
+      default: return "bg-gray-100 text-gray-800 dark:bg-gray-500/20 dark:text-gray-400 border-gray-200 dark:border-gray-500/30";
+    }
+  };
+
+  const getEntityIcon = (entity: string) => {
+    switch (entity.toLowerCase()) {
+      case "user": return "👤";
+      case "task": return "📋";
+      case "meeting": return "📹";
+      case "message": return "💬";
+      case "team": return "👥";
+      case "file": return "📁";
+      default: return "📄";
+    }
+  };
+
+  const getEntityLabel = (entity: string) => {
+    switch (entity.toLowerCase()) {
+      case "user": return "User";
+      case "task": return "Task";
+      case "meeting": return "Meeting";
+      case "message": return "Message";
+      case "team": return "Team";
+      case "file":
+      case "document": return "File / Document";
+      default: return entity || "Unknown";
+    }
+  };
+
+  const formatAuditDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return new Intl.DateTimeFormat("th-TH", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(date);
+  };
+
+  const exportLogs = () => {
+    const csv = [
+      ["Action", "Entity", "Entity ID", "User", "IP Address", "Date", "Details"].join(","),
+      ...auditLogs.map((log) =>
+        [
+          log.action,
+          log.entity,
+          log.entityId,
+          log.userName || "System",
+          log.ipAddress || "N/A",
+          formatAuditDate(log.createdAt),
+          JSON.stringify(log.details || {}).replace(/,/g, "，"), // safe csv
+        ].join(",")
+      ),
+    ].join("\n");
+
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `audit-logs-${new Date().toISOString().split("T")[0]}.csv`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+  };
+
+  const filteredAuditLogs = useMemo(() => {
+    let result = auditLogs;
+    if (auditFilters.search) {
+      const searchLower = auditFilters.search.toLowerCase();
+      result = result.filter((log) => {
+        const detailsText = typeof log.details === "string" ? log.details : JSON.stringify(log.details || {});
+        return (
+          log.action.toLowerCase().includes(searchLower) ||
+          log.entity.toLowerCase().includes(searchLower) ||
+          log.userName?.toLowerCase().includes(searchLower) ||
+          log.entityId.toLowerCase().includes(searchLower) ||
+          detailsText.toLowerCase().includes(searchLower)
+        );
+      });
+    }
+    return result;
+  }, [auditLogs, auditFilters.search]);
+
+  const auditStats = useMemo(() => {
+    const total = auditLogs.length;
+    const uniqueUsers = new Set(auditLogs.map((l) => l.userId).filter(Boolean)).size;
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    const todayCount = auditLogs.filter((l) => new Date(l.createdAt).getTime() >= startOfToday.getTime()).length;
+    return { total, uniqueUsers, todayCount };
+  }, [auditLogs]);
 
   // Permissions matrix state
   interface PermRecord { role: string; resource: string; action: string; allowed: boolean }
@@ -431,10 +591,7 @@ export default function Directory() {
     };
   }, [users]);
 
-  const canAccess = useMemo(() => {
-    const r = (user?.role || "").toLowerCase();
-    return r === "org_owner" || r === "admin";
-  }, [user?.role]);
+  const canAccessValueFromAbove = canAccess; // Using the hoisted one
 
   // If user cannot access admin, force them to the directory view only
   useEffect(() => {
@@ -627,31 +784,6 @@ export default function Directory() {
                   <CardTitle className="text-base font-semibold">User Management</CardTitle>
                   <CardDescription className="text-xs">Search, filter, and manage user access across the organization.</CardDescription>
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  <Select value={roleFilter} onValueChange={setRoleFilter}>
-                    <SelectTrigger className="h-9 w-32 bg-background/60 border-border/60">
-                      <SelectValue placeholder="Role" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Roles</SelectItem>
-                      <SelectItem value="Admin">Admin</SelectItem>
-                      <SelectItem value="Manager">Manager</SelectItem>
-                      <SelectItem value="Member">Member</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Select value={statusFilter} onValueChange={setStatusFilter}>
-                    <SelectTrigger className="h-9 w-32 bg-background/60 border-border/60">
-                      <SelectValue placeholder="Status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Status</SelectItem>
-                      <SelectItem value="online">Online</SelectItem>
-                      <SelectItem value="offline">Offline</SelectItem>
-                      <SelectItem value="busy">Busy</SelectItem>
-                      <SelectItem value="away">Away</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
               </div>
             </CardHeader>
             <CardContent className="space-y-5">
@@ -830,10 +962,6 @@ export default function Directory() {
                     <CardTitle className="text-base font-semibold">Invitation History</CardTitle>
                     <CardDescription className="text-xs">Track all invitations sent to new members.</CardDescription>
                   </div>
-                  <Button size="sm" className="h-9 gap-1.5 text-xs font-medium shrink-0" onClick={() => setShowInviteDialog(true)}>
-                    <UserPlus className="w-3.5 h-3.5" />
-                    Invite User
-                  </Button>
                 </div>
               </CardHeader>
               <CardContent className="space-y-5">
@@ -1158,164 +1286,319 @@ export default function Directory() {
         )}
 
         {activeSection === "security" && (
-          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} key="security" className="max-w-2xl space-y-5">
-            <Card className="border border-border/60 bg-card/80 backdrop-blur-sm shadow-sm">
-              <CardHeader>
-                <CardTitle className="text-base font-semibold">Password Policy</CardTitle>
-                <CardDescription className="text-xs">Define password requirements for all users.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label>Minimum Password Length</Label>
-                    <Input
-                      type="number"
-                      value={securitySettings.minPasswordLength}
-                      onChange={(e) =>
-                        setSecuritySettings({
-                          ...securitySettings,
-                          minPasswordLength: parseInt(e.target.value) || 8,
-                        })
-                      }
-                      className="mt-1.5 bg-background/60 border-border/60"
-                    />
-                  </div>
-                  <div>
-                    <Label>Session Timeout (minutes)</Label>
-                    <Input
-                      type="number"
-                      value={securitySettings.sessionTimeout}
-                      onChange={(e) =>
-                        setSecuritySettings({
-                          ...securitySettings,
-                          sessionTimeout: parseInt(e.target.value) || 480,
-                        })
-                      }
-                      className="mt-1.5 bg-background/60 border-border/60"
-                    />
-                  </div>
-                </div>
-                <Separator className="opacity-50" />
-                {[
-                  { key: "requireUppercase", label: "Require uppercase letter" },
-                  { key: "requireLowercase", label: "Require lowercase letter" },
-                  { key: "requireNumber", label: "Require number" },
-                  { key: "requireSpecial", label: "Require special character" },
-                ].map((item) => (
-                  <div key={item.key} className="flex items-center justify-between py-1.5">
-                    <span className="text-sm text-foreground">{item.label}</span>
-                    <Switch
-                      checked={securitySettings[item.key as keyof typeof securitySettings] as boolean}
-                      onCheckedChange={(checked) =>
-                        setSecuritySettings({
-                          ...securitySettings,
-                          [item.key]: checked,
-                        })
-                      }
-                    />
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-            <Card className="border border-border/60 bg-card/80 backdrop-blur-sm shadow-sm">
-              <CardHeader>
-                <CardTitle className="text-base font-semibold">Meeting Security</CardTitle>
-                <CardDescription className="text-xs">Control meeting security defaults for your organization.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {[
-                  {
-                    key: "waitingRoomDefault",
-                    label: "Enable Waiting Room by default",
-                    desc: "New meetings will have waiting room enabled",
-                  },
-                  {
-                    key: "onlyHostShareScreen",
-                    label: "Only host can share screen",
-                    desc: "Participants need host permission to share",
-                  },
-                  {
-                    key: "lockMeetingsAuto",
-                    label: "Lock meetings automatically after start",
-                    desc: "Prevent uninvited participants",
-                  },
-                ].map((item) => (
-                  <div key={item.key} className="flex items-center justify-between py-2 group">
+          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} key="security" className="w-full space-y-5">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 w-full">
+              <Card className="border border-border/60 bg-card/80 backdrop-blur-sm shadow-sm h-full flex flex-col">
+                <CardHeader>
+                  <CardTitle className="text-base font-semibold">Password Policy</CardTitle>
+                  <CardDescription className="text-xs">Define password requirements for all users.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4 flex-1">
+                  <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <p className="text-sm font-medium text-foreground">{item.label}</p>
-                      <p className="text-[11px] text-muted-foreground">{item.desc}</p>
+                      <Label>Minimum Password Length</Label>
+                      <Input
+                        type="number"
+                        value={securitySettings.minPasswordLength}
+                        onChange={(e) =>
+                          setSecuritySettings({
+                            ...securitySettings,
+                            minPasswordLength: parseInt(e.target.value) || 8,
+                          })
+                        }
+                        className="mt-1.5 bg-background/60 border-border/60"
+                      />
                     </div>
-                    <Switch
-                      checked={
-                        securitySettings[item.key as keyof typeof securitySettings] as boolean
-                      }
-                      onCheckedChange={(checked) =>
-                        setSecuritySettings({
-                          ...securitySettings,
-                          [item.key]: checked,
-                        })
-                      }
-                    />
+                    <div>
+                      <Label>Session Timeout (minutes)</Label>
+                      <Input
+                        type="number"
+                        value={securitySettings.sessionTimeout}
+                        onChange={(e) =>
+                          setSecuritySettings({
+                            ...securitySettings,
+                            sessionTimeout: parseInt(e.target.value) || 480,
+                          })
+                        }
+                        className="mt-1.5 bg-background/60 border-border/60"
+                      />
+                    </div>
                   </div>
-                ))}
-              </CardContent>
-            </Card>
-            <Button onClick={handleSaveSecuritySettings} className="gap-2 bg-gradient-to-r from-primary to-blue-600 hover:from-primary/90 hover:to-blue-500 shadow-lg">
-              <Save className="w-4 h-4" />
-              Save Policy
-            </Button>
+                  <Separator className="opacity-50" />
+                  <div className="space-y-1">
+                    {[
+                      { key: "requireUppercase", label: "Require uppercase letter" },
+                      { key: "requireLowercase", label: "Require lowercase letter" },
+                      { key: "requireNumber", label: "Require number" },
+                      { key: "requireSpecial", label: "Require special character" },
+                    ].map((item) => (
+                      <div key={item.key} className="flex items-center justify-between py-1.5">
+                        <span className="text-sm text-foreground">{item.label}</span>
+                        <Switch
+                          checked={securitySettings[item.key as keyof typeof securitySettings] as boolean}
+                          onCheckedChange={(checked) =>
+                            setSecuritySettings({
+                              ...securitySettings,
+                              [item.key]: checked,
+                            })
+                          }
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+              <Card className="border border-border/60 bg-card/80 backdrop-blur-sm shadow-sm h-full flex flex-col">
+                <CardHeader>
+                  <CardTitle className="text-base font-semibold">Meeting Security</CardTitle>
+                  <CardDescription className="text-xs">Control meeting security defaults for your organization.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4 flex-1">
+                  <div className="space-y-1">
+                    {[
+                      {
+                        key: "waitingRoomDefault",
+                        label: "Enable Waiting Room by default",
+                        desc: "New meetings will have waiting room enabled",
+                      },
+                      {
+                        key: "onlyHostShareScreen",
+                        label: "Only host can share screen",
+                        desc: "Participants need host permission to share",
+                      },
+                      {
+                        key: "lockMeetingsAuto",
+                        label: "Lock meetings automatically after start",
+                        desc: "Prevent uninvited participants",
+                      },
+                    ].map((item) => (
+                      <div key={item.key} className="flex items-center justify-between py-3 group">
+                        <div>
+                          <p className="text-sm font-medium text-foreground">{item.label}</p>
+                          <p className="text-[11px] text-muted-foreground">{item.desc}</p>
+                        </div>
+                        <Switch
+                          checked={
+                            securitySettings[item.key as keyof typeof securitySettings] as boolean
+                          }
+                          onCheckedChange={(checked) =>
+                            setSecuritySettings({
+                              ...securitySettings,
+                              [item.key]: checked,
+                            })
+                          }
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+            
+            <div className="pt-2">
+              <Button onClick={handleSaveSecuritySettings} className="gap-2 bg-gradient-to-r from-primary to-blue-600 hover:from-primary/90 hover:to-blue-500 shadow-lg">
+                <Save className="w-4 h-4" />
+                Save Policy
+              </Button>
+            </div>
+
+            <Separator className="my-8 opacity-50" />
+
+            {/*  ══════ Audit Log Section ══════ */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between pb-2 border-b border-border/50">
+                <div>
+                  <h3 className="text-lg font-bold text-foreground flex items-center gap-2">
+                    <FileSearch className="w-5 h-5 text-primary" />
+                    Audit Log
+                  </h3>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Track system activities, events, and user actions.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button variant="outline" size="icon" className="h-9 w-9 border-border/60" onClick={loadAuditLogs}>
+                        <RefreshCw className="w-4 h-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Refresh</TooltipContent>
+                  </Tooltip>
+                  <Button variant="outline" size="sm" className="h-9 border-border/60" onClick={exportLogs}>
+                    <Download className="w-4 h-4 mr-2" />
+                    Export CSV
+                  </Button>
+                </div>
+              </div>
+
+              {/* Stats */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <Card className="border border-border/60 bg-card/80 backdrop-blur-sm shadow-sm py-3 px-4">
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <span className="text-xs font-medium text-muted-foreground">Total Events</span>
+                    <Zap className="w-3.5 h-3.5 text-primary" />
+                  </div>
+                  <div className="text-xl font-bold">{auditStats.total.toLocaleString("th-TH")}</div>
+                </Card>
+                <Card className="border border-border/60 bg-card/80 backdrop-blur-sm shadow-sm py-3 px-4">
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <span className="text-xs font-medium text-muted-foreground">Active Users</span>
+                    <UserCircle className="w-3.5 h-3.5 text-emerald-500" />
+                  </div>
+                  <div className="text-xl font-bold">{auditStats.uniqueUsers.toLocaleString("th-TH")}</div>
+                </Card>
+                <Card className="border border-border/60 bg-card/80 backdrop-blur-sm shadow-sm py-3 px-4">
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <span className="text-xs font-medium text-muted-foreground">Today's Events</span>
+                    <Clock className="w-3.5 h-3.5 text-indigo-500" />
+                  </div>
+                  <div className="text-xl font-bold">{auditStats.todayCount.toLocaleString("th-TH")}</div>
+                </Card>
+              </div>
+
+              {/* Filters */}
+              <Card className="border border-border/60 bg-card/80 backdrop-blur-sm shadow-sm overflow-visible">
+                <CardHeader className="py-3 px-4 pb-2 border-b border-border/30">
+                  <div className="flex items-center gap-2">
+                    <Filter className="w-4 h-4 text-muted-foreground" />
+                    <CardTitle className="text-sm">Filters</CardTitle>
+                  </div>
+                </CardHeader>
+                <CardContent className="p-4 space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Search</Label>
+                      <div className="relative">
+                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                        <Input
+                          placeholder="Search details..."
+                          value={auditFilters.search}
+                          onChange={(e) => setAuditFilters({ ...auditFilters, search: e.target.value })}
+                          className="pl-8 h-8 text-xs bg-background/50"
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Entity</Label>
+                      <Select
+                        value={auditFilters.entity || "all"}
+                        onValueChange={(val) => setAuditFilters({ ...auditFilters, entity: val === "all" ? "" : val })}
+                      >
+                        <SelectTrigger className="h-8 text-xs bg-background/50">
+                          <SelectValue placeholder="All entities" />
+                        </SelectTrigger>
+                        <SelectContent side="bottom" className="max-h-64">
+                          <SelectItem value="all">All entities</SelectItem>
+                          <SelectItem value="user">User</SelectItem>
+                          <SelectItem value="task">Task</SelectItem>
+                          <SelectItem value="meeting">Meeting</SelectItem>
+                          <SelectItem value="message">Message</SelectItem>
+                          <SelectItem value="team">Team</SelectItem>
+                          <SelectItem value="file">File/Doc</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Action</Label>
+                      <Select
+                        value={auditFilters.action || "all"}
+                        onValueChange={(val) => setAuditFilters({ ...auditFilters, action: val === "all" ? "" : val })}
+                      >
+                        <SelectTrigger className="h-8 text-xs bg-background/50">
+                          <SelectValue placeholder="All actions" />
+                        </SelectTrigger>
+                        <SelectContent side="bottom" className="max-h-64">
+                          <SelectItem value="all">All actions</SelectItem>
+                          <SelectItem value="create">Create</SelectItem>
+                          <SelectItem value="update">Update</SelectItem>
+                          <SelectItem value="delete">Delete</SelectItem>
+                          <SelectItem value="upload">Upload</SelectItem>
+                          <SelectItem value="login">Login</SelectItem>
+                          <SelectItem value="logout">Logout</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">User ID</Label>
+                      <Input
+                        placeholder="Filter by ID"
+                        value={auditFilters.userId}
+                        onChange={(e) => setAuditFilters({ ...auditFilters, userId: e.target.value })}
+                        className="h-8 text-xs bg-background/50"
+                      />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Logs List */}
+              <Card className="border border-border/60 bg-card/80 backdrop-blur-sm shadow-sm flex flex-col min-h-0">
+                <CardHeader className="py-3 px-4 border-b border-border/30">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <Shield className="w-4 h-4 text-primary" />
+                    Activity Logs ({filteredAuditLogs.length})
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-0 flex-1">
+                  {auditLogsLoading ? (
+                    <div className="p-4 space-y-3">
+                      {Array.from({ length: 4 }).map((_, i) => (
+                        <div key={i} className="flex gap-3">
+                          <Skeleton className="h-8 w-8 rounded-full" />
+                          <div className="flex-1 space-y-2">
+                            <Skeleton className="h-3 w-32" />
+                            <Skeleton className="h-3 w-64" />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : auditLogsError ? (
+                    <div className="p-8 text-center text-sm text-destructive">{auditLogsError}</div>
+                  ) : filteredAuditLogs.length === 0 ? (
+                    <div className="p-8 text-center text-sm text-muted-foreground">No audit logs match criteria</div>
+                  ) : (
+                    <ScrollArea className="h-[400px]">
+                      <div className="divide-y divide-border/40">
+                        {filteredAuditLogs.map((log) => (
+                          <div key={log.id} className="p-4 hover:bg-muted/30 transition-colors flex gap-3">
+                            <div className="w-8 h-8 rounded-full bg-background border border-border/50 shadow-sm flex items-center justify-center shrink-0 text-sm mt-0.5">
+                              {getEntityIcon(log.entity)}
+                            </div>
+                            <div className="flex-1 min-w-0 space-y-1.5">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <Badge variant="secondary" className={cn("text-[10px] h-5 px-1.5 capitalize font-medium", getActionColor(log.action))}>
+                                  {log.action}
+                                </Badge>
+                                <span className="text-xs font-semibold text-foreground">{getEntityLabel(log.entity)}</span>
+                                <span className="text-[10px] text-muted-foreground">#{log.entityId.substring(0,8)}</span>
+                              </div>
+                              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-muted-foreground">
+                                <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />{formatAuditDate(log.createdAt)}</span>
+                                {log.userName && <span className="flex items-center gap-1"><UserCircle className="w-3 h-3" />{log.userName}</span>}
+                                {log.ipAddress && <span className="flex items-center gap-1"><span className="font-mono bg-muted px-1 rounded">IP</span>{log.ipAddress}</span>}
+                              </div>
+                              {log.details && Object.keys(log.details).length > 0 && (
+                                <details className="mt-2 group">
+                                  <summary className="text-[10px] text-primary cursor-pointer hover:underline mb-1">View Details</summary>
+                                  <pre className="p-2 bg-background border border-border/50 rounded-md text-[10px] overflow-auto max-h-32 text-muted-foreground">
+                                    {JSON.stringify(log.details, null, 2)}
+                                  </pre>
+                                </details>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </ScrollArea>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
           </motion.div>
         )}
 
-        {activeSection === "audit" && (
-          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} key="audit" className="max-w-4xl space-y-5">
-            <div className="flex items-center justify-between">
-              <h2 className="text-xl font-bold text-foreground">Audit Log</h2>
-              <Button variant="outline" size="sm">
-                <Download className="w-4 h-4 mr-2" />
-                Export
-              </Button>
-            </div>
-            <Card>
-              <CardContent className="p-0">
-                <ScrollArea className="h-[600px]">
-                  <div className="divide-y">
-                    {auditLogs.length === 0 ? (
-                      <div className="p-8 text-center text-muted-foreground">
-                        No audit logs found
-                      </div>
-                    ) : (
-                      auditLogs.map((log) => (
-                        <div key={log.id} className="flex items-start gap-3 px-4 py-3 hover:bg-muted/50">
-                          <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
-                            <Eye className="w-4 h-4 text-primary" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm text-foreground">
-                              <span className="font-medium">
-                                {log.user?.name || "Unknown User"}
-                              </span>{" "}
-                              <span className="text-muted-foreground">{log.action}</span>{" "}
-                              <span className="text-muted-foreground">{log.entity}</span>
-                            </p>
-                            {log.details && (
-                              <p className="text-xs text-muted-foreground mt-1">
-                                {JSON.stringify(log.details)}
-                              </p>
-                            )}
-                            <p className="text-xs text-muted-foreground mt-1">
-                              {new Date(log.createdAt).toLocaleString()}
-                            </p>
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </ScrollArea>
-              </CardContent>
-            </Card>
-          </motion.div>
-        )}
+
             </div>
           </div>
         </div>

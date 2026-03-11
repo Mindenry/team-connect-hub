@@ -454,16 +454,15 @@ export default function InviteSetup() {
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.5 }}
           >
-            <div
-              className="w-10 h-10 rounded-xl flex items-center justify-center"
-              style={{
-                background: "linear-gradient(135deg, hsl(217 91% 55%), hsl(260 80% 55%))",
-                boxShadow: "0 0 20px hsl(217 91% 55% / 0.3)",
-              }}
-            >
-              <Sparkles className="w-5 h-5 text-white" />
+            <div className="w-9 h-9 flex items-center justify-center bg-[#2563eb] rounded-lg shadow-md border border-white/10">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-white">
+                <path d="M16 8h-6a2 2 0 0 0 -2 2v6" />
+                <path d="M16 8v6a2 2 0 0 1 -2 2h-6" />
+                <circle cx="8" cy="8" r="2.5" fill="currentColor" stroke="none" />
+                <circle cx="16" cy="16" r="2.5" fill="currentColor" stroke="none" />
+              </svg>
             </div>
-            <span className="text-white/90 font-semibold text-lg tracking-tight">CollabHub</span>
+            <span className="text-white font-bold text-xl tracking-tight">Team Connect</span>
           </motion.div>
 
           {/* Center */}
@@ -533,16 +532,15 @@ export default function InviteSetup() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4 }}
           >
-            <div
-              className="w-10 h-10 rounded-xl flex items-center justify-center"
-              style={{
-                background: "linear-gradient(135deg, hsl(217 91% 55%), hsl(260 80% 55%))",
-                boxShadow: "0 0 20px hsl(217 91% 55% / 0.3)",
-              }}
-            >
-              <Sparkles className="w-5 h-5 text-white" />
+            <div className="w-9 h-9 flex items-center justify-center bg-[#2563eb] rounded-lg shadow-md border border-white/10">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-white">
+                <path d="M16 8h-6a2 2 0 0 0 -2 2v6" />
+                <path d="M16 8v6a2 2 0 0 1 -2 2h-6" />
+                <circle cx="8" cy="8" r="2.5" fill="currentColor" stroke="none" />
+                <circle cx="16" cy="16" r="2.5" fill="currentColor" stroke="none" />
+              </svg>
             </div>
-            <span className="text-white/90 font-semibold text-lg tracking-tight">CollabHub</span>
+            <span className="text-white font-bold text-xl tracking-tight">Team Connect</span>
           </motion.div>
 
           <MobileStepIndicator currentStep={step} />

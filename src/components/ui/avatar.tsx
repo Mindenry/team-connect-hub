@@ -18,9 +18,17 @@ Avatar.displayName = AvatarPrimitive.Root.displayName;
 const AvatarImage = React.forwardRef<
   React.ElementRef<typeof AvatarPrimitive.Image>,
   React.ComponentPropsWithoutRef<typeof AvatarPrimitive.Image>
->(({ className, ...props }, ref) => (
-  <AvatarPrimitive.Image ref={ref} className={cn("aspect-square h-full w-full object-cover", className)} {...props} />
-));
+>(({ className, src, ...props }, ref) => {
+  let finalSrc = src;
+  if (src && (src.startsWith('/uploads') || src.startsWith('uploads/'))) {
+    const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
+    finalSrc = src.startsWith('/') ? `${API_BASE}${src}` : `${API_BASE}/${src}`;
+  }
+
+  return (
+    <AvatarPrimitive.Image ref={ref} className={cn("aspect-square h-full w-full object-cover", className)} src={finalSrc} {...props} />
+  );
+});
 AvatarImage.displayName = AvatarPrimitive.Image.displayName;
 
 const AvatarFallback = React.forwardRef<

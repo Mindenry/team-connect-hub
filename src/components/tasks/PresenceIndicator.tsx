@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
 import { Circle } from "lucide-react";
 
@@ -42,6 +42,7 @@ export function PresenceIndicator({ users, maxVisible = 5, className }: Presence
             user.isViewing && "border-blue-500",
             !user.isEditing && !user.isViewing && "border-border"
           )}>
+            <AvatarImage src={user.avatar || undefined} alt={user.name} />
             <AvatarFallback className={cn(
               "text-[10px] font-semibold",
               user.isEditing && "bg-primary/10 text-primary",

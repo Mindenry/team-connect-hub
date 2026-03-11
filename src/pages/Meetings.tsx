@@ -60,7 +60,7 @@ interface Meeting {
 interface ActiveRoom {
   roomId: string;
   name: string;
-  participants: Array<{ peerId: string; name: string; userId?: string }>;
+  participants: Array<{ peerId: string; name: string; userId?: string; avatar?: string }>;
   createdAt: Date;
 }
 

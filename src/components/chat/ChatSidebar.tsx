@@ -5,7 +5,7 @@ import {
   Megaphone, Volume2, X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import StatusIndicator from "@/components/shared/StatusIndicator";
 
 const channelIcons: Record<string, React.ElementType> = {
@@ -43,6 +43,7 @@ interface DmContact {
   status: string;
   unread: number;
   lastMsg: string;
+  avatar?: string | null;
 }
 
 interface ChatSidebarProps {
@@ -233,6 +234,7 @@ function ChatSidebar({
                         {/* Avatar with status */}
                         <div className="relative shrink-0">
                           <Avatar className="w-7 h-7">
+                            <AvatarImage src={contact.avatar || undefined} />
                             <AvatarFallback className={cn("text-[10px] font-bold", isActive ? "bg-primary/20 text-primary" : "bg-muted text-muted-foreground")}>
                               {contact.initials || getInitials(contact.name)}
                             </AvatarFallback>

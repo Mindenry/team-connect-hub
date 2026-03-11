@@ -23,6 +23,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { auth } from "@/lib/auth";
 import { getSocket } from "@/lib/websocket";
 import {
@@ -71,6 +72,7 @@ interface ParticipantState {
 interface Participant {
   peerId: string;
   name: string;
+  avatar?: string;
   state: ParticipantState;
   isSpeaking?: boolean;
 }
@@ -643,6 +645,7 @@ function MeetingRoomUI({ meetingId: propMeetingId, meetingTitle: propMeetingTitl
       setParticipants(list.map(p => ({
         peerId: p.peerId,
         name: p.name,
+        avatar: p.avatar,
         state: p.state,
       })));
     };
@@ -651,7 +654,7 @@ function MeetingRoomUI({ meetingId: propMeetingId, meetingTitle: propMeetingTitl
     const handleJoined = (data: { peerId: string; name: string; avatar?: string; state: ParticipantState }) => {
       setParticipants(prev => {
         if (prev.some(p => p.peerId === data.peerId)) return prev;
-        return [...prev, { peerId: data.peerId, name: data.name, state: data.state }];
+        return [...prev, { peerId: data.peerId, name: data.name, avatar: data.avatar, state: data.state }];
       });
     };
 
@@ -892,14 +895,33 @@ function MeetingRoomUI({ meetingId: propMeetingId, meetingTitle: propMeetingTitl
       if (localScreenShareRef.current) {
         localScreenShareRef.current.srcObject = null;
       }
+      if (lkLocal) {
+        lkLocal.setScreenShareEnabled(false).catch(err => console.warn("LiveKit disable screen share error:", err));
+      }
       setIsScreenSharing(false);
     } else {
       try {
-        const screen = await navigator.mediaDevices.getDisplayMedia({
-          video: { width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30 } }
-        });
+        let screenTrack: MediaStreamTrack;
+        let screen: MediaStream;
+        
+        // Use LiveKit's screen share if available, to avoid double prompting
+        if (lkLocal) {
+          await lkLocal.setScreenShareEnabled(true, { audio: true });
+          const pub = lkLocal.getTrackPublication(Track.Source.ScreenShare);
+          if (!pub?.videoTrack?.mediaStreamTrack) {
+            throw new Error("LiveKit failed to attach screen track");
+          }
+          screenTrack = pub.videoTrack.mediaStreamTrack;
+          screen = new MediaStream([screenTrack]);
+        } else {
+          // Fallback manual prompt
+          screen = await navigator.mediaDevices.getDisplayMedia({
+            video: { width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30 } }
+          });
+          screenTrack = screen.getVideoTracks()[0];
+        }
+
         screenStreamRef.current = screen;
-        const screenTrack = screen.getVideoTracks()[0];
         
         // Add screen track as a second track (don't replace camera track)
         peersRef.current.forEach(peer => {
@@ -922,6 +944,7 @@ function MeetingRoomUI({ meetingId: propMeetingId, meetingTitle: propMeetingTitl
         if (localVideoRef.current && isCameraOn && localStreamRef.current) {
           localVideoRef.current.srcObject = localStreamRef.current;
         }
+        
         screenTrack.onended = () => toggleScreenShare();
         setIsScreenSharing(true);
       } catch (err) {
@@ -1275,6 +1298,7 @@ function MeetingRoomUI({ meetingId: propMeetingId, meetingTitle: propMeetingTitl
   const allParticipants: Array<{
     peerId: string;
     name: string;
+    avatar?: string;
     state: ParticipantState;
     isSpeaking?: boolean;
     isLocal: boolean;
@@ -1285,6 +1309,7 @@ function MeetingRoomUI({ meetingId: propMeetingId, meetingTitle: propMeetingTitl
   allParticipants.push({
       peerId: peerId.current,
       name: userName + " (You)",
+      avatar: currentUser?.avatar,
       state: { isMuted, isCameraOn, isScreenSharing, isHandRaised },
       isSpeaking: isSpeaking && !isMuted,
       isLocal: true,
@@ -1308,6 +1333,7 @@ function MeetingRoomUI({ meetingId: propMeetingId, meetingTitle: propMeetingTitl
     // Main tile (Camera/Avatar)
     allParticipants.push({
       ...p,
+      avatar: p.avatar,
       isSpeaking: p.isSpeaking && !p.state.isMuted,
       isLocal: false,
     });
@@ -1616,13 +1642,16 @@ function MeetingRoomUI({ meetingId: propMeetingId, meetingTitle: propMeetingTitl
                       />
                             {!isCameraOn && (
                               <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-[#1a1a1a] to-[#0f0f0f]">
-                          <div className={cn(
-                                  "w-20 h-20 rounded-full bg-gradient-to-br from-[#3d3d3d] to-[#2d2d2d] flex items-center justify-center shadow-xl transition-all duration-300",
+                                <Avatar className={cn(
+                                  "w-20 h-20 shadow-xl transition-all duration-300",
                                   p.isSpeaking && "ring-4 ring-green-500/60 ring-offset-4 ring-offset-[#1a1a1a] scale-110"
-                          )}>
-                                  <span className="text-white text-xl font-semibold">{initials}</span>
-                          </div>
-                        </div>
+                                )}>
+                                  <AvatarImage src={p.avatar} />
+                                  <AvatarFallback className="bg-gradient-to-br from-[#3d3d3d] text-white text-xl font-semibold to-[#2d2d2d] flex items-center justify-center">
+                                    {initials}
+                                  </AvatarFallback>
+                                </Avatar>
+                              </div>
                             )}
                           </>
                       )}
@@ -1637,14 +1666,23 @@ function MeetingRoomUI({ meetingId: propMeetingId, meetingTitle: propMeetingTitl
                                 if (el) {
                                   const basePeerId = p.peerId.replace('-screen', '');
                                   const peer = peersRef.current.get(basePeerId);
-                                  if (peer?.screenStream) {
+                                  const lkPeer = livekitParticipants.find(lp => lp.identity === basePeerId);
+                                  let lkStream = null;
+                                  if (lkPeer) {
+                                    const pub = lkPeer.getTrackPublication(Track.Source.ScreenShare);
+                                    if (pub?.track?.mediaStream) lkStream = pub.track.mediaStream;
+                                    else if (pub?.track?.mediaStreamTrack) lkStream = new MediaStream([pub.track.mediaStreamTrack]);
+                                  }
+                                  const finalStream = peer?.screenStream || lkStream;
+                                  
+                                  if (finalStream) {
                                     // Use screen stream for screen share tile
                                     // Only update if different to prevent flickering
-                                    if (el.srcObject !== peer.screenStream) {
-                                      el.srcObject = peer.screenStream;
+                                    if (el.srcObject !== finalStream) {
+                                      el.srcObject = finalStream;
                                       // Use requestAnimationFrame to ensure smooth update
                                       requestAnimationFrame(() => {
-                                        if (el && el.srcObject === peer.screenStream) {
+                                        if (el && el.srcObject === finalStream) {
                                           el.play().catch(() => {});
                                         }
                                       });
@@ -1672,8 +1710,15 @@ function MeetingRoomUI({ meetingId: propMeetingId, meetingTitle: propMeetingTitl
                               if (el) {
                                 const basePeerId = p.peerId.replace('-screen', '');
                                 const peer = peersRef.current.get(basePeerId);
+                                const lkPeer = livekitParticipants.find(lp => lp.identity === basePeerId);
+                                let lkAudioStream = null;
+                                if (lkPeer) {
+                                  const pub = lkPeer.getTrackPublication(Track.Source.Microphone);
+                                  if (pub?.track?.mediaStream) lkAudioStream = pub.track.mediaStream;
+                                  else if (pub?.track?.mediaStreamTrack) lkAudioStream = new MediaStream([pub.track.mediaStreamTrack]);
+                                }
                                 // Use camera stream for audio (or screen stream if no camera)
-                                const audioStream = peer?.cameraStream || peer?.screenStream;
+                                const audioStream = peer?.cameraStream || peer?.screenStream || lkAudioStream;
                                 if (audioStream) {
                                   const audioTracks = audioStream.getAudioTracks();
                                   if (audioTracks.length > 0) {
@@ -1695,12 +1740,21 @@ function MeetingRoomUI({ meetingId: propMeetingId, meetingTitle: propMeetingTitl
                                 ref={(el) => {
                                   if (el) {
                                     const peer = peersRef.current.get(p.peerId);
-                                    if (peer?.cameraStream) {
+                                    const lkPeer = livekitParticipants.find(lp => lp.identity === p.peerId);
+                                    let lkStream = null;
+                                    if (lkPeer) {
+                                      const pub = lkPeer.getTrackPublication(Track.Source.Camera);
+                                      if (pub?.track?.mediaStream) lkStream = pub.track.mediaStream;
+                                      else if (pub?.track?.mediaStreamTrack) lkStream = new MediaStream([pub.track.mediaStreamTrack]);
+                                    }
+                                    const finalStream = peer?.cameraStream || lkStream;
+                                    
+                                    if (finalStream) {
                                       // Use camera stream for camera tile
-                                      if (el.srcObject !== peer.cameraStream) {
-                                        el.srcObject = peer.cameraStream;
+                                      if (el.srcObject !== finalStream) {
+                                        el.srcObject = finalStream;
                                         requestAnimationFrame(() => {
-                                          if (el && el.srcObject === peer.cameraStream) {
+                                          if (el && el.srcObject === finalStream) {
                                             el.play().catch(() => {});
                                           }
                                         });
@@ -1732,19 +1786,29 @@ function MeetingRoomUI({ meetingId: propMeetingId, meetingTitle: propMeetingTitl
                             )}
                             {!p.state.isCameraOn && (
                               <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-[#1a1a1a] to-[#0f0f0f]">
-                                <div className={cn(
-                                  "w-20 h-20 rounded-full bg-gradient-to-br from-[#3d3d3d] to-[#2d2d2d] flex items-center justify-center shadow-xl transition-all duration-300",
+                                <Avatar className={cn(
+                                  "w-20 h-20 shadow-xl transition-all duration-300",
                                   p.isSpeaking && "ring-4 ring-green-500/60 ring-offset-4 ring-offset-[#1a1a1a] scale-110"
                                 )}>
-                                  <span className="text-white text-xl font-semibold">{initials}</span>
-                                </div>
+                                  <AvatarImage src={p.avatar} />
+                                  <AvatarFallback className="bg-gradient-to-br from-[#3d3d3d] text-white text-xl font-semibold to-[#2d2d2d]">
+                                    {initials}
+                                  </AvatarFallback>
+                                </Avatar>
                               </div>
                             )}
                             <audio ref={(el) => {
                               if (el) {
                                 const peer = peersRef.current.get(p.peerId);
+                                const lkPeer = livekitParticipants.find(lp => lp.identity === p.peerId);
+                                let lkAudioStream = null;
+                                if (lkPeer) {
+                                  const pub = lkPeer.getTrackPublication(Track.Source.Microphone);
+                                  if (pub?.track?.mediaStream) lkAudioStream = pub.track.mediaStream;
+                                  else if (pub?.track?.mediaStreamTrack) lkAudioStream = new MediaStream([pub.track.mediaStreamTrack]);
+                                }
                                 // Use camera stream for audio (or screen stream if no camera)
-                                const audioStream = peer?.cameraStream || peer?.screenStream;
+                                const audioStream = peer?.cameraStream || peer?.screenStream || lkAudioStream;
                                 if (audioStream) {
                                   const audioTracks = audioStream.getAudioTracks();
                                   if (audioTracks.length > 0) {

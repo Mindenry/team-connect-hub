@@ -86,6 +86,7 @@ export default function MeetingLobby() {
   const [joining, setJoining] = useState(false);
   const [participantCount, setParticipantCount] = useState(0);
   const [participantNames, setParticipantNames] = useState<string[]>([]);
+  const [roomParticipants, setRoomParticipants] = useState<Array<{ peerId: string; name: string; userId?: string; avatar?: string }>>([]);
   const [hasAudio, setHasAudio] = useState(false);
   const [hasVideo, setHasVideo] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -174,6 +175,11 @@ export default function MeetingLobby() {
         setParticipantNames(
           room.participants.map((p: any) => p.name?.split(" ")[0] || "Someone")
         );
+        setRoomParticipants(room.participants || []);
+      } else {
+        setParticipantCount(0);
+        setParticipantNames([]);
+        setRoomParticipants([]);
       }
     };
 
@@ -1141,6 +1147,87 @@ export default function MeetingLobby() {
                 </div>
               </CardContent>
             </Card>
+
+          {/* People in this meeting */}
+          {roomParticipants.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.6 }}
+            >
+              <Card className="bg-gradient-to-br from-[#1a1a1a] to-[#0f0f0f] border border-white/10 rounded-2xl overflow-hidden shadow-xl">
+                <CardContent className="p-5">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <Users className="w-4 h-4 text-green-400" />
+                      <p className="text-xs font-bold uppercase tracking-widest text-white/40">In this meeting</p>
+                    </div>
+                    <Badge className="bg-green-500/20 text-green-400 border-0 text-[10px] px-2">
+                      {roomParticipants.length}
+                    </Badge>
+                  </div>
+                  <div className="space-y-2">
+                    {roomParticipants.slice(0, 8).map((p, i) => {
+                      const initials = p.name
+                        .split(" ")
+                        .map((n) => n[0])
+                        .join("")
+                        .slice(0, 2)
+                        .toUpperCase();
+                      return (
+                        <div
+                          key={p.peerId || i}
+                          className="flex items-center gap-3 p-2 rounded-lg bg-white/5 border border-white/5"
+                        >
+                          <Avatar className="h-8 w-8 ring-1 ring-white/10">
+                            <AvatarImage
+                              src={
+                                p.avatar
+                                  ? p.avatar.startsWith("/")
+                                    ? `${API_BASE}${p.avatar}`
+                                    : p.avatar
+                                  : undefined
+                              }
+                              alt={p.name}
+                            />
+                            <AvatarFallback className="bg-gradient-to-br from-green-500/20 to-emerald-500/10 text-green-400 text-[10px] font-bold">
+                              {initials}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-white truncate">{p.name}</p>
+                            <p className="text-[10px] text-white/40">In meeting</p>
+                          </div>
+                          <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                        </div>
+                      );
+                    })}
+                    {roomParticipants.length > 8 && (
+                      <p className="text-[11px] text-white/30 text-center py-1">
+                        +{roomParticipants.length - 8} more
+                      </p>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
+          )}
+
+          {/* Waiting Room Notice */}
+          {meetingData?.waitingRoom && meetingData?.hostId !== currentUser?.id && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.65 }}
+              className="flex items-center gap-3 p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-xl backdrop-blur-sm"
+            >
+              <Shield className="w-5 h-5 text-yellow-400 flex-shrink-0" />
+              <div>
+                <p className="text-sm font-medium text-yellow-300">Waiting Room Enabled</p>
+                <p className="text-[11px] text-yellow-400/60">The host will let you in when they're ready</p>
+              </div>
+            </motion.div>
+          )}
 
           {/* Security Badge */}
           <motion.div

@@ -94,20 +94,13 @@ type TeamsFilter = "all" | "mine" | "favorites" | "active";
 function getRoleLabel(role?: string) {
   const value = String(role || "member").toLowerCase();
   if (value === "lead") return "Team Lead";
-  if (value === "admin") return "Admin";
-  if (value === "manager") return "Manager";
-  if (value === "viewer") return "Viewer";
   return "Member";
 }
 
 function rolePriority(role?: string) {
   const value = String(role || "member").toLowerCase();
   if (value === "lead") return 0;
-  if (value === "admin") return 1;
-  if (value === "manager") return 2;
-  if (value === "member") return 3;
-  if (value === "viewer") return 4;
-  return 5;
+  return 1;
 }
 
 function canPromoteToLead(currentUserRole?: string) {
@@ -366,7 +359,7 @@ export default function Teams() {
     }
   };
 
-  const handleChangeMemberRole = async (teamId: string, userId: string, role: "lead" | "admin" | "manager" | "member" | "viewer") => {
+  const handleChangeMemberRole = async (teamId: string, userId: string, role: "lead" | "member") => {
     try {
       await apiPatch(`/teams/${teamId}/members/${userId}/role?role=${role}`);
       toast.success("อัปเดตบทบาทเรียบร้อย");
@@ -384,8 +377,8 @@ export default function Teams() {
   const activeTeam = teams.find((t) => t.id === selectedTeam);
   const activeTeamManagerRole = activeTeam?.members.find((m) => m.userId === user?.id)?.role?.toLowerCase();
   
-  const canChangeTeamMemberRoles = orgRole === "org_owner" || activeTeamManagerRole === "lead" || activeTeamManagerRole === "admin";
-  const canRemoveTeamMembers = orgRole === "org_owner" || activeTeamManagerRole === "lead" || activeTeamManagerRole === "admin";
+  const canChangeTeamMemberRoles = orgRole === "org_owner" || activeTeamManagerRole === "lead";
+  const canRemoveTeamMembers = orgRole === "org_owner" || activeTeamManagerRole === "lead";
   
   const onlineMembers = activeTeam?.members.filter(m => isUserOnline(m.userId || "")) || [];
   const totalMembers = activeTeam?.members.length || 0;
@@ -871,13 +864,21 @@ export default function Teams() {
                                       <div className="flex-1 min-w-0">
                                         <div className="flex items-center gap-2 mb-0.5">
                                           <p className="text-xs font-medium text-foreground truncate">{member.name}</p>
-                                          {member.role === "lead" && (
+                                          {member.role === "lead" ? (
                                             <Badge
                                               variant="secondary"
                                               className="h-4 px-1.5 text-[9px] gap-0.5 bg-primary/10 text-primary border-primary/20"
                                             >
                                               <Crown className="w-3 h-3" />
                                               Lead
+                                            </Badge>
+                                          ) : (
+                                            <Badge
+                                              variant="secondary"
+                                              className="h-4 px-1.5 text-[9px] gap-0.5"
+                                            >
+                                              <IdCard className="w-3 h-3" />
+                                              Member
                                             </Badge>
                                           )}
                                         </div>
@@ -917,18 +918,18 @@ export default function Teams() {
                                               {canChangeTeamMemberRoles && selectedTeam && !isSelf && (
                                                 <>
                                                   <DropdownMenuSeparator />
-                                                  <DropdownMenuItem onClick={() => handleChangeMemberRole(selectedTeam, member.userId!, "lead")}>
-                                                    <Crown className="w-4 h-4 mr-2" />
-                                                    ตั้งเป็น Team Lead
-                                                  </DropdownMenuItem>
-                                                  <DropdownMenuItem onClick={() => handleChangeMemberRole(selectedTeam, member.userId!, "member")}>
-                                                    <IdCard className="w-4 h-4 mr-2" />
-                                                    ตั้งเป็น Member
-                                                  </DropdownMenuItem>
-                                                  <DropdownMenuItem onClick={() => handleChangeMemberRole(selectedTeam, member.userId!, "viewer")}>
-                                                    <IdCard className="w-4 h-4 mr-2" />
-                                                    ตั้งเป็น Viewer
-                                                  </DropdownMenuItem>
+                                                  {member.role !== "lead" && (
+                                                    <DropdownMenuItem onClick={() => handleChangeMemberRole(selectedTeam, member.userId!, "lead")}>
+                                                      <Crown className="w-4 h-4 mr-2" />
+                                                      ตั้งเป็น Team Lead
+                                                    </DropdownMenuItem>
+                                                  )}
+                                                  {member.role !== "member" && (
+                                                    <DropdownMenuItem onClick={() => handleChangeMemberRole(selectedTeam, member.userId!, "member")}>
+                                                      <IdCard className="w-4 h-4 mr-2" />
+                                                      ตั้งเป็น Member
+                                                    </DropdownMenuItem>
+                                                  )}
                                                 </>
                                               )}
                                             </>

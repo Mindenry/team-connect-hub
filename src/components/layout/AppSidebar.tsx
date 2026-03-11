@@ -1,19 +1,16 @@
 import { useState, useMemo, useEffect } from "react";
 import { useLocation, Link, useNavigate } from "react-router-dom";
-import { motion, AnimatePresence, useSpring, useTransform } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   LayoutDashboard, Video, MessageSquare, CheckSquare,
-  Settings, Bell, Shield, ChevronRight, ChevronDown,
+  Settings, Bell, ChevronRight, ChevronDown,
   Search, LogOut, Headphones,
   Folder, FileText,
   CalendarDays, BellOff, Users, FileSearch,
   BookOpen,
   Megaphone,
   FileBarChart,
-  MoreHorizontal,
-  Sparkles,
   Zap,
-  User,
   IdCard,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -95,7 +92,6 @@ const systemNav: NavItem[] = [
 
 // Admin Only
 const adminNav: NavItem[] = [
-  { title: "Audit Trail", url: "/audit-trail", icon: FileSearch, description: "Activity logs" },
 ];
 
 export default function AppSidebar({
@@ -109,7 +105,6 @@ export default function AppSidebar({
   const [collapsed, setCollapsed] = useState(false);
   const [focusMode, setFocusMode] = useState(false);
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
-  const [hoveredItem, setHoveredItem] = useState<string | null>(null);
   const { onlineUserIds, activeRooms } = usePresence();
 
   const currentUserId = currentUser?.id;
@@ -240,7 +235,7 @@ export default function AppSidebar({
     [notificationsUnreadCount]
   );
 
-  const sidebarWidth = collapsed ? 72 : 280;
+  const sidebarWidth = collapsed ? 64 : 260;
   const showContent = !collapsed || onNavigate;
 
   return (
@@ -257,73 +252,52 @@ export default function AppSidebar({
         }}
         className={cn(
           "relative flex flex-col h-screen overflow-hidden",
-          "bg-gradient-to-b from-sidebar via-sidebar to-sidebar/95",
-          "backdrop-blur-xl",
-          "border-r border-sidebar-border/50",
-          "shadow-2xl shadow-black/20",
+          "bg-sidebar",
+          "border-r border-sidebar-border/40",
+          "shadow-lg shadow-black/10",
           onNavigate ? "w-full" : "sticky top-0"
         )}
       >
-        {/* Decorative gradient overlay */}
-        <div className="absolute inset-0 bg-gradient-to-br from-sidebar-primary/5 via-transparent to-sidebar-primary/10 pointer-events-none" />
-        
-        {/* Animated background pattern */}
-        <div className="absolute inset-0 opacity-[0.02] pointer-events-none">
-          <div className="absolute inset-0" style={{
-            backgroundImage: `radial-gradient(circle at 2px 2px, currentColor 1px, transparent 0)`,
-            backgroundSize: '24px 24px',
-          }} />
-        </div>
 
         {/* Header */}
-        <motion.div
-          initial={false}
-          animate={{
-            padding: showContent ? "1rem 1.25rem" : "1rem",
-          }}
-          className="relative flex items-center gap-3 h-16 border-b border-sidebar-border/30 shrink-0 z-10"
+        <div
+          className={cn(
+            "flex items-center h-14 border-b border-sidebar-border/30 shrink-0",
+            showContent ? "px-4 gap-3" : "px-0 justify-center"
+          )}
         >
-          <motion.div
-            whileHover={{ scale: 1.05, rotate: 5 }}
-            whileTap={{ scale: 0.95 }}
+          <div
             className={cn(
-              "relative w-10 h-10 rounded-2xl",
-              "bg-gradient-to-br from-sidebar-primary via-sidebar-primary to-sidebar-primary/80",
+              "w-8 h-8 rounded-xl",
+              "bg-sidebar-primary",
               "flex items-center justify-center",
-              "shadow-lg shadow-sidebar-primary/30",
-              "ring-2 ring-sidebar-primary/20",
-              "transition-all duration-300"
+              "shadow-md shadow-sidebar-primary/25",
+              "shrink-0"
             )}
           >
-            <Video className="w-5 h-5 text-sidebar-primary-foreground" />
-            <motion.div
-              className="absolute inset-0 rounded-2xl bg-gradient-to-br from-white/20 to-transparent"
-              animate={{
-                opacity: [0.3, 0.5, 0.3],
-              }}
-              transition={{
-                duration: 3,
-                repeat: Infinity,
-                ease: "easeInOut",
-              }}
-            />
-          </motion.div>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-sidebar-primary-foreground">
+              <path d="M16 8h-6a2 2 0 0 0 -2 2v6" />
+              <path d="M16 8v6a2 2 0 0 1 -2 2h-6" />
+              <circle cx="8" cy="8" r="2.5" fill="currentColor" stroke="none" />
+              <circle cx="16" cy="16" r="2.5" fill="currentColor" stroke="none" />
+            </svg>
+          </div>
           
           <AnimatePresence mode="wait">
             {showContent && (
               <motion.div
                 key="header-text"
-                initial={{ opacity: 0, x: -10 }}
+                initial={{ opacity: 0, x: -8 }}
                 animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -10 }}
-                transition={{ duration: 0.2 }}
+                exit={{ opacity: 0, x: -8 }}
+                transition={{ duration: 0.15 }}
                 className="flex-1 min-w-0"
               >
-                <h1 className="text-base font-bold text-sidebar-accent-foreground truncate tracking-tight">
-                  CollabHub
+                <h1 className="text-sm font-bold text-sidebar-accent-foreground truncate tracking-tight">
+                  Team Connect
                 </h1>
-                <p className="text-[10px] text-sidebar-muted/80 truncate mt-0.5">
-                  Acme Corp · WFH
+                <p className="text-[10px] text-sidebar-muted/70 truncate">
+                  Enterprise
                 </p>
               </motion.div>
             )}
@@ -332,401 +306,407 @@ export default function AppSidebar({
           {!onNavigate && (
             <Tooltip>
               <TooltipTrigger asChild>
-                <motion.button
-                  whileHover={{ scale: 1.1 }}
-                  whileTap={{ scale: 0.9 }}
+                <button
                   onClick={() => setCollapsed(!collapsed)}
                   className={cn(
-                    "relative p-2 rounded-xl",
-                    "bg-sidebar-accent/30 hover:bg-sidebar-accent/50",
-                    "text-sidebar-muted hover:text-sidebar-accent-foreground",
-                    "border border-sidebar-border/30",
+                    "p-1.5 rounded-lg",
+                    "text-sidebar-muted/70 hover:text-sidebar-accent-foreground",
+                    "hover:bg-sidebar-accent/40",
                     "transition-all duration-200",
-                    "backdrop-blur-sm"
+                    showContent ? "" : "mt-1"
                   )}
-                  title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
                 >
                   <motion.div
                     animate={{ rotate: collapsed ? 0 : 180 }}
-                    transition={{ type: "spring", damping: 20 }}
+                    transition={{ type: "spring", damping: 25 }}
                   >
-                    <ChevronRight className="w-4 h-4" />
+                    <ChevronRight className="w-3.5 h-3.5" />
                   </motion.div>
-                </motion.button>
+                </button>
               </TooltipTrigger>
-              <TooltipContent side="right" className="hidden md:block">
+              <TooltipContent side="right" className="hidden md:block text-xs">
                 {collapsed ? "Expand" : "Collapse"}
               </TooltipContent>
             </Tooltip>
           )}
-        </motion.div>
+        </div>
 
         {/* Search */}
-        <AnimatePresence>
-          {showContent && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              exit={{ opacity: 0, height: 0 }}
-              transition={{ duration: 0.2 }}
-              className="px-3 py-2.5 border-b border-sidebar-border/20 shrink-0"
+        {showContent ? (
+          <div className="px-3 py-2 border-b border-sidebar-border/20 shrink-0">
+            <button
+              className={cn(
+                "w-full flex items-center gap-2.5 px-3 py-2 rounded-lg",
+                "bg-sidebar-accent/30 hover:bg-sidebar-accent/50",
+                "border border-sidebar-border/30",
+                "text-sidebar-muted text-xs",
+                "hover:text-sidebar-accent-foreground",
+                "transition-all duration-200"
+              )}
             >
-              <motion.button
-                whileHover={{ scale: 1.01 }}
-                whileTap={{ scale: 0.99 }}
-                className={cn(
-                  "w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl",
-                  "bg-sidebar-accent/40 hover:bg-sidebar-accent/60",
-                  "border border-sidebar-border/30",
-                  "text-sidebar-muted text-xs",
-                  "hover:text-sidebar-accent-foreground",
-                  "backdrop-blur-sm",
-                  "shadow-sm hover:shadow-md",
-                  "transition-all duration-200",
-                  "group/search"
-                )}
-              >
-                <Search className="w-3.5 h-3.5 transition-transform group-hover/search:scale-110" />
-                <span className="flex-1 text-left">Search...</span>
-                {!onNavigate && (
-                  <kbd className="hidden md:flex items-center gap-0.5 text-[10px] bg-sidebar-border/50 px-1.5 py-0.5 rounded border border-sidebar-border/50">
-                    <span>⌘</span>
-                    <span>K</span>
-                  </kbd>
-                )}
-              </motion.button>
-            </motion.div>
-          )}
-        </AnimatePresence>
+              <Search className="w-3.5 h-3.5" />
+              <span className="flex-1 text-left">Search...</span>
+              {!onNavigate && (
+                <kbd className="hidden md:flex items-center gap-0.5 text-[9px] bg-sidebar-border/50 px-1.5 py-0.5 rounded border border-sidebar-border/40">
+                  <span>⌘</span><span>K</span>
+                </kbd>
+              )}
+            </button>
+          </div>
+        ) : (
+          <div className="flex justify-center py-2 border-b border-sidebar-border/20 shrink-0">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button className="p-2 rounded-lg text-sidebar-muted/70 hover:text-sidebar-accent-foreground hover:bg-sidebar-accent/40 transition-all">
+                  <Search className="w-4 h-4" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="right" className="text-xs">Search (⌘K)</TooltipContent>
+            </Tooltip>
+          </div>
+        )}
 
         {/* Quick Huddle */}
-        <AnimatePresence>
-          {showContent && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              exit={{ opacity: 0, height: 0 }}
-              transition={{ duration: 0.2 }}
-              className="px-3 py-2.5 border-b border-sidebar-border/20 shrink-0"
+        {showContent ? (
+          <div className="px-3 py-2 border-b border-sidebar-border/20 shrink-0">
+            <Link
+              to="/meeting-lobby/quick-huddle"
+              onClick={handleNav}
+              className={cn(
+                "relative w-full flex items-center gap-2.5 px-3 py-2 rounded-lg",
+                "bg-sidebar-primary/10 hover:bg-sidebar-primary/20",
+                "border border-sidebar-primary/20 hover:border-sidebar-primary/30",
+                "text-sidebar-primary text-xs font-semibold",
+                "transition-all duration-200",
+                "group/huddle"
+              )}
             >
-              <Link
-                to="/meeting-lobby/quick-huddle"
-                onClick={handleNav}
-                className={cn(
-                  "relative w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl",
-                  "bg-gradient-to-r from-sidebar-primary/15 via-sidebar-primary/10 to-sidebar-primary/5",
-                  "border border-sidebar-primary/20",
-                  "text-sidebar-primary text-xs font-semibold",
-                  "hover:from-sidebar-primary/25 hover:via-sidebar-primary/15 hover:to-sidebar-primary/10",
-                  "hover:border-sidebar-primary/30",
-                  "backdrop-blur-sm",
-                  "shadow-sm hover:shadow-lg hover:shadow-sidebar-primary/20",
-                  "transition-all duration-300",
-                  "group/huddle"
-                )}
-              >
-                <motion.div
-                  whileHover={{ rotate: [0, -10, 10, -10, 0] }}
-                  transition={{ duration: 0.5 }}
+              <Headphones className="w-3.5 h-3.5" />
+              <span className="flex-1">Quick Huddle</span>
+              {quickHuddleParticipants.length > 0 ? (
+                <Badge className="bg-sidebar-primary/25 text-sidebar-primary text-[9px] h-4 px-1.5 border-0">
+                  {quickHuddleParticipants.length}
+                </Badge>
+              ) : (
+                <span className="text-[9px] text-sidebar-muted/50">Start</span>
+              )}
+            </Link>
+          </div>
+        ) : (
+          <div className="flex justify-center py-2 border-b border-sidebar-border/20 shrink-0">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Link
+                  to="/meeting-lobby/quick-huddle"
+                  onClick={handleNav}
+                  className="relative p-2 rounded-lg text-sidebar-primary hover:bg-sidebar-primary/15 transition-all"
                 >
                   <Headphones className="w-4 h-4" />
-                </motion.div>
-                <span className="flex-1">Quick Huddle</span>
-                <div className="flex items-center gap-1.5">
-                  {quickHuddleParticipants.length > 0 ? (
-                    <>
-                      <div className="flex -space-x-1.5">
-                        {quickHuddleParticipants.slice(0, 3).map((p) => (
-                          <motion.div
-                            key={p.peerId}
-                            initial={{ scale: 0 }}
-                            animate={{ scale: 1 }}
-                            className="w-5 h-5 rounded-full bg-sidebar-primary/40 border-2 border-sidebar flex items-center justify-center shadow-sm"
-                          >
-                            <span className="text-[8px] text-sidebar-primary-foreground font-bold">
-                              {p.name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()}
-                            </span>
-                          </motion.div>
-                        ))}
-                      </div>
-                      <Badge className="bg-sidebar-primary/30 text-sidebar-primary text-[9px] h-4 px-1.5 border-0">
-                        {quickHuddleParticipants.length}
-                      </Badge>
-                    </>
-                  ) : (
-                    <span className="text-[9px] text-sidebar-muted/60">Start</span>
+                  {quickHuddleParticipants.length > 0 && (
+                    <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-sidebar-primary animate-pulse" />
                   )}
-                </div>
-                <motion.div
-                  className="absolute inset-0 rounded-xl bg-gradient-to-r from-transparent via-white/5 to-transparent"
-                  initial={{ x: "-100%" }}
-                  whileHover={{ x: "100%" }}
-                  transition={{ duration: 0.6, repeat: Infinity, repeatDelay: 2 }}
-                />
-              </Link>
-            </motion.div>
-          )}
-        </AnimatePresence>
+                </Link>
+              </TooltipTrigger>
+              <TooltipContent side="right" className="text-xs">
+                Quick Huddle{quickHuddleParticipants.length > 0 ? ` (${quickHuddleParticipants.length})` : ""}
+              </TooltipContent>
+            </Tooltip>
+          </div>
+        )}
 
         {/* Active Meeting Rooms */}
         <AnimatePresence>
-          {showContent && activeMeetingsCount > 0 && (
+          {activeMeetingsCount > 0 && (
             <motion.div
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: "auto" }}
               exit={{ opacity: 0, height: 0 }}
               transition={{ duration: 0.2 }}
-              className="px-3 py-2.5 border-b border-sidebar-border/20 shrink-0 space-y-1.5"
+              className={cn(
+                "border-b border-sidebar-border/20 shrink-0",
+                showContent ? "px-3 py-2 space-y-1" : "py-2 px-1.5 space-y-1"
+              )}
             >
-              <p className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-sidebar-muted/60">
-                Live
-              </p>
-              {activeRooms.filter(r => r.roomId !== "quick-huddle").slice(0, 2).map((room) => (
-                <Link
-                  key={room.roomId}
-                  to={`/meeting-lobby/${room.roomId}`}
-                  onClick={handleNav}
-                  className={cn(
-                    "flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-xs",
-                    "bg-green-500/10 hover:bg-green-500/15",
-                    "border border-green-500/20",
-                    "text-green-400",
-                    "backdrop-blur-sm",
-                    "shadow-sm hover:shadow-md",
-                    "transition-all duration-200",
-                    "group/room"
-                  )}
-                >
-                  <div className="relative">
-                    <Video className="w-3.5 h-3.5" />
-                    <motion.span
-                      className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-green-500"
-                      animate={{
-                        scale: [1, 1.2, 1],
-                        opacity: [1, 0.7, 1],
-                      }}
-                      transition={{
-                        duration: 2,
-                        repeat: Infinity,
-                        ease: "easeInOut",
-                      }}
-                    />
-                  </div>
-                  <span className="flex-1 truncate text-[11px] font-medium">{room.name}</span>
-                  <Badge className="bg-green-500/20 text-green-400 text-[9px] h-4 px-1.5 border-0">
-                    {room.participants.length}
-                  </Badge>
-                </Link>
-              ))}
+              {showContent ? (
+                /* Expanded: room cards with participant avatars */
+                <>
+                  <p className="px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-sidebar-muted/50">
+                    Live
+                  </p>
+                  {activeRooms.filter(r => r.roomId !== "quick-huddle").slice(0, 3).map((room) => (
+                    <Link
+                      key={room.roomId}
+                      to={`/meeting-lobby/${room.roomId}`}
+                      onClick={handleNav}
+                      className={cn(
+                        "block px-2.5 py-2 rounded-lg text-xs",
+                        "bg-green-500/10 hover:bg-green-500/15",
+                        "border border-green-500/20",
+                        "text-green-400",
+                        "transition-all duration-200"
+                      )}
+                    >
+                      <div className="flex items-center gap-2 mb-1.5">
+                        <div className="relative">
+                          <Video className="w-3 h-3" />
+                          <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                        </div>
+                        <span className="flex-1 truncate text-[11px] font-medium">{room.name}</span>
+                        <Badge className="bg-green-500/20 text-green-400 text-[9px] h-4 px-1 border-0">
+                          {room.participants.length}
+                        </Badge>
+                      </div>
+                      <div className="flex items-center gap-1.5 pl-5">
+                        <div className="flex -space-x-1.5">
+                          {room.participants.slice(0, 4).map((p, i) => (
+                            <div
+                              key={p.peerId || i}
+                              className="w-5 h-5 rounded-full bg-sidebar-accent border border-sidebar-border/40 flex items-center justify-center overflow-hidden"
+                              title={p.name}
+                            >
+                              {p.avatar ? (
+                                <img src={p.avatar.startsWith('/') ? `${API_BASE}${p.avatar}` : p.avatar} alt={p.name} className="w-full h-full object-cover" />
+                              ) : (
+                                <span className="text-[7px] font-bold text-sidebar-muted">{p.name.charAt(0).toUpperCase()}</span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                        <span className="text-[9px] text-green-400/70 truncate">
+                          {room.participants.slice(0, 3).map(p => p.name.split(" ")[0]).join(", ")}
+                          {room.participants.length > 3 && ` +${room.participants.length - 3}`}
+                        </span>
+                      </div>
+                    </Link>
+                  ))}
+                </>
+              ) : (
+                /* Collapsed: icon indicators with tooltip */
+                activeRooms.filter(r => r.roomId !== "quick-huddle").slice(0, 3).map((room) => (
+                  <Tooltip key={room.roomId}>
+                    <TooltipTrigger asChild>
+                      <Link
+                        to={`/meeting-lobby/${room.roomId}`}
+                        onClick={handleNav}
+                        className="relative flex items-center justify-center py-1.5 mx-auto w-10 h-9 rounded-lg bg-green-500/10 hover:bg-green-500/15 border border-green-500/20 transition-all"
+                      >
+                        <Video className="w-4 h-4 text-green-400" />
+                        <span className="absolute top-0.5 right-0.5 w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                      </Link>
+                    </TooltipTrigger>
+                    <TooltipContent side="right" className="text-xs max-w-[180px]">
+                      <p className="font-semibold mb-0.5">{room.name}</p>
+                      <p className="text-muted-foreground">
+                        {room.participants.map(p => p.name.split(" ")[0]).join(", ")}
+                        {" "}({room.participants.length})
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                ))
+              )}
             </motion.div>
           )}
         </AnimatePresence>
 
         {/* Main Nav */}
-        <nav className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-thin px-2 py-3 space-y-1 relative z-10">
-          {enhancedMainNav.map((item, index) => {
+        <nav className={cn(
+          "flex-1 overflow-y-auto overflow-x-hidden scrollbar-thin py-2 space-y-0.5",
+          showContent ? "px-2" : "px-1.5"
+        )}>
+          {/* Section label */}
+          {showContent && (
+            <p className="px-3 py-1 text-[9px] font-bold uppercase tracking-wider text-sidebar-muted/50">
+              Main
+            </p>
+          )}
+
+          {enhancedMainNav.map((item) => {
             const active = isActive(item.url);
-            const hovered = hoveredItem === item.url;
             
             return (
               <Tooltip key={item.url}>
                 <TooltipTrigger asChild>
-                  <motion.div
-                    initial={false}
-                    onHoverStart={() => setHoveredItem(item.url)}
-                    onHoverEnd={() => setHoveredItem(null)}
-                    whileHover={{ x: showContent ? 0 : 4 }}
-                    transition={{ type: "spring", damping: 25, stiffness: 300 }}
+                  <Link
+                    to={item.url}
+                    onClick={handleNav}
+                    className={cn(
+                      "relative flex items-center rounded-lg transition-all duration-200",
+                      showContent 
+                        ? "gap-2.5 px-3 py-2 text-xs"
+                        : "justify-center py-2 mx-auto w-10 h-9",
+                      active
+                        ? showContent
+                          ? "bg-sidebar-accent text-sidebar-accent-foreground font-semibold"
+                          : "bg-sidebar-accent text-sidebar-accent-foreground"
+                        : "text-sidebar-foreground/70 hover:text-sidebar-accent-foreground hover:bg-sidebar-accent/40"
+                    )}
                   >
-                    <Link
-                      to={item.url}
-                      onClick={handleNav}
-                      className={cn(
-                        "relative flex items-center gap-3 px-3 py-2.5 rounded-xl",
-                        "text-sm transition-all duration-300",
-                        "group/nav",
-                        active
-                          ? "bg-sidebar-accent text-sidebar-accent-foreground font-semibold shadow-lg shadow-sidebar-accent/20"
-                          : "text-sidebar-foreground/80 hover:text-sidebar-accent-foreground hover:bg-sidebar-accent/40",
-                        !showContent && "justify-center"
-                      )}
-                    >
-                      {/* Active indicator */}
-                      {active && (
-                        <motion.div
-                          layoutId={onNavigate ? "activeNavMobile" : "activeNav"}
-                          className="absolute left-0 inset-y-0 w-1 rounded-r-full bg-sidebar-primary shadow-lg shadow-sidebar-primary/50"
-                          transition={{ type: "spring", damping: 25, stiffness: 300 }}
-                        />
-                      )}
-
-                      {/* Hover glow effect */}
-                      {hovered && !active && (
-                        <motion.div
-                          className="absolute inset-0 rounded-xl bg-gradient-to-r from-sidebar-primary/10 via-transparent to-sidebar-primary/10"
-                          initial={{ opacity: 0 }}
-                          animate={{ opacity: 1 }}
-                          exit={{ opacity: 0 }}
-                        />
-                      )}
-
+                    {/* Active indicator bar */}
+                    {active && showContent && (
                       <motion.div
-                        animate={{
-                          scale: active ? 1.1 : 1,
-                          rotate: hovered && !active ? [0, -5, 5, 0] : 0,
-                        }}
-                        transition={{ type: "spring", damping: 15 }}
-                      >
-                        <item.icon className={cn(
-                          "w-4.5 h-4.5 shrink-0 transition-colors",
-                          active && "text-sidebar-primary"
-                        )} />
-                      </motion.div>
+                        layoutId={onNavigate ? "activeNavMobile" : "activeNav"}
+                        className="absolute left-0 inset-y-1.5 w-[3px] rounded-full bg-sidebar-primary"
+                        transition={{ type: "spring", damping: 25, stiffness: 300 }}
+                      />
+                    )}
 
-                      <AnimatePresence mode="wait">
-                        {showContent && (
-                          <motion.div
-                            key="nav-content"
-                            initial={{ opacity: 0, x: -10 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            exit={{ opacity: 0, x: -10 }}
-                            transition={{ duration: 0.15 }}
-                            className="flex-1 flex items-center justify-between min-w-0"
-                          >
-                            <div className="flex-1 min-w-0">
-                              <span className="block truncate">{item.title}</span>
-                              {item.description && (
-                                <span className="text-[10px] text-sidebar-muted/60 truncate block mt-0.5">
-                                  {item.description}
-                                </span>
-                              )}
-                            </div>
-                            {item.title === "Meetings" && activeMeetingsCount > 0 && (
-                              <Badge className="h-5 min-w-[20px] px-1.5 text-[10px] flex items-center justify-center bg-green-500 text-white border-0 shadow-sm">
-                                {activeMeetingsCount}
-                              </Badge>
-                            )}
-                            {item.title !== "Meetings" && item.badge && item.badge > 0 && (
-                              <Badge variant="destructive" className="h-5 min-w-[20px] px-1.5 text-[10px] flex items-center justify-center">
-                                {item.badge > 99 ? "99+" : item.badge}
-                              </Badge>
-                            )}
-                          </motion.div>
+                    <item.icon className={cn(
+                      "shrink-0",
+                      showContent ? "w-4 h-4" : "w-[18px] h-[18px]",
+                      active && "text-sidebar-primary"
+                    )} />
+
+                    {showContent && (
+                      <div className="flex-1 flex items-center justify-between min-w-0">
+                        <span className="truncate">{item.title}</span>
+                        {item.title === "Meetings" && activeMeetingsCount > 0 && (
+                          <Badge className="h-4 min-w-[16px] px-1 text-[9px] bg-green-500 text-white border-0">
+                            {activeMeetingsCount}
+                          </Badge>
                         )}
-                      </AnimatePresence>
-                    </Link>
-                  </motion.div>
+                        {item.title !== "Meetings" && item.badge && item.badge > 0 && (
+                          <Badge variant="destructive" className="h-4 min-w-[16px] px-1 text-[9px]">
+                            {item.badge > 99 ? "99+" : item.badge}
+                          </Badge>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Badge dot when collapsed */}
+                    {!showContent && (
+                      <>
+                        {item.title === "Meetings" && activeMeetingsCount > 0 && (
+                          <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                        )}
+                        {item.title !== "Meetings" && item.badge && item.badge > 0 && (
+                          <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-red-500" />
+                        )}
+                      </>
+                    )}
+                  </Link>
                 </TooltipTrigger>
                 {collapsed && !onNavigate && (
-                  <TooltipContent side="right" className="hidden md:block">
-                    <div>
-                      <div className="font-semibold">{item.title}</div>
-                      {item.description && (
-                        <div className="text-xs text-muted-foreground">{item.description}</div>
-                      )}
-                    </div>
+                  <TooltipContent side="right" className="hidden md:block text-xs">
+                    <div className="font-semibold">{item.title}</div>
                   </TooltipContent>
                 )}
               </Tooltip>
             );
           })}
 
-          {/* Secondary Sections - Collapsible */}
-          <AnimatePresence>
-            {showContent && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ delay: 0.1 }}
-                className="pt-3 space-y-1"
-              >
-                {secondarySections.map((section) => {
-                  const isOpen = openSections[section.title] ?? false;
-                  const hasActiveItem = section.items.some((item) => isActive(item.url));
-                  const SectionIcon = section.icon;
+          {/* Divider before secondary */}
+          {!showContent && (
+            <div className="mx-3 my-1.5 border-t border-sidebar-border/20" />
+          )}
 
-                  return (
-                    <div key={section.title} className="space-y-1">
-                      <motion.button
-                        whileHover={{ x: 2 }}
-                        whileTap={{ scale: 0.98 }}
-                        onClick={() => toggleSection(section.title)}
-                        className={cn(
-                          "w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold",
-                          "transition-all duration-200",
-                          hasActiveItem
-                            ? "text-sidebar-accent-foreground bg-sidebar-accent/30"
-                            : "text-sidebar-muted hover:text-sidebar-foreground hover:bg-sidebar-accent/20"
-                        )}
+          {/* Secondary Sections */}
+          {showContent ? (
+            /* Expanded: collapsible sections */
+            <div className="pt-2 space-y-0.5">
+              {secondarySections.map((section) => {
+                const isOpen = openSections[section.title] ?? false;
+                const hasActiveItem = section.items.some((item) => isActive(item.url));
+                const SectionIcon = section.icon;
+
+                return (
+                  <div key={section.title} className="space-y-0.5">
+                    <button
+                      onClick={() => toggleSection(section.title)}
+                      className={cn(
+                        "w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-xs",
+                        "transition-all duration-200",
+                        hasActiveItem
+                          ? "text-sidebar-accent-foreground"
+                          : "text-sidebar-muted/60 hover:text-sidebar-foreground"
+                      )}
+                    >
+                      <div className="flex items-center gap-2">
+                        {SectionIcon && <SectionIcon className="w-3 h-3" />}
+                        <span className="uppercase tracking-wider text-[9px] font-bold">{section.title}</span>
+                      </div>
+                      <motion.div
+                        animate={{ rotate: isOpen ? 180 : 0 }}
+                        transition={{ type: "spring", damping: 25 }}
                       >
-                        <div className="flex items-center gap-2">
-                          {SectionIcon && <SectionIcon className="w-3.5 h-3.5" />}
-                          <span className="uppercase tracking-wider text-[10px]">{section.title}</span>
-                        </div>
+                        <ChevronDown className="w-3 h-3" />
+                      </motion.div>
+                    </button>
+                    <AnimatePresence>
+                      {isOpen && (
                         <motion.div
-                          animate={{ rotate: isOpen ? 180 : 0 }}
-                          transition={{ type: "spring", damping: 20 }}
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: "auto", opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          transition={{ duration: 0.2, ease: "easeInOut" }}
+                          className="overflow-hidden"
                         >
-                          <ChevronDown className="w-3.5 h-3.5" />
+                          <div className="space-y-0.5 pl-2.5 ml-2 border-l border-sidebar-border/20">
+                            {section.items.map((item) => {
+                              const itemActive = isActive(item.url);
+                              return (
+                                <Link
+                                  key={item.url}
+                                  to={item.url}
+                                  onClick={handleNav}
+                                  className={cn(
+                                    "flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs",
+                                    "transition-all duration-200",
+                                    itemActive
+                                      ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+                                      : "text-sidebar-foreground/60 hover:bg-sidebar-accent/30 hover:text-sidebar-accent-foreground"
+                                  )}
+                                >
+                                  <item.icon className="w-3.5 h-3.5 shrink-0" />
+                                  <span className="truncate">{item.title}</span>
+                                </Link>
+                              );
+                            })}
+                          </div>
                         </motion.div>
-                      </motion.button>
-                      <AnimatePresence>
-                        {isOpen && (
-                          <motion.div
-                            initial={{ height: 0, opacity: 0 }}
-                            animate={{ height: "auto", opacity: 1 }}
-                            exit={{ height: 0, opacity: 0 }}
-                            transition={{ duration: 0.25, ease: "easeInOut" }}
-                            className="overflow-hidden"
-                          >
-                            <div className="space-y-1 pl-3 border-l-2 border-sidebar-border/30 ml-2">
-                              {section.items.map((item) => {
-                                const itemActive = isActive(item.url);
-                                return (
-                                  <Link
-                                    key={item.url}
-                                    to={item.url}
-                                    onClick={handleNav}
-                                    className={cn(
-                                      "flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs",
-                                      "transition-all duration-200",
-                                      itemActive
-                                        ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium shadow-sm"
-                                        : "text-sidebar-foreground/70 hover:bg-sidebar-accent/40 hover:text-sidebar-accent-foreground"
-                                    )}
-                                  >
-                                    <item.icon className="w-3.5 h-3.5 shrink-0" />
-                                    <div className="flex-1 min-w-0">
-                                      <div className="truncate">{item.title}</div>
-                                      {item.description && (
-                                        <div className="text-[10px] text-sidebar-muted/50 truncate mt-0.5">
-                                          {item.description}
-                                        </div>
-                                      )}
-                                    </div>
-                                    {item.badge && item.badge > 0 && (
-                                      <Badge variant="destructive" className="h-4 min-w-[16px] px-1 text-[9px]">
-                                        {item.badge}
-                                      </Badge>
-                                    )}
-                                  </Link>
-                                );
-                              })}
-                            </div>
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
-                    </div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            /* Collapsed: flat icon list for secondary items */
+            <div className="space-y-0.5">
+              {secondarySections.flatMap((section) =>
+                section.items.map((item) => {
+                  const itemActive = isActive(item.url);
+                  return (
+                    <Tooltip key={item.url}>
+                      <TooltipTrigger asChild>
+                        <Link
+                          to={item.url}
+                          onClick={handleNav}
+                          className={cn(
+                            "relative flex items-center justify-center py-2 mx-auto w-10 h-9 rounded-lg transition-all duration-200",
+                            itemActive
+                              ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                              : "text-sidebar-foreground/50 hover:text-sidebar-accent-foreground hover:bg-sidebar-accent/30"
+                          )}
+                        >
+                          <item.icon className="w-[18px] h-[18px]" />
+                        </Link>
+                      </TooltipTrigger>
+                      <TooltipContent side="right" className="hidden md:block text-xs">
+                        <div className="font-semibold">{item.title}</div>
+                      </TooltipContent>
+                    </Tooltip>
                   );
-                })}
-              </motion.div>
-            )}
-          </AnimatePresence>
+                })
+              )}
+            </div>
+          )}
         </nav>
 
-        {/* System & Settings - Compact */}
-        <div className="px-2 py-2.5 space-y-1 border-t border-sidebar-border/30 shrink-0 relative z-10 bg-sidebar/50 backdrop-blur-sm">
+        {/* System & Settings */}
+        <div className={cn(
+          "py-1.5 space-y-0.5 border-t border-sidebar-border/30 shrink-0",
+          showContent ? "px-2" : "px-1.5"
+        )}>
           {enhancedSystemNav.map((item) => {
             const active = isActive(item.url);
             return (
@@ -736,15 +716,19 @@ export default function AppSidebar({
                     to={item.url}
                     onClick={handleNav}
                     className={cn(
-                      "flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs",
-                      "transition-all duration-200",
+                      "relative flex items-center rounded-lg transition-all duration-200",
+                      showContent
+                        ? "gap-2.5 px-3 py-2 text-xs"
+                        : "justify-center py-2 mx-auto w-10 h-9",
                       active
-                        ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium shadow-sm"
-                        : "text-sidebar-foreground/70 hover:bg-sidebar-accent/40 hover:text-sidebar-accent-foreground",
-                      !showContent && "justify-center"
+                        ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+                        : "text-sidebar-foreground/60 hover:bg-sidebar-accent/30 hover:text-sidebar-accent-foreground"
                     )}
                   >
-                    <item.icon className="w-3.5 h-3.5 shrink-0" />
+                    <item.icon className={cn(
+                      "shrink-0",
+                      showContent ? "w-3.5 h-3.5" : "w-[18px] h-[18px]"
+                    )} />
                     {showContent && (
                       <>
                         <span className="flex-1">{item.title}</span>
@@ -755,10 +739,14 @@ export default function AppSidebar({
                         )}
                       </>
                     )}
+                    {/* Badge dot when collapsed */}
+                    {!showContent && item.badge && item.badge > 0 && (
+                      <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-red-500" />
+                    )}
                   </Link>
                 </TooltipTrigger>
                 {collapsed && !onNavigate && (
-                  <TooltipContent side="right" className="hidden md:block">
+                  <TooltipContent side="right" className="hidden md:block text-xs">
                     {item.title}
                   </TooltipContent>
                 )}
@@ -766,16 +754,11 @@ export default function AppSidebar({
             );
           })}
 
-          {/* Admin Section - Compact */}
+          {/* Admin Section */}
           {isAdmin && (
-            <AnimatePresence>
-              {showContent && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  exit={{ opacity: 0, height: 0 }}
-                  className="pt-1.5 space-y-1 border-t border-sidebar-border/30 mt-1.5"
-                >
+            <>
+              {showContent ? (
+                <div className="pt-1 space-y-0.5 border-t border-sidebar-border/20 mt-1">
                   {adminNav.map((item) => {
                     const active = isActive(item.url);
                     return (
@@ -784,11 +767,11 @@ export default function AppSidebar({
                         to={item.url}
                         onClick={handleNav}
                         className={cn(
-                          "flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs",
+                          "flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs",
                           "transition-all duration-200",
                           active
-                            ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium shadow-sm"
-                            : "text-sidebar-foreground/70 hover:bg-sidebar-accent/40 hover:text-sidebar-accent-foreground"
+                            ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+                            : "text-sidebar-foreground/60 hover:bg-sidebar-accent/30 hover:text-sidebar-accent-foreground"
                         )}
                       >
                         <item.icon className="w-3.5 h-3.5 shrink-0" />
@@ -796,108 +779,129 @@ export default function AppSidebar({
                       </Link>
                     );
                   })}
-                </motion.div>
+                </div>
+              ) : (
+                adminNav.map((item) => {
+                  const active = isActive(item.url);
+                  return (
+                    <Tooltip key={item.url}>
+                      <TooltipTrigger asChild>
+                        <Link
+                          to={item.url}
+                          onClick={handleNav}
+                          className={cn(
+                            "relative flex items-center justify-center py-2 mx-auto w-10 h-9 rounded-lg transition-all duration-200",
+                            active
+                              ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                              : "text-sidebar-foreground/50 hover:text-sidebar-accent-foreground hover:bg-sidebar-accent/30"
+                          )}
+                        >
+                          <item.icon className="w-[18px] h-[18px]" />
+                        </Link>
+                      </TooltipTrigger>
+                      <TooltipContent side="right" className="hidden md:block text-xs">
+                        {item.title}
+                      </TooltipContent>
+                    </Tooltip>
+                  );
+                })
               )}
-            </AnimatePresence>
+            </>
           )}
         </div>
 
         {/* User Profile */}
-        <motion.div
-          initial={false}
-          animate={{
-            padding: showContent ? "0.75rem 1rem" : "0.75rem",
-          }}
-          className="px-3 py-3 border-t border-sidebar-border/30 shrink-0 relative z-10 bg-sidebar/80 backdrop-blur-sm"
+        <div
+          className={cn(
+            "border-t border-sidebar-border/30 shrink-0",
+            showContent ? "px-3 py-2.5" : "px-0 py-2.5 flex justify-center"
+          )}
         >
-          <div className="flex items-center gap-3">
-            <motion.div
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              className="relative"
-            >
-              <Avatar className="h-10 w-10 ring-2 ring-sidebar-primary/30 shadow-lg">
-                <AvatarImage src={currentUser?.avatar} alt={currentUser?.name || "User avatar"} />
-                <AvatarFallback className="bg-gradient-to-br from-sidebar-primary to-sidebar-primary/80 text-sidebar-primary-foreground text-xs font-bold">
-                  {currentUser?.name ? currentUser.name.split(" ").map(n => n[0]).join("") : "?"}
-                </AvatarFallback>
-              </Avatar>
-              <StatusIndicator
-                status={derivedCurrentStatus}
-                className="absolute -bottom-0.5 -right-0.5 shadow-lg"
-              />
-            </motion.div>
-            <AnimatePresence mode="wait">
-              {showContent && (
-                <motion.div
-                  key="user-info"
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -10 }}
-                  transition={{ duration: 0.2 }}
-                  className="flex-1 min-w-0"
-                >
-                  <p className="text-xs font-semibold text-sidebar-accent-foreground truncate">
-                    {currentUser?.name || "Guest User"}
-                  </p>
-                  <p className="text-[10px] text-sidebar-muted/80 truncate mt-0.5">{statusLabel}</p>
-                </motion.div>
-              )}
-            </AnimatePresence>
-            <div className="flex items-center gap-1">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <motion.button
-                    whileHover={{ scale: 1.1, rotate: 5 }}
-                    whileTap={{ scale: 0.9 }}
-                    onClick={toggleFocusMode}
-                    className={cn(
-                      "p-2 rounded-lg",
-                      "bg-sidebar-accent/30 hover:bg-sidebar-accent/50",
-                      "text-sidebar-muted hover:text-sidebar-accent-foreground",
-                      "border border-sidebar-border/30",
-                      "transition-all duration-200",
-                      "backdrop-blur-sm"
-                    )}
-                    title={derivedCurrentStatus === "dnd" ? "Exit Focus mode" : "Enable Focus mode"}
-                  >
-                    <BellOff className="w-3.5 h-3.5" />
-                  </motion.button>
-                </TooltipTrigger>
-                {showContent && (
-                  <TooltipContent side="right" className="hidden md:block">
+          {showContent ? (
+            <div className="flex items-center gap-2.5">
+              <div className="relative shrink-0">
+                <Avatar className="h-8 w-8 ring-1 ring-sidebar-primary/20">
+                  <AvatarImage src={currentUser?.avatar} alt={currentUser?.name || "User avatar"} />
+                  <AvatarFallback className="bg-sidebar-primary text-sidebar-primary-foreground text-[10px] font-bold">
+                    {currentUser?.name ? currentUser.name.split(" ").map(n => n[0]).join("") : "?"}
+                  </AvatarFallback>
+                </Avatar>
+                <StatusIndicator
+                  status={derivedCurrentStatus}
+                  className="absolute -bottom-0.5 -right-0.5"
+                />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold text-sidebar-accent-foreground truncate">
+                  {currentUser?.name || "Guest User"}
+                </p>
+                <p className="text-[10px] text-sidebar-muted/70 truncate">{statusLabel}</p>
+              </div>
+              <div className="flex items-center gap-0.5">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      onClick={toggleFocusMode}
+                      className={cn(
+                        "p-1.5 rounded-md",
+                        "text-sidebar-muted/60 hover:text-sidebar-accent-foreground",
+                        "hover:bg-sidebar-accent/30",
+                        "transition-all duration-200",
+                        focusMode && "text-amber-500"
+                      )}
+                    >
+                      <BellOff className="w-3.5 h-3.5" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="right" className="hidden md:block text-xs">
                     {derivedCurrentStatus === "dnd" ? "Exit Focus mode" : "Enable Focus mode"}
                   </TooltipContent>
-                )}
-              </Tooltip>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <motion.button
-                    whileHover={{ scale: 1.1, rotate: -5 }}
-                    whileTap={{ scale: 0.9 }}
-                    onClick={handleLogout}
-                    className={cn(
-                      "p-2 rounded-lg",
-                      "bg-sidebar-accent/30 hover:bg-sidebar-accent/50",
-                      "text-sidebar-muted hover:text-red-400",
-                      "border border-sidebar-border/30",
-                      "transition-all duration-200",
-                      "backdrop-blur-sm"
-                    )}
-                    title="Log out"
-                  >
-                    <LogOut className="w-3.5 h-3.5" />
-                  </motion.button>
-                </TooltipTrigger>
-                {showContent && (
-                  <TooltipContent side="right" className="hidden md:block">
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      onClick={handleLogout}
+                      className={cn(
+                        "p-1.5 rounded-md",
+                        "text-sidebar-muted/60 hover:text-red-400",
+                        "hover:bg-sidebar-accent/30",
+                        "transition-all duration-200"
+                      )}
+                    >
+                      <LogOut className="w-3.5 h-3.5" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="right" className="hidden md:block text-xs">
                     Log out
                   </TooltipContent>
-                )}
-              </Tooltip>
+                </Tooltip>
+              </div>
             </div>
-          </div>
-        </motion.div>
+          ) : (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="relative cursor-pointer">
+                  <Avatar className="h-8 w-8 ring-1 ring-sidebar-primary/20">
+                    <AvatarImage src={currentUser?.avatar} alt={currentUser?.name || "User avatar"} />
+                    <AvatarFallback className="bg-sidebar-primary text-sidebar-primary-foreground text-[10px] font-bold">
+                      {currentUser?.name ? currentUser.name.split(" ").map(n => n[0]).join("") : "?"}
+                    </AvatarFallback>
+                  </Avatar>
+                  <StatusIndicator
+                    status={derivedCurrentStatus}
+                    className="absolute -bottom-0.5 -right-0.5"
+                  />
+                </div>
+              </TooltipTrigger>
+              <TooltipContent side="right" className="hidden md:block text-xs">
+                <div>
+                  <p className="font-semibold">{currentUser?.name || "Guest"}</p>
+                  <p className="text-muted-foreground">{statusLabel}</p>
+                </div>
+              </TooltipContent>
+            </Tooltip>
+          )}
+        </div>
       </motion.aside>
     </TooltipProvider>
   );

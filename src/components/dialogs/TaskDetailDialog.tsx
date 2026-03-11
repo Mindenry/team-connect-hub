@@ -4,7 +4,7 @@ import {
   CheckSquare, Calendar, User, Tag, Flag, MessageSquare, Paperclip,
   Clock, Link as LinkIcon, Send, ArrowUp, ArrowRight, ArrowDown, Rocket,
   Plus, X, Trash2, FileText, Upload, Target, Zap, Edit2, Save, CheckCircle2, Package,
-  Eye, EyeOff,
+  Eye, EyeOff, ChevronsUpDown, Check, Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,8 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem } from "@/components/ui/command";
 import {
   AnimatedDialog as Dialog,
   AnimatedDialogContent as DialogContent,
@@ -300,7 +302,7 @@ export default function TaskDetailDialog({ open, onOpenChange, task, onDeleted }
   const [projects, setProjects] = useState<any[]>([]);
   const [components, setComponents] = useState<any[]>([]);
   const [versions, setVersions] = useState<any[]>([]);
-  const [viewingUsers, setViewingUsers] = useState<Array<{ userId: string; name: string; initials?: string }>>([]);
+  const [viewingUsers, setViewingUsers] = useState<Array<{ userId: string; name: string; initials?: string; avatar?: string }>>([]);
   const [previewAttachment, setPreviewAttachment] = useState<{ url: string; fetchUrl?: string; name: string; mimetype?: string } | null>(null);
   const [previewObjectUrl, setPreviewObjectUrl] = useState<string | null>(null);
   const previewBlobUrlRef = useRef<string | null>(null);
@@ -421,15 +423,21 @@ export default function TaskDetailDialog({ open, onOpenChange, task, onDeleted }
     const userName = currentUser?.name;
     
     if (userId && task.id) {
-      socket.emit('task:viewing', { taskId: task.id, userId, userName: userName || 'Unknown' });
+      socket.emit('task:viewing', { 
+        taskId: task.id, 
+        userId, 
+        userName: userName || 'Unknown',
+        avatar: (currentUser as any)?.avatar,
+      });
     }
 
-    const handleViewingUpdate = (data: { taskId: string; users: Array<{ userId: string; name: string }> }) => {
+    const handleViewingUpdate = (data: { taskId: string; users: Array<{ userId: string; name: string; avatar?: string }> }) => {
       if (!cancelled && data.taskId === task.id) {
         const mapped = data.users.map(u => ({
           userId: u.userId,
           name: u.name,
           initials: u.name?.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase(),
+          avatar: u.avatar,
           isViewing: true,
         }));
         setViewingUsers(mapped);
@@ -1463,37 +1471,89 @@ export default function TaskDetailDialog({ open, onOpenChange, task, onDeleted }
                     </div>
 
                     <div className="space-y-2">
-                      <Label className="text-[11px] text-muted-foreground">Additional Assignees</Label>
-                      <div className="flex flex-wrap gap-1.5">
-                        {users.map((u) => {
-                          const selected = Array.isArray(displayTask.assignments)
-                            ? displayTask.assignments.some((a: any) => a.userId === u.id || a.user?.id === u.id)
-                            : false;
-                          return (
-                            <button
-                              key={`extra-assignee-${u.id}`}
-                              type="button"
-                              onClick={() => {
-                                const existing = Array.isArray(displayTask.assignments)
-                                  ? displayTask.assignments.map((a: any) => a.userId || a.user?.id).filter(Boolean)
-                                  : [];
-                                const next = selected
-                                  ? existing.filter((id: string) => id !== u.id)
-                                  : [...existing, u.id];
-                                handleUpdateField("assigneeIds", next);
-                              }}
-                              className={cn(
-                                "px-2 py-1 rounded text-[11px] border",
-                                selected
-                                  ? "bg-primary/15 text-primary border-primary/40"
-                                  : "bg-background text-foreground border-border hover:bg-muted"
-                              )}
-                            >
-                              {u.name}
-                            </button>
-                          );
-                        })}
-                      </div>
+                      <Label className="text-[11px] text-muted-foreground flex items-center gap-1">
+                        <Users className="w-3.5 h-3.5" />
+                        Additional Assignees
+                      </Label>
+                      
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            role="combobox"
+                            className={cn(
+                              "w-full justify-between h-8 text-xs font-normal",
+                              (!displayTask.assignments || displayTask.assignments.length === 0) && "text-muted-foreground"
+                            )}
+                          >
+                            {displayTask.assignments && displayTask.assignments.length > 0 ? (
+                              <div className="flex gap-1 overflow-hidden">
+                                {displayTask.assignments.slice(0, 3).map((a: any) => {
+                                  const userId = a.userId || a.user?.id;
+                                  const user = users.find(u => u.id === userId);
+                                  return user ? (
+                                    <Badge variant="secondary" key={`badge-extra-${userId}`} className="text-[10px] h-5 rounded-sm px-1.5 font-normal">
+                                      {user.name.split(' ')[0]}
+                                    </Badge>
+                                  ) : null;
+                                })}
+                                {displayTask.assignments.length > 3 && (
+                                  <Badge variant="secondary" className="text-[10px] h-5 rounded-sm px-1.5 font-normal">
+                                    +{displayTask.assignments.length - 3} more
+                                  </Badge>
+                                )}
+                              </div>
+                            ) : (
+                              "Select members..."
+                            )}
+                            <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-50" />
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-[300px] p-0" align="start">
+                          <Command>
+                            <CommandInput placeholder="Search users..." className="h-9 text-xs" />
+                            <CommandList>
+                              <CommandEmpty className="text-xs py-4 text-center text-muted-foreground">No users found.</CommandEmpty>
+                              <CommandGroup className="max-h-60 overflow-y-auto">
+                                {users.map((user) => {
+                                  const existing = Array.isArray(displayTask.assignments)
+                                    ? displayTask.assignments.map((a: any) => a.userId || a.user?.id).filter(Boolean)
+                                    : [];
+                                  const isSelected = existing.includes(user.id);
+                                  
+                                  return (
+                                    <CommandItem
+                                      key={`cmd-extra-${user.id}`}
+                                      value={user.name}
+                                      onSelect={() => {
+                                        const next = isSelected
+                                          ? existing.filter((id: string) => id !== user.id)
+                                          : [...existing, user.id];
+                                        handleUpdateField("assigneeIds", next);
+                                      }}
+                                      className="flex items-center gap-2 px-2 py-1.5 text-xs cursor-pointer"
+                                    >
+                                      <div className={cn(
+                                        "mr-1 flex h-3.5 w-3.5 items-center justify-center rounded-[3px] border",
+                                        isSelected ? "bg-primary border-primary text-primary-foreground" : "border-muted-foreground/30 opacity-50"
+                                      )}>
+                                        {isSelected && <Check className="h-2.5 w-2.5" />}
+                                      </div>
+                                      <Avatar className="h-5 w-5 rounded-full border border-border/50">
+                                        <AvatarImage src={user.avatar} />
+                                        <AvatarFallback className="text-[8px] bg-primary/10 text-primary">
+                                          {user.name?.charAt(0)}
+                                        </AvatarFallback>
+                                      </Avatar>
+                                      <span>{user.name}</span>
+                                    </CommandItem>
+                                  );
+                                })}
+                              </CommandGroup>
+                            </CommandList>
+                          </Command>
+                        </PopoverContent>
+                      </Popover>
                     </div>
 
                     <div className="space-y-2">
