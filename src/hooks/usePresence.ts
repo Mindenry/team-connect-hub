@@ -57,13 +57,20 @@ export function usePresence() {
     }
     socket.on("connect", requestData);
 
-    // Also re-request on reconnection (socket.io fires 'connect' on reconnect too,
-    // but adding explicit reconnect handler for safety)
+    // Also re-request on reconnection
     socket.io.on("reconnect", () => {
       requestData();
     });
 
+    // Periodic refresh every 10 seconds as a safety net
+    const interval = setInterval(() => {
+      if (socket.connected) {
+        requestData();
+      }
+    }, 10000);
+
     return () => {
+      clearInterval(interval);
       socket.off("presence:update", handlePresenceUpdate);
       socket.off("rooms:active", handleActiveRooms);
       socket.off("connect", requestData);

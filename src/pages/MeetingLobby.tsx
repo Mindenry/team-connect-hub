@@ -39,6 +39,7 @@ import {
 import { auth, useAuth } from "@/lib/auth";
 import { apiGet } from "@/lib/api";
 import { getSocket } from "@/lib/websocket";
+import { usePresence } from "@/hooks/usePresence";
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
 
@@ -87,6 +88,7 @@ export default function MeetingLobby() {
   const [participantCount, setParticipantCount] = useState(0);
   const [participantNames, setParticipantNames] = useState<string[]>([]);
   const [roomParticipants, setRoomParticipants] = useState<Array<{ peerId: string; name: string; userId?: string; avatar?: string }>>([]);
+  const { activeRooms } = usePresence();
   const [hasAudio, setHasAudio] = useState(false);
   const [hasVideo, setHasVideo] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -164,30 +166,22 @@ export default function MeetingLobby() {
         }
       });
     }
-
-    const socket = getSocket();
-    socket.emit("rooms:get-active");
-
-    const handleRooms = (rooms: any[]) => {
-      const room = rooms?.find((r) => r.roomId === meetingCode);
-      if (room) {
-        setParticipantCount(room.participants.length);
-        setParticipantNames(
-          room.participants.map((p: any) => p.name?.split(" ")[0] || "Someone")
-        );
-        setRoomParticipants(room.participants || []);
-      } else {
-        setParticipantCount(0);
-        setParticipantNames([]);
-        setRoomParticipants([]);
-      }
-    };
-
-    socket.on("rooms:active", handleRooms);
-    return () => {
-      socket.off("rooms:active", handleRooms);
-    };
   }, [meetingCode, currentUser, navigate]);
+
+  useEffect(() => {
+    const room = activeRooms.find((r) => r.roomId === meetingCode);
+    if (room) {
+      setParticipantCount(room.participants.length);
+      setParticipantNames(
+        room.participants.map((p: any) => p.name?.split(" ")[0] || "Someone")
+      );
+      setRoomParticipants(room.participants || []);
+    } else {
+      setParticipantCount(0);
+      setParticipantNames([]);
+      setRoomParticipants([]);
+    }
+  }, [activeRooms, meetingCode]);
 
   const attachVideo = (stream: MediaStream | null) => {
     if (!videoRef.current) return;
