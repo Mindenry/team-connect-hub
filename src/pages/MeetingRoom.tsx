@@ -26,6 +26,7 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { auth } from "@/lib/auth";
 import { getSocket } from "@/lib/websocket";
+import { setCurrentMeeting, clearCurrentMeeting } from "@/hooks/usePresence";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -541,6 +542,15 @@ function MeetingRoomUI({ meetingId: propMeetingId, meetingTitle: propMeetingTitl
       state: { isMuted, isCameraOn, isScreenSharing, isHandRaised },
     });
 
+    // Track current meeting for auto-rejoin on socket reconnection
+    setCurrentMeeting({
+      meetingId: meetingCode,
+      peerId: peerId.current,
+      peerName: userName,
+      userId: currentUser?.id,
+      state: { isMuted, isCameraOn, isScreenSharing, isHandRaised },
+    });
+
     // Load persistent chat history (Discord-style) if meeting has a team
     const loadChatHistory = async () => {
       if (!meetingId || meetingId === "quick-huddle") return;
@@ -681,6 +691,7 @@ function MeetingRoomUI({ meetingId: propMeetingId, meetingTitle: propMeetingTitl
       }
       
       socket.emit("meeting:leave", { meetingId: meetingCode, peerId: peerId.current });
+      clearCurrentMeeting();
       socket.off("meeting:participant:update", handleUpdate);
       socket.off("meeting:participant:speaking", handleSpeaking);
       socket.off("meeting:chat:message", handleChat);

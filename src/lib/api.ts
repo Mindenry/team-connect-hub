@@ -1,4 +1,5 @@
 import { auth } from './auth';
+import { updateSocketAuth } from './websocket';
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
 
@@ -219,6 +220,8 @@ export async function apiFetch(url: string, options: RequestInit = {}): Promise<
   if (response.status === 401 && auth.getRefreshToken()) {
     const newToken = await auth.refreshAccessToken();
     if (newToken) {
+      // Sync fresh token to WebSocket connection
+      updateSocketAuth();
       const newHeaders = await auth.getAuthHeaders();
       const isFormData = options.body instanceof FormData;
       const cleanRetryHeaders: HeadersInit = isFormData

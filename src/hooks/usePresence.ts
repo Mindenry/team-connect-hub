@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { getSocket } from "@/lib/websocket";
 import { auth } from "@/lib/auth";
 
@@ -15,10 +15,30 @@ interface OnlineUser {
   avatar?: string;
 }
 
+// Shared state for current meeting (set by MeetingRoom when user joins)
+let currentMeetingInfo: {
+  meetingId: string;
+  peerId: string;
+  peerName: string;
+  state: any;
+  userId?: string;
+} | null = null;
+
+/** Call this when user joins a meeting to enable auto-rejoin on reconnect */
+export function setCurrentMeeting(info: typeof currentMeetingInfo) {
+  currentMeetingInfo = info;
+}
+
+/** Call this when user leaves a meeting */
+export function clearCurrentMeeting() {
+  currentMeetingInfo = null;
+}
+
 export function usePresence() {
   const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([]);
   const [activeRooms, setActiveRooms] = useState<ActiveRoom[]>([]);
   const currentUser = auth.getUser();
+  const activeRoomsRef = useRef<ActiveRoom[]>([]);
 
   useEffect(() => {
     const socket = getSocket();
@@ -43,9 +63,11 @@ export function usePresence() {
       setOnlineUsers(users || []);
     };
 
-    // Listen for active rooms
+    // Listen for active rooms — always accept new data (don't clear on empty during reconnect)
     const handleActiveRooms = (rooms: ActiveRoom[]) => {
-      setActiveRooms(rooms || []);
+      const newRooms = rooms || [];
+      activeRoomsRef.current = newRooms;
+      setActiveRooms(newRooms);
     };
 
     socket.on("presence:update", handlePresenceUpdate);
@@ -55,17 +77,39 @@ export function usePresence() {
     if (socket.connected) {
       requestData();
     }
-    socket.on("connect", requestData);
+
+    const handleConnect = () => {
+      requestData();
+
+      // If user was in a meeting, rejoin with new socket
+      if (currentMeetingInfo) {
+        socket.emit("meeting:rejoin", {
+          ...currentMeetingInfo,
+          userId: currentMeetingInfo.userId || currentUser?.id,
+        });
+      }
+    };
+
+    socket.on("connect", handleConnect);
 
     // Also re-request on reconnection
     socket.io.on("reconnect", () => {
       requestData();
+
+      // Rejoin meeting on reconnect
+      if (currentMeetingInfo) {
+        socket.emit("meeting:rejoin", {
+          ...currentMeetingInfo,
+          userId: currentMeetingInfo.userId || currentUser?.id,
+        });
+      }
     });
 
     // Periodic refresh every 10 seconds as a safety net
     const interval = setInterval(() => {
       if (socket.connected) {
-        requestData();
+        socket.emit("rooms:get-active");
+        socket.emit("presence:get");
       }
     }, 10000);
 
@@ -73,7 +117,7 @@ export function usePresence() {
       clearInterval(interval);
       socket.off("presence:update", handlePresenceUpdate);
       socket.off("rooms:active", handleActiveRooms);
-      socket.off("connect", requestData);
+      socket.off("connect", handleConnect);
       socket.io.off("reconnect");
     };
   }, [currentUser?.id]);

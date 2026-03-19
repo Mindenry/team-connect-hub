@@ -11,14 +11,33 @@ export const getSocket = (): Socket => {
     socket = io(API_BASE, {
       transports: ['websocket'],
       reconnection: true,
-      reconnectionAttempts: 10,
+      reconnectionAttempts: Infinity,
       reconnectionDelay: 1000,
       reconnectionDelayMax: 30000,
       timeout: 20000,
       auth: token ? { token } : undefined,
     });
+
+    // Refresh auth token from localStorage before each reconnect attempt
+    // This picks up tokens refreshed by the REST API layer
+    socket.on('reconnect_attempt', () => {
+      const freshToken = localStorage.getItem('collabhub_token');
+      if (socket && freshToken) {
+        socket.auth = { token: freshToken };
+      }
+    });
   }
   return socket;
+};
+
+/** Update socket auth token (call after REST token refresh) */
+export const updateSocketAuth = () => {
+  if (socket) {
+    const freshToken = localStorage.getItem('collabhub_token');
+    if (freshToken) {
+      socket.auth = { token: freshToken };
+    }
+  }
 };
 
 export const disconnectSocket = () => {
