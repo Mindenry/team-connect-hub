@@ -8,11 +8,11 @@ import {
   useTracks,
   useRoomContext
 } from "@livekit/components-react";
-import { RoomEvent, Track } from "livekit-client";
+import { RoomEvent, Track, LocalVideoTrack, LocalAudioTrack } from "livekit-client";
 
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { apiGet } from "@/lib/api";
+import { apiGet, apiFetch } from "@/lib/api";
 import {
   Mic, MicOff, Video as VideoIcon, VideoOff, Monitor, MonitorOff, Users,
   MessageSquare, Hand, Settings, Send, X, Loader2, ChevronUp, Volume2,
@@ -84,6 +84,7 @@ interface ChatMessage {
   time: string;
   text: string;
   type?: "text" | "file" | "image";
+  attachments?: Array<{ url: string; name: string; type: string }>;
   fileUrl?: string;
   fileName?: string;
 }
@@ -204,12 +205,40 @@ function MeetingRoomUI({ meetingId: propMeetingId, meetingTitle: propMeetingTitl
   const { localParticipant: lkLocal } = useLocalParticipant();
   const screenTracks = useTracks([Track.Source.ScreenShare]);
   
-  // Sync state upward to localParticipant
+  // Sync state upward to localParticipant by manually publishing our existing tracks
+  // This prevents double camera capture conflicts that cause black screens
   useEffect(() => {
-    if (lkLocal) {
-      lkLocal.setMicrophoneEnabled(!isMuted);
-      lkLocal.setCameraEnabled(isCameraOn);
-    }
+    const syncLiveKit = async () => {
+      if (!lkLocal) return;
+      try {
+        if (localStreamRef.current) {
+          // Audio
+          const audioTrack = localStreamRef.current.getAudioTracks()[0];
+          if (audioTrack && !isMuted) {
+            const hasAudio = Array.from(lkLocal.audioTrackPublications.values()).some(p => p.track?.mediaStreamTrack === audioTrack);
+            if (!hasAudio) await lkLocal.publishTrack(new LocalAudioTrack(audioTrack));
+          } else {
+            Array.from(lkLocal.audioTrackPublications.values()).forEach(p => {
+              if (p.source === Track.Source.Microphone && p.track) lkLocal.unpublishTrack(p.track);
+            });
+          }
+
+          // Video
+          const videoTrack = localStreamRef.current.getVideoTracks()[0];
+          if (videoTrack && isCameraOn) {
+            const hasVideo = Array.from(lkLocal.videoTrackPublications.values()).some(p => p.track?.mediaStreamTrack === videoTrack || p.track?.mediaStreamTrack?.id === videoTrack.id);
+            if (!hasVideo) await lkLocal.publishTrack(videoTrack, { source: Track.Source.Camera, name: "camera" });
+          } else {
+            Array.from(lkLocal.videoTrackPublications.values()).forEach(p => {
+              if (p.source === Track.Source.Camera && p.track) lkLocal.unpublishTrack(p.track);
+            });
+          }
+        }
+      } catch (err) {
+        console.warn("LiveKit publish err", err);
+      }
+    };
+    syncLiveKit();
   }, [lkLocal, isMuted, isCameraOn]);
 
   const meetingCode = meetingId || "quick-huddle";
@@ -223,7 +252,8 @@ function MeetingRoomUI({ meetingId: propMeetingId, meetingTitle: propMeetingTitl
   const loadDbParticipants = useCallback(async () => {
     if (!meetingId || meetingId === "quick-huddle") return;
     try {
-      const res = await fetch(`${API_BASE}/meetings/${meetingId}/participants?includeWaitingRoom=true`);
+      const authHeaders = await auth.getAuthHeaders();
+      const res = await fetch(`${API_BASE}/meetings/${meetingId}/participants?includeWaitingRoom=true`, { headers: authHeaders });
       if (res.ok) {
         const text = await res.text();
         if (!text) return;
@@ -251,7 +281,8 @@ function MeetingRoomUI({ meetingId: propMeetingId, meetingTitle: propMeetingTitl
   const loadWaitingRoom = useCallback(async () => {
     if (!meetingId || meetingId === "quick-huddle") return;
     try {
-      const res = await fetch(`${API_BASE}/meetings/${meetingId}/participants/waiting-room`);
+      const authHeaders = await auth.getAuthHeaders();
+      const res = await fetch(`${API_BASE}/meetings/${meetingId}/participants/waiting-room`, { headers: authHeaders });
       if (res.ok) {
         const text = await res.text();
         if (!text) return;
@@ -274,8 +305,10 @@ function MeetingRoomUI({ meetingId: propMeetingId, meetingTitle: propMeetingTitl
   const admitParticipant = useCallback(async (userId: string) => {
     if (!meetingId || !isHost) return;
     try {
+      const authHeaders = await auth.getAuthHeaders();
       const res = await fetch(`${API_BASE}/meetings/${meetingId}/participants/${userId}/admit`, {
         method: "POST",
+        headers: authHeaders,
       });
       if (res.ok) {
         await loadDbParticipants();
@@ -288,8 +321,10 @@ function MeetingRoomUI({ meetingId: propMeetingId, meetingTitle: propMeetingTitl
   const denyParticipant = useCallback(async (userId: string) => {
     if (!meetingId || !isHost) return;
     try {
+      const authHeaders = await auth.getAuthHeaders();
       const res = await fetch(`${API_BASE}/meetings/${meetingId}/participants/${userId}/deny`, {
         method: "POST",
+        headers: authHeaders,
       });
       if (res.ok) {
         await loadDbParticipants();
@@ -425,13 +460,6 @@ function MeetingRoomUI({ meetingId: propMeetingId, meetingTitle: propMeetingTitl
         setupAudioAnalyser(stream);
         await enumerateDevices();
         
-        // Force update video after devices are enumerated
-        setTimeout(() => {
-          if (localVideoRef.current && localStreamRef.current && initialCameraOn) {
-            localVideoRef.current.srcObject = localStreamRef.current;
-            localVideoRef.current.play().catch(() => {});
-          }
-        }, 200);
       } catch {
         try {
           const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -673,12 +701,22 @@ function MeetingRoomUI({ meetingId: propMeetingId, meetingTitle: propMeetingTitl
       setParticipants(prev => prev.filter(p => p.peerId !== data.peerId));
     };
 
+    const handleForceMute = (data: { peerId: string }) => {
+      if (data.peerId === peerId.current) {
+        setIsMuted(true);
+        if (localStreamRef.current) {
+          localStreamRef.current.getAudioTracks().forEach(t => t.enabled = false);
+        }
+      }
+    };
+
     socket.on("meeting:participant:update", handleUpdate);
     socket.on("meeting:participant:speaking", handleSpeaking);
     socket.on("meeting:chat:message", handleChat);
     socket.on("meeting:participants", handleParticipants);
     socket.on("meeting:participant:joined", handleJoined);
     socket.on("meeting:participant:left", handleLeft);
+    socket.on("meeting:participant:force_mute", handleForceMute);
 
     return () => {
       // Record leave time in database if it's a real meeting (not quick-huddle)
@@ -698,6 +736,7 @@ function MeetingRoomUI({ meetingId: propMeetingId, meetingTitle: propMeetingTitl
       socket.off("meeting:participants", handleParticipants);
       socket.off("meeting:participant:joined", handleJoined);
       socket.off("meeting:participant:left", handleLeft);
+      socket.off("meeting:participant:force_mute", handleForceMute);
     };
   }, [loading, meetingCode]);
 
@@ -992,6 +1031,50 @@ function MeetingRoomUI({ meetingId: propMeetingId, meetingTitle: propMeetingTitl
     }
   }, [isHandRaised]);
 
+  const [uploadingFile, setUploadingFile] = useState(false);
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !currentUser || !meetingId) return;
+
+    setUploadingFile(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("folder", "meeting-chat");
+
+      const res = await apiFetch(`/upload`, {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!res.ok) throw new Error("Upload failed");
+      const data = await res.json();
+
+      const msgId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      
+      socketRef.current.emit("meeting:chat:send", {
+        meetingId: meetingCode,
+        message: {
+          id: msgId,
+          senderId: currentUser.id,
+          senderName: currentUser.name,
+          text: `Shared a file: ${file.name}`,
+          attachments: [{
+            url: data.url,
+            name: file.name,
+            type: file.type
+          }]
+        },
+      });
+    } catch (err) {
+      console.error("Failed to upload file:", err);
+    } finally {
+      setUploadingFile(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
   const sendChat = useCallback(() => {
     if (!chatInput.trim() || !currentUser) return;
 
@@ -1115,8 +1198,10 @@ function MeetingRoomUI({ meetingId: propMeetingId, meetingTitle: propMeetingTitl
     // Record leave time in database if it's a real meeting (not quick-huddle)
     if (meetingId && meetingId !== "quick-huddle" && currentUser?.id) {
       try {
+        const authHeaders = await auth.getAuthHeaders();
         await fetch(`${API_BASE}/meetings/${meetingId}/participants/${currentUser.id}`, {
           method: "DELETE",
+          headers: authHeaders,
         }).catch(() => {
           // Silently fail if API call fails
         });
@@ -1173,9 +1258,10 @@ function MeetingRoomUI({ meetingId: propMeetingId, meetingTitle: propMeetingTitl
   const handleMuteAll = async () => {
     if (!isHost || !meetingId) return;
     try {
+      const authHeaders = await auth.getAuthHeaders();
       const res = await fetch(`${API_BASE}/meetings/${meetingId}/participants/mute-all`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeaders },
         body: JSON.stringify({ hostId: currentUser?.id }),
       });
       if (res.ok) {
@@ -1189,9 +1275,10 @@ function MeetingRoomUI({ meetingId: propMeetingId, meetingTitle: propMeetingTitl
   const handleKickParticipant = async (targetUserId: string) => {
     if (!isHost || !meetingId) return;
     try {
+      const authHeaders = await auth.getAuthHeaders();
       const res = await fetch(`${API_BASE}/meetings/${meetingId}/participants/${targetUserId}/remove`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeaders },
         body: JSON.stringify({ hostId: currentUser?.id }),
       });
       if (res.ok) {
@@ -1675,31 +1762,30 @@ function MeetingRoomUI({ meetingId: propMeetingId, meetingTitle: propMeetingTitl
                             <video 
                               ref={(el) => {
                                 if (el) {
+                                  el.muted = true; // Fix Autoplay block for remote videos
                                   const basePeerId = p.peerId.replace('-screen', '');
                                   const peer = peersRef.current.get(basePeerId);
                                   const lkPeer = livekitParticipants.find(lp => lp.identity === basePeerId);
-                                  let lkStream = null;
+                                  let attached = false;
+                                  
                                   if (lkPeer) {
                                     const pub = lkPeer.getTrackPublication(Track.Source.ScreenShare);
-                                    if (pub?.track?.mediaStream) lkStream = pub.track.mediaStream;
-                                    else if (pub?.track?.mediaStreamTrack) lkStream = new MediaStream([pub.track.mediaStreamTrack]);
+                                    if (pub?.track) {
+                                      pub.track.attach(el);
+                                      attached = true;
+                                    }
                                   }
-                                  const finalStream = peer?.screenStream || lkStream;
                                   
-                                  if (finalStream) {
-                                    // Use screen stream for screen share tile
-                                    // Only update if different to prevent flickering
-                                    if (el.srcObject !== finalStream) {
-                                      el.srcObject = finalStream;
-                                      // Use requestAnimationFrame to ensure smooth update
+                                  if (!attached && peer?.screenStream) {
+                                    if (el.srcObject !== peer.screenStream) {
+                                      el.srcObject = peer.screenStream;
                                       requestAnimationFrame(() => {
-                                        if (el && el.srcObject === finalStream) {
+                                        if (el && el.srcObject === peer.screenStream) {
                                           el.play().catch(() => {});
                                         }
                                       });
                                     }
-                                  } else {
-                                    // Clear if no stream
+                                  } else if (!attached) {
                                     if (el.srcObject) {
                                       el.srcObject = null;
                                     }
@@ -1708,7 +1794,7 @@ function MeetingRoomUI({ meetingId: propMeetingId, meetingTitle: propMeetingTitl
                               }} 
                               autoPlay 
                               playsInline 
-                              muted={false}
+                              muted
                               className="object-contain"
                               style={{
                                 objectFit: 'contain',
@@ -1750,28 +1836,29 @@ function MeetingRoomUI({ meetingId: propMeetingId, meetingTitle: propMeetingTitl
                               <video 
                                 ref={(el) => {
                                   if (el) {
+                                    el.muted = true; // Fix Autoplay block for remote videos
                                     const peer = peersRef.current.get(p.peerId);
                                     const lkPeer = livekitParticipants.find(lp => lp.identity === p.peerId);
-                                    let lkStream = null;
+                                    let attached = false;
+                                    
                                     if (lkPeer) {
                                       const pub = lkPeer.getTrackPublication(Track.Source.Camera);
-                                      if (pub?.track?.mediaStream) lkStream = pub.track.mediaStream;
-                                      else if (pub?.track?.mediaStreamTrack) lkStream = new MediaStream([pub.track.mediaStreamTrack]);
+                                      if (pub?.track) {
+                                        pub.track.attach(el);
+                                        attached = true;
+                                      }
                                     }
-                                    const finalStream = peer?.cameraStream || lkStream;
                                     
-                                    if (finalStream) {
-                                      // Use camera stream for camera tile
-                                      if (el.srcObject !== finalStream) {
-                                        el.srcObject = finalStream;
+                                    if (!attached && peer?.cameraStream) {
+                                      if (el.srcObject !== peer.cameraStream) {
+                                        el.srcObject = peer.cameraStream;
                                         requestAnimationFrame(() => {
-                                          if (el && el.srcObject === finalStream) {
+                                          if (el && el.srcObject === peer.cameraStream) {
                                             el.play().catch(() => {});
                                           }
                                         });
                                       }
-                                    } else {
-                                      // Clear if no camera stream
+                                    } else if (!attached) {
                                       if (el.srcObject) {
                                         el.srcObject = null;
                                       }
@@ -1780,7 +1867,7 @@ function MeetingRoomUI({ meetingId: propMeetingId, meetingTitle: propMeetingTitl
                                 }} 
                                 autoPlay 
                                 playsInline 
-                                muted={false}
+                                muted
                                 className={cn(
                                   "object-contain",
                                   p.state.isCameraOn ? "opacity-100" : "opacity-0 pointer-events-none"
@@ -1955,7 +2042,15 @@ function MeetingRoomUI({ meetingId: propMeetingId, meetingTitle: propMeetingTitl
                           <div className="flex-1 min-w-0"><p className="text-white text-sm truncate">{p.name}</p></div>
                           <div className="flex items-center gap-1">
                             {p.state.isHandRaised && <Hand className="w-4 h-4 text-yellow-500" />}
-                            {p.state.isMuted ? <MicOff className="w-4 h-4 text-red-500" /> : <Mic className="w-4 h-4 text-white/50" />}
+                            {isHost && !p.state.isMuted && !p.isLocal ? (
+                              <button onClick={() => {
+                                socketRef.current.emit("meeting:participant:mute", { meetingId: meetingCode, targetPeerId: p.peerId });
+                              }} className="hover:bg-red-500/20 p-1 rounded transition-colors group relative" title="Mute Participant">
+                                <Mic className="w-4 h-4 text-white/50 group-hover:text-red-400" />
+                              </button>
+                            ) : (
+                              p.state.isMuted ? <MicOff className="w-4 h-4 text-red-500" /> : <Mic className="w-4 h-4 text-white/50" />
+                            )}
                             {!p.state.isCameraOn && <VideoOff className="w-4 h-4 text-red-500" />}
                           </div>
                         </div>
@@ -1971,6 +2066,23 @@ function MeetingRoomUI({ meetingId: propMeetingId, meetingTitle: propMeetingTitl
                       <div key={msg.id} className="text-sm">
                         <div className="flex items-center gap-2 mb-0.5"><span className="text-white font-medium">{msg.sender}</span><span className="text-white/40 text-xs">{msg.time}</span></div>
                         <p className="text-white/80 break-words">{msg.text}</p>
+                        {msg.attachments && msg.attachments.length > 0 && (
+                          <div className="mt-2 space-y-2">
+                            {msg.attachments.map((file, i) => (
+                              <div key={i} className="bg-[#2d2d2d] rounded overflow-hidden">
+                                {file.type.startsWith("image/") ? (
+                                  <img src={file.url} alt={file.name} className="max-w-full h-auto max-h-48 object-contain" />
+                                ) : (
+                                  <a href={file.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 p-2 hover:bg-[#3d3d3d] text-blue-400">
+                                    <FileText className="w-4 h-4" />
+                                    <span className="truncate flex-1">{file.name}</span>
+                                    <Download className="w-4 h-4 text-white/50" />
+                                  </a>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     ))}
                     <div ref={chatEndRef} />
@@ -1979,9 +2091,15 @@ function MeetingRoomUI({ meetingId: propMeetingId, meetingTitle: propMeetingTitl
               </div>
               {showChat && (
                 <div className="p-3 border-t border-[#333]">
-                  <div className="flex gap-2">
-                    <Input value={chatInput} onChange={e => setChatInput(e.target.value)} onKeyDown={e => e.key === "Enter" && sendChat()} placeholder="Type message..." className="bg-[#3d3d3d] border-0 text-white placeholder:text-white/40 h-10" />
-                    <Button size="icon" className="h-10 w-10 bg-[#0E71EB] hover:bg-[#0D65D0]" onClick={sendChat}><Send className="w-4 h-4" /></Button>
+                  <div className="flex gap-2 relative">
+                    <Input value={chatInput} onChange={e => setChatInput(e.target.value)} onKeyDown={e => e.key === "Enter" && sendChat()} placeholder="Type message..." className="bg-[#3d3d3d] border-0 text-white placeholder:text-white/40 h-10 pr-10" />
+                    <Button type="button" size="icon" variant="ghost" className="absolute right-12 top-1 text-white/50 hover:text-white" onClick={() => fileInputRef.current?.click()} disabled={uploadingFile}>
+                      {uploadingFile ? <Loader2 className="w-5 h-5 animate-spin" /> : <Paperclip className="w-5 h-5" />}
+                    </Button>
+                    <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileUpload} />
+                    <Button size="icon" className="h-10 w-10 bg-[#0E71EB] hover:bg-[#0D65D0]" onClick={sendChat} disabled={uploadingFile}>
+                      <Send className="w-4 h-4" />
+                    </Button>
                   </div>
                 </div>
               )}

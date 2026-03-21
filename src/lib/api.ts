@@ -164,10 +164,21 @@ class RequestManager {
   
   const apiUrl = url.startsWith('/api') ? url : url.startsWith('/') ? `/api${url}` : `/api/${url}`;
   
-    return fetch(`${API_BASE}${apiUrl}`, {
-    ...options,
-    headers: requestHeaders,
-  });
+    const response = await fetch(`${API_BASE}${apiUrl}`, {
+      ...options,
+      headers: requestHeaders,
+    });
+    
+    if (response.status === 401) {
+       // Auto-logout on 401 globally if token is invalid/ghost
+       auth.clear();
+       window.dispatchEvent(new Event("storage"));
+       if (!window.location.pathname.includes('/login')) {
+         window.location.href = '/login';
+       }
+    }
+    
+    return response;
   }
 
   getCacheKey(url: string, options: RequestInit): string {
