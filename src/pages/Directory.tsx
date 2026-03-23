@@ -33,6 +33,7 @@ import {
   Calendar,
   UserCircle,
   Zap,
+  CreditCard,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import InviteUserDialog from "@/components/dialogs/InviteUserDialog";
@@ -1597,8 +1598,6 @@ export default function Directory() {
             </div>
           </motion.div>
         )}
-
-
             </div>
           </div>
         </div>

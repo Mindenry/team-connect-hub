@@ -1,13 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import {
-  Eye,
-  EyeOff,
-  Mail,
-  ArrowRight,
-  Lock,
-} from "lucide-react";
+import { Eye, EyeOff, Mail, ArrowRight, Lock } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { auth } from "@/lib/auth";
@@ -28,6 +22,7 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -51,7 +46,7 @@ export default function Login() {
       const res = await fetch(`${API_BASE}/api/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email, password, rememberMe }),
       });
 
       if (!res.ok) {
@@ -102,7 +97,7 @@ export default function Login() {
           avatar: avatarUrl,
         },
         data.accessToken,
-        data.refreshToken
+        data.refreshToken,
       );
 
       navigate("/", { replace: true });
@@ -190,7 +185,8 @@ export default function Login() {
           <div
             className="absolute w-[700px] h-[700px] rounded-full blur-[160px]"
             style={{
-              background: "radial-gradient(circle, rgba(59,130,246,0.15), transparent 65%)",
+              background:
+                "radial-gradient(circle, rgba(59,130,246,0.15), transparent 65%)",
               top: "-15%",
               right: "-20%",
               animation: "aurora 20s ease-in-out infinite",
@@ -199,7 +195,8 @@ export default function Login() {
           <div
             className="absolute w-[600px] h-[600px] rounded-full blur-[140px]"
             style={{
-              background: "radial-gradient(circle, rgba(139,92,246,0.12), transparent 65%)",
+              background:
+                "radial-gradient(circle, rgba(139,92,246,0.12), transparent 65%)",
               bottom: "-10%",
               left: "-15%",
               animation: "aurora2 25s ease-in-out infinite",
@@ -208,7 +205,8 @@ export default function Login() {
           <div
             className="absolute w-[400px] h-[400px] rounded-full blur-[120px]"
             style={{
-              background: "radial-gradient(circle, rgba(6,182,212,0.08), transparent 65%)",
+              background:
+                "radial-gradient(circle, rgba(6,182,212,0.08), transparent 65%)",
               top: "40%",
               left: "30%",
               animation: "aurora 18s ease-in-out infinite reverse",
@@ -216,7 +214,10 @@ export default function Login() {
           />
 
           {/* ─ Animated circuit lines SVG overlay ─ */}
-          <svg className="absolute inset-0 w-full h-full opacity-[0.06] pointer-events-none" xmlns="http://www.w3.org/2000/svg">
+          <svg
+            className="absolute inset-0 w-full h-full opacity-[0.06] pointer-events-none"
+            xmlns="http://www.w3.org/2000/svg"
+          >
             <defs>
               <linearGradient id="lineGrad" x1="0%" y1="0%" x2="100%" y2="100%">
                 <stop offset="0%" stopColor="#3b82f6" stopOpacity="0" />
@@ -226,36 +227,107 @@ export default function Login() {
               </linearGradient>
             </defs>
             {/* Horizontal lines */}
-            <line x1="0" y1="25%" x2="100%" y2="25%" stroke="url(#lineGrad)" strokeWidth="0.5" strokeDasharray="8 12"
-              style={{ animation: "line-draw 8s linear infinite" }} />
-            <line x1="0" y1="50%" x2="100%" y2="50%" stroke="url(#lineGrad)" strokeWidth="0.5" strokeDasharray="12 8"
-              style={{ animation: "line-draw 12s linear infinite" }} />
-            <line x1="0" y1="75%" x2="100%" y2="75%" stroke="url(#lineGrad)" strokeWidth="0.5" strokeDasharray="6 14"
-              style={{ animation: "line-draw 10s linear infinite" }} />
+            <line
+              x1="0"
+              y1="25%"
+              x2="100%"
+              y2="25%"
+              stroke="url(#lineGrad)"
+              strokeWidth="0.5"
+              strokeDasharray="8 12"
+              style={{ animation: "line-draw 8s linear infinite" }}
+            />
+            <line
+              x1="0"
+              y1="50%"
+              x2="100%"
+              y2="50%"
+              stroke="url(#lineGrad)"
+              strokeWidth="0.5"
+              strokeDasharray="12 8"
+              style={{ animation: "line-draw 12s linear infinite" }}
+            />
+            <line
+              x1="0"
+              y1="75%"
+              x2="100%"
+              y2="75%"
+              stroke="url(#lineGrad)"
+              strokeWidth="0.5"
+              strokeDasharray="6 14"
+              style={{ animation: "line-draw 10s linear infinite" }}
+            />
             {/* Vertical lines */}
-            <line x1="25%" y1="0" x2="25%" y2="100%" stroke="url(#lineGrad)" strokeWidth="0.5" strokeDasharray="10 10"
-              style={{ animation: "line-draw 9s linear infinite" }} />
-            <line x1="50%" y1="0" x2="50%" y2="100%" stroke="url(#lineGrad)" strokeWidth="0.5" strokeDasharray="14 6"
-              style={{ animation: "line-draw 11s linear infinite" }} />
-            <line x1="75%" y1="0" x2="75%" y2="100%" stroke="url(#lineGrad)" strokeWidth="0.5" strokeDasharray="8 12"
-              style={{ animation: "line-draw 7s linear infinite" }} />
+            <line
+              x1="25%"
+              y1="0"
+              x2="25%"
+              y2="100%"
+              stroke="url(#lineGrad)"
+              strokeWidth="0.5"
+              strokeDasharray="10 10"
+              style={{ animation: "line-draw 9s linear infinite" }}
+            />
+            <line
+              x1="50%"
+              y1="0"
+              x2="50%"
+              y2="100%"
+              stroke="url(#lineGrad)"
+              strokeWidth="0.5"
+              strokeDasharray="14 6"
+              style={{ animation: "line-draw 11s linear infinite" }}
+            />
+            <line
+              x1="75%"
+              y1="0"
+              x2="75%"
+              y2="100%"
+              stroke="url(#lineGrad)"
+              strokeWidth="0.5"
+              strokeDasharray="8 12"
+              style={{ animation: "line-draw 7s linear infinite" }}
+            />
             {/* Diagonal accent */}
-            <line x1="10%" y1="100%" x2="90%" y2="0" stroke="url(#lineGrad)" strokeWidth="0.3" strokeDasharray="20 20"
-              style={{ animation: "line-draw 15s linear infinite" }} />
+            <line
+              x1="10%"
+              y1="100%"
+              x2="90%"
+              y2="0"
+              stroke="url(#lineGrad)"
+              strokeWidth="0.3"
+              strokeDasharray="20 20"
+              style={{ animation: "line-draw 15s linear infinite" }}
+            />
           </svg>
 
           {/* ─ Dot intersection nodes ─ */}
           {[
-            { x: "25%", y: "25%" }, { x: "50%", y: "25%" }, { x: "75%", y: "25%" },
-            { x: "25%", y: "50%" }, { x: "50%", y: "50%" }, { x: "75%", y: "50%" },
-            { x: "25%", y: "75%" }, { x: "50%", y: "75%" }, { x: "75%", y: "75%" },
+            { x: "25%", y: "25%" },
+            { x: "50%", y: "25%" },
+            { x: "75%", y: "25%" },
+            { x: "25%", y: "50%" },
+            { x: "50%", y: "50%" },
+            { x: "75%", y: "50%" },
+            { x: "25%", y: "75%" },
+            { x: "50%", y: "75%" },
+            { x: "75%", y: "75%" },
           ].map((pos, i) => (
             <motion.div
               key={i}
               className="absolute w-1.5 h-1.5 rounded-full bg-blue-400/30"
-              style={{ left: pos.x, top: pos.y, transform: "translate(-50%, -50%)" }}
+              style={{
+                left: pos.x,
+                top: pos.y,
+                transform: "translate(-50%, -50%)",
+              }}
               animate={{ opacity: [0.2, 0.6, 0.2], scale: [0.8, 1.2, 0.8] }}
-              transition={{ duration: 3 + i * 0.4, repeat: Infinity, ease: "easeInOut", delay: i * 0.3 }}
+              transition={{
+                duration: 3 + i * 0.4,
+                repeat: Infinity,
+                ease: "easeInOut",
+                delay: i * 0.3,
+              }}
             />
           ))}
 
@@ -267,14 +339,38 @@ export default function Login() {
             transition={{ duration: 0.6 }}
           >
             <div className="w-9 h-9 flex items-center justify-center bg-[#2563eb] rounded-lg shadow-lg shadow-blue-500/20 border border-white/10">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-white">
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="text-white"
+              >
                 <path d="M16 8h-6a2 2 0 0 0 -2 2v6" />
                 <path d="M16 8v6a2 2 0 0 1 -2 2h-6" />
-                <circle cx="8" cy="8" r="2.5" fill="currentColor" stroke="none" />
-                <circle cx="16" cy="16" r="2.5" fill="currentColor" stroke="none" />
+                <circle
+                  cx="8"
+                  cy="8"
+                  r="2.5"
+                  fill="currentColor"
+                  stroke="none"
+                />
+                <circle
+                  cx="16"
+                  cy="16"
+                  r="2.5"
+                  fill="currentColor"
+                  stroke="none"
+                />
               </svg>
             </div>
-            <span className="text-white/90 font-bold text-lg tracking-tight">Team Connect</span>
+            <span className="text-white/90 font-bold text-lg tracking-tight">
+              Team Connect
+            </span>
           </motion.div>
 
           {/* ─ Center Hero Content ─ */}
@@ -289,12 +385,16 @@ export default function Login() {
               <div
                 className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-[11px] font-semibold uppercase tracking-widest"
                 style={{
-                  background: "linear-gradient(135deg, rgba(59,130,246,0.12), rgba(139,92,246,0.08))",
+                  background:
+                    "linear-gradient(135deg, rgba(59,130,246,0.12), rgba(139,92,246,0.08))",
                   border: "1px solid rgba(59,130,246,0.2)",
                   color: "rgba(147,197,253,0.9)",
                 }}
               >
-                <span className="w-1.5 h-1.5 rounded-full bg-blue-400" style={{ animation: "pulse-glow 2s ease-in-out infinite" }} />
+                <span
+                  className="w-1.5 h-1.5 rounded-full bg-blue-400"
+                  style={{ animation: "pulse-glow 2s ease-in-out infinite" }}
+                />
                 Enterprise Collaboration
               </div>
             </motion.div>
@@ -309,7 +409,8 @@ export default function Login() {
               <span
                 className="block text-6xl xl:text-7xl font-extrabold tracking-tight leading-[0.95]"
                 style={{
-                  background: "linear-gradient(135deg, #ffffff 0%, #e2e8f0 25%, #60a5fa 60%, #a78bfa 100%)",
+                  background:
+                    "linear-gradient(135deg, #ffffff 0%, #e2e8f0 25%, #60a5fa 60%, #a78bfa 100%)",
                   WebkitBackgroundClip: "text",
                   WebkitTextFillColor: "transparent",
                   backgroundClip: "text",
@@ -320,7 +421,8 @@ export default function Login() {
               <span
                 className="block text-6xl xl:text-7xl font-extrabold tracking-tight leading-[1.1] mt-1"
                 style={{
-                  background: "linear-gradient(135deg, #60a5fa 0%, #a78bfa 40%, #f0abfc 100%)",
+                  background:
+                    "linear-gradient(135deg, #60a5fa 0%, #a78bfa 40%, #f0abfc 100%)",
                   WebkitBackgroundClip: "text",
                   WebkitTextFillColor: "transparent",
                   backgroundClip: "text",
@@ -337,8 +439,8 @@ export default function Login() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.45, duration: 0.6 }}
             >
-              Meetings, chat, tasks, file sharing, and team management —
-              unified in one powerful workspace.
+              Meetings, chat, tasks, file sharing, and team management — unified
+              in one powerful workspace.
             </motion.p>
 
             {/* Feature pills row */}
@@ -393,8 +495,12 @@ export default function Login() {
                 { value: "Real-time", label: "Sync" },
               ].map((stat, i) => (
                 <div key={i} className="text-center">
-                  <div className="text-white/40 text-[11px] font-bold tracking-wide">{stat.value}</div>
-                  <div className="text-slate-600 text-[9px] mt-0.5 uppercase tracking-wider">{stat.label}</div>
+                  <div className="text-white/40 text-[11px] font-bold tracking-wide">
+                    {stat.value}
+                  </div>
+                  <div className="text-slate-600 text-[9px] mt-0.5 uppercase tracking-wider">
+                    {stat.label}
+                  </div>
                 </div>
               ))}
             </div>
@@ -407,7 +513,9 @@ export default function Login() {
         {/* ── Right Login Panel ── */}
         <div
           className="flex flex-col items-center justify-center px-6 py-12 relative"
-          style={{ background: "linear-gradient(180deg, #0f172a 0%, #0b1120 100%)" }}
+          style={{
+            background: "linear-gradient(180deg, #0f172a 0%, #0b1120 100%)",
+          }}
         >
           {/* Mobile logo (visible only on small screens) */}
           <motion.div
@@ -417,14 +525,38 @@ export default function Login() {
             transition={{ duration: 0.4 }}
           >
             <div className="w-9 h-9 flex items-center justify-center bg-[#2563eb] rounded-lg shadow-md border border-white/10">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-white">
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="text-white"
+              >
                 <path d="M16 8h-6a2 2 0 0 0 -2 2v6" />
                 <path d="M16 8v6a2 2 0 0 1 -2 2h-6" />
-                <circle cx="8" cy="8" r="2.5" fill="currentColor" stroke="none" />
-                <circle cx="16" cy="16" r="2.5" fill="currentColor" stroke="none" />
+                <circle
+                  cx="8"
+                  cy="8"
+                  r="2.5"
+                  fill="currentColor"
+                  stroke="none"
+                />
+                <circle
+                  cx="16"
+                  cy="16"
+                  r="2.5"
+                  fill="currentColor"
+                  stroke="none"
+                />
               </svg>
             </div>
-            <span className="text-white font-bold text-xl tracking-tight">Team Connect</span>
+            <span className="text-white font-bold text-xl tracking-tight">
+              Team Connect
+            </span>
           </motion.div>
 
           <motion.div
@@ -435,15 +567,21 @@ export default function Login() {
           >
             {/* Header */}
             <div className="mb-8">
-              <h2 className="text-2xl font-bold text-white tracking-tight">Welcome back</h2>
-              <p className="text-slate-400 text-sm mt-2">Sign in to your workspace to continue</p>
+              <h2 className="text-2xl font-bold text-white tracking-tight">
+                Welcome back
+              </h2>
+              <p className="text-slate-400 text-sm mt-2">
+                Sign in to your workspace to continue
+              </p>
             </div>
 
             {/* Login Form */}
             <form onSubmit={handleLogin} className="space-y-5">
               {/* Email */}
               <div className="space-y-2">
-                <Label className="text-slate-300 text-sm font-medium">Email address</Label>
+                <Label className="text-slate-300 text-sm font-medium">
+                  Email address
+                </Label>
                 <div className="relative">
                   <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
                   <Input
@@ -460,7 +598,9 @@ export default function Login() {
               {/* Password */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <Label className="text-slate-300 text-sm font-medium">Password</Label>
+                  <Label className="text-slate-300 text-sm font-medium">
+                    Password
+                  </Label>
                   <button
                     type="button"
                     onClick={() => setShowForgotPwd(true)}
@@ -491,6 +631,23 @@ export default function Login() {
                     )}
                   </button>
                 </div>
+              </div>
+
+              {/* Remember Me */}
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="remember-me"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                  className="w-4 h-4 rounded border-white/[0.15] bg-white/[0.04] text-blue-500 focus:ring-blue-500/40 focus:ring-offset-0 cursor-pointer"
+                />
+                <label
+                  htmlFor="remember-me"
+                  className="text-sm text-slate-400 cursor-pointer select-none"
+                >
+                  Remember me for 7 days
+                </label>
               </div>
 
               {/* Error */}
@@ -553,7 +710,9 @@ export default function Login() {
             {/* Divider */}
             <div className="flex items-center gap-4 my-6">
               <div className="flex-1 h-px bg-white/[0.06]" />
-              <span className="text-xs text-slate-500 uppercase tracking-wider">or</span>
+              <span className="text-xs text-slate-500 uppercase tracking-wider">
+                or
+              </span>
               <div className="flex-1 h-px bg-white/[0.06]" />
             </div>
 
@@ -568,8 +727,7 @@ export default function Login() {
                 onClick={() => navigate("/invite")}
                 className="w-full h-10 rounded-xl text-sm font-medium text-slate-300 border border-white/[0.08] bg-white/[0.02] hover:bg-white/[0.06] hover:border-white/[0.12] transition-all duration-200 flex items-center justify-center gap-2"
               >
-                <Mail className="w-3.5 h-3.5" />
-                I have an invite
+                <Mail className="w-3.5 h-3.5" />I have an invite
               </button>
             </div>
 
@@ -592,7 +750,8 @@ export default function Login() {
               <div
                 className="w-8 h-8 rounded-lg flex items-center justify-center"
                 style={{
-                  background: "linear-gradient(135deg, hsl(217 91% 55% / 0.2), hsl(260 80% 55% / 0.15))",
+                  background:
+                    "linear-gradient(135deg, hsl(217 91% 55% / 0.2), hsl(260 80% 55% / 0.15))",
                   border: "1px solid hsl(217 91% 55% / 0.15)",
                 }}
               >
@@ -628,7 +787,8 @@ export default function Login() {
                 disabled={forgotLoading || !forgotEmail}
                 className="w-full h-11 rounded-xl text-white font-semibold text-sm transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 style={{
-                  background: "linear-gradient(135deg, hsl(217 91% 55%), hsl(245 80% 55%))",
+                  background:
+                    "linear-gradient(135deg, hsl(217 91% 55%), hsl(245 80% 55%))",
                   boxShadow: "0 4px 15px hsl(217 91% 55% / 0.3)",
                 }}
               >

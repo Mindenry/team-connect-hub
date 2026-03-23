@@ -116,7 +116,6 @@ export default function SettingsPage() {
   const [taskAssignments, setTaskAssignments] = useState(true);
   const [channelMessages, setChannelMessages] = useState(false);
   const [announcements, setAnnouncements] = useState(true);
-  const [emailNotifications, setEmailNotifications] = useState(false);
   const [pushNotifications, setPushNotifications] = useState(true);
   const [soundEnabled, setSoundEnabled] = useState(true);
 
@@ -135,6 +134,12 @@ export default function SettingsPage() {
   // Security settings
   const [loginAlerts, setLoginAlerts] = useState(true);
   const [sessionTimeout, setSessionTimeout] = useState(480);
+  
+  // Password change state
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmNewPassword, setConfirmNewPassword] = useState("");
+  const [changingPassword, setChangingPassword] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -210,6 +215,13 @@ export default function SettingsPage() {
       } else {
         setAvatarUrl("");
       }
+      
+      // Load Notification Preferences
+      apiGet(`/notifications/preferences?userId=${user.id}`).then((prefs: any) => {
+        if (prefs) {
+          // Additional notification preferences can be loaded here
+        }
+      }).catch(console.error);
     }
   }, [user]);
 
@@ -314,19 +326,30 @@ export default function SettingsPage() {
     toast.success("Device settings saved!");
   };
 
-  const handleSaveNotifications = () => {
+  const handleSaveNotifications = async () => {
     const prefs = {
       meetingReminders,
       mentions,
       taskAssignments,
       channelMessages,
       announcements,
-      emailNotifications,
       pushNotifications,
       soundEnabled,
     };
     localStorage.setItem("notification_preferences", JSON.stringify(prefs));
-    toast.success("Notification settings saved!");
+    
+    if (user?.id) {
+       try {
+         await apiPatch(`/notifications/preferences?userId=${user.id}`, {
+            soundEnabled
+         });
+         toast.success("Notification settings saved!");
+       } catch (err: any) {
+         toast.error(err.message || "Failed to save to cloud.");
+       }
+    } else {
+       toast.success("Notification settings saved locally!");
+    }
   };
 
   const handleSavePrivacy = () => {
@@ -367,6 +390,38 @@ export default function SettingsPage() {
       sessionTimeout,
     }));
     toast.success("Security settings saved!");
+  };
+
+  const handleChangePassword = async () => {
+    if (!user?.id) return;
+    if (!currentPassword || !newPassword || !confirmNewPassword) {
+      toast.error("Please fill in all password fields.");
+      return;
+    }
+    if (newPassword !== confirmNewPassword) {
+      toast.error("New passwords do not match.");
+      return;
+    }
+    if (newPassword.length < 6) {
+      toast.error("New password must be at least 6 characters long.");
+      return;
+    }
+    
+    setChangingPassword(true);
+    try {
+      await apiPatch(`/users/${user.id}/password`, {
+        currentPassword,
+        newPassword
+      });
+      toast.success("Password changed successfully!");
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmNewPassword("");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to change password. Please check your current password.");
+    } finally {
+      setChangingPassword(false);
+    }
   };
 
   const handleExportData = () => {
@@ -906,18 +961,6 @@ export default function SettingsPage() {
               <CardContent className="space-y-4">
                 <div className="flex items-center justify-between py-1">
                   <div>
-                    <p className="text-sm font-medium text-foreground">Email notifications</p>
-                    <p className="text-xs text-muted-foreground">
-                      Receive notifications via email
-                    </p>
-                  </div>
-                  <Switch
-                    checked={emailNotifications}
-                    onCheckedChange={setEmailNotifications}
-                  />
-                </div>
-                <div className="flex items-center justify-between py-1">
-                  <div>
                     <p className="text-sm font-medium text-foreground">Push notifications</p>
                     <p className="text-xs text-muted-foreground">
                       Receive browser push notifications
@@ -1130,6 +1173,52 @@ export default function SettingsPage() {
                 <Button onClick={handleSaveSecurity}>
                   <Save className="w-4 h-4 mr-2" />
                   Save Security Settings
+                </Button>
+              </CardContent>
+            </Card>
+            
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Change Password</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <Label>Current Password</Label>
+                  <Input
+                    type="password"
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                    className="mt-1"
+                    placeholder="Enter current password"
+                  />
+                </div>
+                <div>
+                  <Label>New Password</Label>
+                  <Input
+                    type="password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    className="mt-1"
+                    placeholder="Enter new password"
+                  />
+                </div>
+                <div>
+                  <Label>Confirm New Password</Label>
+                  <Input
+                    type="password"
+                    value={confirmNewPassword}
+                    onChange={(e) => setConfirmNewPassword(e.target.value)}
+                    className="mt-1"
+                    placeholder="Confirm new password"
+                  />
+                </div>
+                <Button 
+                  onClick={handleChangePassword}
+                  disabled={changingPassword || !currentPassword || !newPassword || !confirmNewPassword}
+                  className="mt-2"
+                >
+                  <Save className="w-4 h-4 mr-2" />
+                  {changingPassword ? "Updating..." : "Update Password"}
                 </Button>
               </CardContent>
             </Card>

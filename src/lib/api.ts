@@ -1,7 +1,8 @@
 import { auth } from './auth';
 import { updateSocketAuth } from './websocket';
 
-const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
+// Determine API Base dynamically: use explicitly set env var, or fallback to the current window's origin (crucial for ngrok dynamic urls), or localhost
+const API_BASE = import.meta.env.VITE_API_URL || (typeof window !== 'undefined' ? window.location.origin : "http://localhost:3000");
 
 // Request queue and throttling
 interface QueuedRequest {

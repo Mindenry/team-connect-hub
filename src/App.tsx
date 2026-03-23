@@ -9,6 +9,7 @@ import CommandPalette from "@/components/shared/CommandPalette";
 import { ErrorBoundary } from "@/components/shared/ErrorBoundary";
 import { auth } from "@/lib/auth";
 import { Skeleton } from "@/components/ui/skeleton";
+import { PresenceProvider } from "@/contexts/PresenceContext";
 
 // Lazy load pages for code splitting
 const Dashboard = lazy(() => import("./pages/Dashboard"));
@@ -46,8 +47,8 @@ const PageLoader = () => (
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 30_000,       // Data stays fresh for 30 seconds
-      retry: 1,                // Retry failed requests once
+      staleTime: 30_000, // Data stays fresh for 30 seconds
+      retry: 1, // Retry failed requests once
       refetchOnWindowFocus: false, // Don't refetch when tab regains focus
     },
   },
@@ -62,47 +63,111 @@ const ProtectedRoute = ({ children }: { children: React.ReactElement }) => {
 
 const App = () => (
   <ErrorBoundary>
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        <CommandPalette />
-        <Suspense fallback={<PageLoader />}>
-          <Routes>
-            {/* Standalone routes — each has its own Suspense */}
-            <Route path="/login" element={<Suspense fallback={<PageLoader />}><Login /></Suspense>} />
-            <Route path="/reset-password" element={<Suspense fallback={<PageLoader />}><ResetPassword /></Suspense>} />
-            <Route path="/invite" element={<Suspense fallback={<PageLoader />}><InviteSetup /></Suspense>} />
-            <Route path="/meeting-lobby/:id" element={<Suspense fallback={<PageLoader />}><ProtectedRoute><MeetingLobby /></ProtectedRoute></Suspense>} />
-            <Route path="/meeting-room" element={<Suspense fallback={<PageLoader />}><ProtectedRoute><MeetingRoom /></ProtectedRoute></Suspense>} />
-            <Route path="/meeting-room/:id" element={<Suspense fallback={<PageLoader />}><ProtectedRoute><MeetingRoom /></ProtectedRoute></Suspense>} />
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <PresenceProvider>
+          <Toaster />
+          <Sonner />
+          <BrowserRouter>
+            <CommandPalette />
+            <Suspense fallback={<PageLoader />}>
+              <Routes>
+                {/* Standalone routes — each has its own Suspense */}
+                <Route
+                  path="/login"
+                  element={
+                    <Suspense fallback={<PageLoader />}>
+                      <Login />
+                    </Suspense>
+                  }
+                />
+                <Route
+                  path="/reset-password"
+                  element={
+                    <Suspense fallback={<PageLoader />}>
+                      <ResetPassword />
+                    </Suspense>
+                  }
+                />
+                <Route
+                  path="/invite"
+                  element={
+                    <Suspense fallback={<PageLoader />}>
+                      <InviteSetup />
+                    </Suspense>
+                  }
+                />
+                <Route
+                  path="/meeting-lobby/:id"
+                  element={
+                    <Suspense fallback={<PageLoader />}>
+                      <ProtectedRoute>
+                        <MeetingLobby />
+                      </ProtectedRoute>
+                    </Suspense>
+                  }
+                />
+                <Route
+                  path="/meeting-room"
+                  element={
+                    <Suspense fallback={<PageLoader />}>
+                      <ProtectedRoute>
+                        <MeetingRoom />
+                      </ProtectedRoute>
+                    </Suspense>
+                  }
+                />
+                <Route
+                  path="/meeting-room/:id"
+                  element={
+                    <Suspense fallback={<PageLoader />}>
+                      <ProtectedRoute>
+                        <MeetingRoom />
+                      </ProtectedRoute>
+                    </Suspense>
+                  }
+                />
 
-            {/* Layout routes — Suspense is inside AppLayout, sidebar stays stable */}
-            <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
-              <Route path="/" element={<Dashboard />} />
-              <Route path="/meetings" element={<Meetings />} />
-              <Route path="/calendar" element={<CalendarPage />} />
-              <Route path="/drive" element={<SharedDrive />} />
-              <Route path="/chat" element={<Chat />} />
-              <Route path="/tasks" element={<Tasks />} />
-              <Route path="/teams" element={<Teams />} />
-              <Route path="/directory" element={<Directory />} />
-              <Route path="/reminders" element={<Reminders />} />
-              <Route path="/notifications" element={<Notifications />} />
-              <Route path="/settings" element={<SettingsPage />} />
-              <Route path="/wiki" element={<KnowledgeBase />} />
-              <Route path="/announcements" element={<Announcements />} />
-              <Route path="/reports" element={<Reports />} />
-            </Route>
-            <Route path="*" element={auth.isAuthenticated() ? <NotFound /> : <Navigate to="/login" replace />} />
-          </Routes>
-        </Suspense>
-      </BrowserRouter>
-    </TooltipProvider>
-  </QueryClientProvider>
+                {/* Layout routes — Suspense is inside AppLayout, sidebar stays stable */}
+                <Route
+                  element={
+                    <ProtectedRoute>
+                      <AppLayout />
+                    </ProtectedRoute>
+                  }
+                >
+                  <Route path="/" element={<Dashboard />} />
+                  <Route path="/meetings" element={<Meetings />} />
+                  <Route path="/calendar" element={<CalendarPage />} />
+                  <Route path="/drive" element={<SharedDrive />} />
+                  <Route path="/chat" element={<Chat />} />
+                  <Route path="/tasks" element={<Tasks />} />
+                  <Route path="/teams" element={<Teams />} />
+                  <Route path="/directory" element={<Directory />} />
+                  <Route path="/reminders" element={<Reminders />} />
+                  <Route path="/notifications" element={<Notifications />} />
+                  <Route path="/settings" element={<SettingsPage />} />
+                  <Route path="/wiki" element={<KnowledgeBase />} />
+                  <Route path="/announcements" element={<Announcements />} />
+                  <Route path="/reports" element={<Reports />} />
+                </Route>
+                <Route
+                  path="*"
+                  element={
+                    auth.isAuthenticated() ? (
+                      <NotFound />
+                    ) : (
+                      <Navigate to="/login" replace />
+                    )
+                  }
+                />
+              </Routes>
+            </Suspense>
+          </BrowserRouter>
+        </PresenceProvider>
+      </TooltipProvider>
+    </QueryClientProvider>
   </ErrorBoundary>
 );
 
 export default App;
-
