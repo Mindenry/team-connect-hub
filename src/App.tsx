@@ -10,6 +10,7 @@ import { ErrorBoundary } from "@/components/shared/ErrorBoundary";
 import { auth } from "@/lib/auth";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PresenceProvider } from "@/contexts/PresenceContext";
+import MeetingPiP from "@/components/meeting/MeetingPiP";
 
 // Lazy load pages for code splitting
 const Dashboard = lazy(() => import("./pages/Dashboard"));
@@ -163,6 +164,7 @@ const App = () => (
                 />
               </Routes>
             </Suspense>
+            <MeetingPiP />
           </BrowserRouter>
         </PresenceProvider>
       </TooltipProvider>

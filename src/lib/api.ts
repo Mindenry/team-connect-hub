@@ -1,8 +1,35 @@
 import { auth } from './auth';
 import { updateSocketAuth } from './websocket';
 
-// Determine API Base dynamically: use explicitly set env var, or fallback to the current window's origin (crucial for ngrok dynamic urls), or localhost
-const API_BASE = import.meta.env.VITE_API_URL || (typeof window !== 'undefined' ? window.location.origin : "http://localhost:3000");
+// Determine API Base dynamically: use explicitly set env var, or fallback to the current window's origin
+let resolvedApiBase = import.meta.env.VITE_API_URL || "http://localhost:3000";
+
+if (typeof window !== 'undefined') {
+  const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  // If VITE_API_URL is localhost but user accesses via ngrok/LAN, force API_BASE to be the current origin
+  if (!isLocalhost && resolvedApiBase.includes('localhost')) {
+    resolvedApiBase = window.location.origin;
+  }
+}
+export const API_BASE = resolvedApiBase;
+
+// Global helper to normalize attachment URLs (fixes hardcoded localhost URLs in DB when accessed via ngrok)
+export const normalizeAttachmentUrl = (url: string): string => {
+  if (!url) return "";
+  let finalUrl = url;
+  
+  // Attempt to replace hardcoded localhost with the dynamic API_BASE if we are not on localhost
+  if (typeof window !== 'undefined' && !window.location.hostname.includes("localhost")) {
+    finalUrl = finalUrl.replace(/http:\/\/(localhost|127\.0\.0\.1):\d+/, API_BASE.replace(/\/+$/, ""));
+  }
+
+  if (finalUrl.startsWith("http://") || finalUrl.startsWith("https://") || finalUrl.startsWith("data:")) {
+    return finalUrl;
+  }
+  
+  const base = API_BASE.replace(/\/+$/, "");
+  return finalUrl.startsWith("/") ? `${base}${finalUrl}` : `${base}/${finalUrl}`;
+};
 
 // Request queue and throttling
 interface QueuedRequest {

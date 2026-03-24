@@ -26,7 +26,7 @@ import {
 
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { apiGet, apiFetch } from "@/lib/api";
+import { apiGet, apiFetch, API_BASE, normalizeAttachmentUrl } from "@/lib/api";
 import {
   Mic,
   MicOff,
@@ -57,7 +57,13 @@ import {
   Image as ImageIcon,
   PhoneOff,
   ExternalLink,
+  Pin,
+  PinOff,
+  ScreenShare,
 } from "lucide-react";
+import { ImagePreview } from "@/components/chat/ImagePreview";
+import { PDFViewer } from "@/components/chat/PDFViewer";
+import { FilePreview } from "@/components/chat/FilePreview";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -65,7 +71,14 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { auth } from "@/lib/auth";
 import { getSocket } from "@/lib/websocket";
+import { toast } from "sonner";
 import { setCurrentMeeting, clearCurrentMeeting } from "@/hooks/usePresence";
+import {
+  meetingPiPJoin,
+  meetingPiPLeave,
+  meetingPiPShowOverlay,
+  meetingPiPUpdateState,
+} from "@/hooks/useMeetingPiP";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -90,9 +103,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-const RAW_API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
-const API_BASE = `${RAW_API_BASE}/api`;
-
 /** Synchronous helper – returns an Authorization header if a token exists in localStorage. */
 const getAuthHeaders = (): HeadersInit => {
   const token = localStorage.getItem("collabhub_token");
@@ -100,6 +110,22 @@ const getAuthHeaders = (): HeadersInit => {
 };
 
 const isImageMime = (m?: string) => !!m && m.startsWith("image/");
+
+// Detect mime type from file extension
+const getMimeFromExtension = (filename: string): string => {
+  const ext = filename.split(".").pop()?.toLowerCase() || "";
+  const mimeMap: Record<string, string> = {
+    jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png",
+    gif: "image/gif", webp: "image/webp", bmp: "image/bmp", svg: "image/svg+xml",
+    mp4: "video/mp4", webm: "video/webm", ogg: "video/ogg", mov: "video/quicktime",
+    mp3: "audio/mpeg", wav: "audio/wav", m4a: "audio/mp4", flac: "audio/flac",
+    pdf: "application/pdf",
+    doc: "application/msword", docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    xls: "application/vnd.ms-excel", xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    txt: "text/plain",
+  };
+  return mimeMap[ext] || "application/octet-stream";
+};
 
 interface ParticipantState {
   isMuted: boolean;
@@ -109,7 +135,7 @@ interface ParticipantState {
   isSpeaking?: boolean;
 }
 
-interface Participant {
+interface SocketParticipant {
   peerId: string;
   name: string;
   avatar?: string;
@@ -117,9 +143,25 @@ interface Participant {
   isSpeaking?: boolean;
 }
 
+export interface UIMappedParticipant {
+  identity: string;
+  name: string;
+  isLocal: boolean;
+  cameraEnabled: boolean;
+  microphoneEnabled: boolean;
+  screenShareEnabled: boolean;
+  metadata?: string;
+  isSpeaking: boolean;
+  isScreenShareTile?: boolean;
+  screenShareIdentity?: string;
+  isHandRaised: boolean;
+}
+
 interface ChatMessage {
   id: string;
   sender: string;
+  senderId?: string;
+  senderAvatar?: string;
   time: string;
   text: string;
   type?: "text" | "file" | "image";
@@ -191,6 +233,80 @@ function useAudioLevel(track: LocalAudioTrack | null) {
   return audioLevel;
 }
 
+// Real-time Mic Level Visualizer for the Settings Dialog
+// Uses Web Audio API directly on the local mic track for responsive visualization
+function MicLevelVisualizer({ tracks, isMuted }: { tracks: any[]; isMuted: boolean }) {
+  const [level, setLevel] = useState(0);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const rafRef = useRef<number>(0);
+
+  useEffect(() => {
+    const localAudio = tracks.find(
+      (t: any) => t.participant?.isLocal && t.source === Track.Source.Microphone
+    );
+    if (!localAudio?.publication?.track?.mediaStreamTrack) {
+      setLevel(0);
+      return;
+    }
+
+    const mediaTrack = localAudio.publication.track.mediaStreamTrack as MediaStreamTrack;
+    const stream = new MediaStream([mediaTrack]);
+    const ctx = new AudioContext();
+    const analyser = ctx.createAnalyser();
+    const source = ctx.createMediaStreamSource(stream);
+    source.connect(analyser);
+    analyser.fftSize = 256;
+
+    audioCtxRef.current = ctx;
+    analyserRef.current = analyser;
+
+    const data = new Uint8Array(analyser.frequencyBinCount);
+    const loop = () => {
+      if (!analyserRef.current) return;
+      analyserRef.current.getByteFrequencyData(data);
+      const avg = data.reduce((a, b) => a + b, 0) / data.length;
+      setLevel(avg);
+      rafRef.current = requestAnimationFrame(loop);
+    };
+    loop();
+
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      ctx.close();
+      analyserRef.current = null;
+      audioCtxRef.current = null;
+    };
+  }, [tracks, isMuted]);
+
+  // Normalize level to 0-20 segments
+  const activeSegments = Math.min(20, Math.max(0, Math.floor((level / 60) * 20)));
+
+  return (
+    <div className="mt-4 bg-[#2a2a2a] p-4 rounded-xl border border-white/5">
+      <label className="text-xs text-white/50 mb-3 block">Input Level</label>
+      <div className="flex items-center gap-1 h-4 w-full bg-black/40 rounded-full overflow-hidden p-0.5 border border-white/10">
+        {Array.from({ length: 20 }).map((_, i) => (
+          <div
+            key={i}
+            className={cn(
+              "flex-1 h-full rounded-[1px] transition-all duration-75",
+              i < activeSegments
+                ? i > 15 ? "bg-red-500" : i > 10 ? "bg-yellow-500" : "bg-green-500"
+                : "bg-white/10"
+            )}
+          />
+        ))}
+      </div>
+      {isMuted && (
+        <p className="text-xs text-red-400/80 mt-2 flex items-center gap-1.5">
+          <MicOff className="w-3 h-3" /> Microphone is muted — unmute to test input level
+        </p>
+      )}
+    </div>
+  );
+}
+
 // Main Meeting Room UI Component using LiveKit
 function MeetingRoomUI({
   meetingId: propMeetingId,
@@ -215,6 +331,11 @@ function MeetingRoomUI({
   const [showSettings, setShowSettings] = useState(false);
   const [chatInput, setChatInput] = useState("");
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [previewImage, setPreviewImage] = useState<{
+    url: string;
+    name?: string;
+  } | null>(null);
+
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [meetingTitle, setMeetingTitle] = useState("Meeting");
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -223,7 +344,11 @@ function MeetingRoomUI({
   const [endingMeeting, setEndingMeeting] = useState(false);
   const [isHandRaised, setIsHandRaised] = useState(false);
 
-  const [participants, setParticipants] = useState<Participant[]>([]);
+  // Focus and layout states
+  const [pinnedParticipantId, setPinnedParticipantId] = useState<string | null>(null);
+  const [settingsTab, setSettingsTab] = useState<"audio" | "video">("audio");
+
+  const [participants, setParticipants] = useState<SocketParticipant[]>([]);
   const [waitingRoomParticipants, setWaitingRoomParticipants] = useState<any[]>(
     [],
   );
@@ -275,12 +400,15 @@ function MeetingRoomUI({
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showMentionList, setShowMentionList] = useState(false);
   const [mentionQuery, setMentionQuery] = useState("");
+  const [pendingAttachments, setPendingAttachments] = useState<Array<{ file: File; url: string; name: string; type: string }>>([]);
+  const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const chatEndRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const socketRef = useRef(getSocket());
   const waitingRoomIntervalRef = useRef<number | null>(null);
+  const hasInitializedMedia = useRef(false);
 
   const userName = currentUser?.name || "Guest";
   const meetingCode = meetingId || "quick-huddle";
@@ -383,7 +511,8 @@ function MeetingRoomUI({
 
       // Now initialize media based on lobby settings
       // This must run AFTER enumerateDevices so hasVideoDevice/hasAudioDevice are set
-      if (lkLocal) {
+      if (lkLocal && !hasInitializedMedia.current) {
+        hasInitializedMedia.current = true;
         try {
           console.log("[MeetingRoom] Initializing media with lobby state:", {
             initialCameraOn,
@@ -418,9 +547,20 @@ function MeetingRoomUI({
       }
 
       setLoading(false);
+
+      // Register with PiP store
+      meetingPiPJoin(meetingId || "quick-huddle", meetingTitle);
     };
 
     init();
+
+    // Handle autoLeave from PiP overlay
+    if (lobbyState.autoLeave) {
+      // Delay slightly so the room connects first, then trigger leave
+      setTimeout(() => {
+        leaveMeeting();
+      }, 500);
+    }
 
     return () => {
       if (waitingRoomIntervalRef.current) {
@@ -467,11 +607,22 @@ function MeetingRoomUI({
       name: string;
       state: ParticipantState;
     }) => {
-      setParticipants((prev) =>
-        prev.map((p) =>
+      setParticipants((prev) => {
+        const participant = prev.find(p => p.peerId === data.peerId);
+        
+        // If the hand was just raised, show a toast notification
+        if (participant && !participant.state.isHandRaised && data.state.isHandRaised) {
+          toast(`${data.name} raised their hand`, {
+            icon: "✋",
+            duration: 4000,
+            position: "top-center"
+          });
+        }
+        
+        return prev.map((p) =>
           p.peerId === data.peerId ? { ...p, state: data.state } : p,
-        ),
-      );
+        );
+      });
     };
 
     const handleSpeaking = (data: { peerId: string; isSpeaking: boolean }) => {
@@ -483,8 +634,21 @@ function MeetingRoomUI({
     };
 
     const handleChat = (msg: ChatMessage) => {
+      // Normalize attachment URLs and ensure type field is always present
+      const normalizedMsg: ChatMessage = {
+        ...msg,
+        attachments: Array.isArray(msg.attachments)
+          ? msg.attachments.map((att) => ({
+              url: normalizeAttachmentUrl(att.url || ""),
+              name: att.name || "attachment",
+              type: att.type || getMimeFromExtension(att.name || ""),
+            }))
+          : undefined,
+      };
       setChatMessages((prev) =>
-        prev.some((m) => m.id === msg.id) ? prev : [...prev, msg],
+        prev.some((m) => m.id === normalizedMsg.id)
+          ? prev
+          : [...prev, normalizedMsg],
       );
     };
 
@@ -548,6 +712,8 @@ function MeetingRoomUI({
       // DON'T emit meeting:leave on unmount - user might just be navigating
       // Leave should only happen when user explicitly clicks Leave button
       clearCurrentMeeting();
+      // Show PiP overlay when navigating away
+      meetingPiPShowOverlay();
       socket.off("meeting:participant:update", handleUpdate);
       socket.off("meeting:participant:speaking", handleSpeaking);
       socket.off("meeting:chat:message", handleChat);
@@ -557,6 +723,16 @@ function MeetingRoomUI({
       socket.off("meeting:participant:force_mute", handleForceMute);
     };
   }, [loading, meetingCode]);
+
+  // Sync fullscreen state with browser (handles ESC key)
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    return () => document.removeEventListener("fullscreenchange", handleFullscreenChange);
+  }, []);
 
   // Sync state to socket
   useEffect(() => {
@@ -662,15 +838,55 @@ function MeetingRoomUI({
   }, [lkLocal, isScreenSharing]);
 
   const toggleHand = useCallback(() => {
-    setIsHandRaised((prev) => !prev);
-  }, []);
+    setIsHandRaised((prev) => {
+      const newState = !prev;
+      // Emit the state change to socket immediately
+      socketRef.current.emit("meeting:participant:update", {
+        meetingId: meetingCode,
+        peerId: peerId.current,
+        peerName: userName,
+        userId: currentUser?.id,
+        state: { isMuted, isCameraOn, isScreenSharing, isHandRaised: newState },
+      });
+      // Play notification beep sound when raising hand
+      if (newState) {
+        try {
+          const ctx = new AudioContext();
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.type = "sine";
+          osc.frequency.setValueAtTime(880, ctx.currentTime);
+          gain.gain.setValueAtTime(0.15, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+          osc.start(ctx.currentTime);
+          osc.stop(ctx.currentTime + 0.3);
+          setTimeout(() => ctx.close(), 500);
+        } catch {}
+      }
+      return newState;
+    });
+  }, [meetingCode, userName, currentUser, isMuted, isCameraOn, isScreenSharing]);
 
   const switchMic = useCallback(
     async (deviceId: string) => {
       setSelectedMic(deviceId);
-      if (lkLocal && !isMuted) {
+      
+      // Save device preference to match Lobby behavior
+      try {
+        const currentPrefs = localStorage.getItem("device_preferences");
+        const prefs = currentPrefs ? JSON.parse(currentPrefs) : {};
+        localStorage.setItem("device_preferences", JSON.stringify({ ...prefs, mic: deviceId }));
+      } catch (e) {
+        // Ignore
+      }
+
+      if (lkLocal) {
         try {
-          await lkLocal.setMicrophoneEnabled(true, { deviceId });
+          if (!isMuted) {
+            await lkLocal.setMicrophoneEnabled(true, { deviceId });
+          }
         } catch (e) {
           console.error("Error switching mic:", e);
         }
@@ -682,12 +898,24 @@ function MeetingRoomUI({
   const switchCamera = useCallback(
     async (deviceId: string) => {
       setSelectedCamera(deviceId);
-      if (lkLocal && isCameraOn) {
+      
+      // Save device preference to match Lobby behavior
+      try {
+        const currentPrefs = localStorage.getItem("device_preferences");
+        const prefs = currentPrefs ? JSON.parse(currentPrefs) : {};
+        localStorage.setItem("device_preferences", JSON.stringify({ ...prefs, camera: deviceId }));
+      } catch (e) {
+        // Ignore
+      }
+
+      if (lkLocal) {
         try {
-          await lkLocal.setCameraEnabled(true, {
-            deviceId,
-            resolution: VideoPresets.h1080,
-          });
+          if (isCameraOn) {
+            await lkLocal.setCameraEnabled(true, {
+              deviceId,
+              resolution: VideoPresets.h1080,
+            });
+          }
         } catch (e) {
           console.error("Error switching camera:", e);
         }
@@ -771,49 +999,63 @@ function MeetingRoomUI({
     const file = e.target.files?.[0];
     if (!file || !currentUser || !meetingId) return;
 
+    setUploading(true);
     try {
       const formData = new FormData();
       formData.append("file", file);
-      formData.append("folder", "meeting-chat");
+      const params = new URLSearchParams();
+      params.append("folder", "meeting-chat");
+      params.append("filename", file.name);
 
-      const res = await apiFetch(`/upload`, {
+      const res = await apiFetch(`/upload?${params.toString()}`, {
         method: "POST",
         body: formData,
       });
 
       if (!res.ok) throw new Error("Upload failed");
-      const data = await res.json();
+      const parsed = await res.json();
+      const actualData = parsed.data || parsed;
 
-      const msgId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      // Determine MIME type — fallback to extension detection when browser doesn't provide it
+      const fileType = file.type || getMimeFromExtension(file.name);
+      const normalizedUrl = normalizeAttachmentUrl(actualData.url);
 
-      socketRef.current.emit("meeting:chat:send", {
-        meetingId: meetingCode,
-        message: {
-          id: msgId,
-          senderId: currentUser.id,
-          senderName: currentUser.name,
-          text: "", // No text for file messages
-          attachments: [
-            {
-              url: data.url,
-              name: file.name,
-              type: file.type,
-            },
-          ],
+      // Stage the file as a pending attachment so user can preview and send with text
+      setPendingAttachments((prev) => [
+        ...prev,
+        {
+          file,
+          url: normalizedUrl,
+          name: file.name,
+          type: fileType,
         },
-      });
+      ]);
     } catch (err) {
       console.error("Failed to upload file:", err);
     } finally {
+      setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
 
+  const removePendingAttachment = useCallback((index: number) => {
+    setPendingAttachments((prev) => prev.filter((_, i) => i !== index));
+  }, []);
+
   const sendChat = useCallback(() => {
-    if (!chatInput.trim() || !currentUser) return;
+    const hasText = chatInput.trim().length > 0;
+    const hasAttachments = pendingAttachments.length > 0;
+    if ((!hasText && !hasAttachments) || !currentUser) return;
 
     const msgId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const msgText = chatInput.trim();
+
+    // Build attachments array from pending
+    const attachments = pendingAttachments.map((pa) => ({
+      url: pa.url,
+      name: pa.name,
+      type: pa.type,
+    }));
 
     socketRef.current.emit("meeting:chat:send", {
       meetingId: meetingCode,
@@ -822,11 +1064,13 @@ function MeetingRoomUI({
         senderId: currentUser.id,
         senderName: currentUser.name,
         text: msgText,
+        ...(attachments.length > 0 ? { attachments } : {}),
       },
     });
 
     setChatInput("");
-  }, [chatInput, currentUser, meetingCode]);
+    setPendingAttachments([]);
+  }, [chatInput, pendingAttachments, currentUser, meetingCode]);
 
   const toggleFullscreen = useCallback(async () => {
     try {
@@ -869,6 +1113,7 @@ function MeetingRoomUI({
       peerId: peerId.current,
     });
     clearCurrentMeeting();
+    meetingPiPLeave();
     navigate("/");
   }, [navigate, meetingCode, meetingId, currentUser]);
 
@@ -895,6 +1140,7 @@ function MeetingRoomUI({
       peerId: peerId.current,
     });
     clearCurrentMeeting();
+    meetingPiPLeave();
     navigate("/meetings");
     setEndingMeeting(false);
   }, [isHost, meetingId, meetingCode, navigate, leaveMeeting]);
@@ -909,47 +1155,79 @@ function MeetingRoomUI({
 
   const testSpeaker = useCallback(async () => {
     try {
-      const audio = new Audio("/test-sound.mp3");
-      if (selectedSpeaker && (audio as any).setSinkId)
-        await (audio as any).setSinkId(selectedSpeaker);
-      audio.volume = speakerVolume[0] / 100;
-      audio.play().catch(() => {});
-    } catch {}
+      // Generate a test beep tone using Web Audio API
+      const ctx = new AudioContext();
+      const oscillator = ctx.createOscillator();
+      const gainNode = ctx.createGain();
+      oscillator.connect(gainNode);
+      gainNode.connect(ctx.destination);
+      oscillator.type = "sine";
+      oscillator.frequency.setValueAtTime(800, ctx.currentTime);
+      gainNode.gain.setValueAtTime((speakerVolume[0] / 100) * 0.3, ctx.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.8);
+      oscillator.start(ctx.currentTime);
+      oscillator.stop(ctx.currentTime + 0.8);
+      // Play a second beep after a short delay
+      const osc2 = ctx.createOscillator();
+      const gain2 = ctx.createGain();
+      osc2.connect(gain2);
+      gain2.connect(ctx.destination);
+      osc2.type = "sine";
+      osc2.frequency.setValueAtTime(1000, ctx.currentTime + 0.3);
+      gain2.gain.setValueAtTime((speakerVolume[0] / 100) * 0.3, ctx.currentTime + 0.3);
+      gain2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.1);
+      osc2.start(ctx.currentTime + 0.3);
+      osc2.stop(ctx.currentTime + 1.1);
+      setTimeout(() => ctx.close(), 1500);
+    } catch (e) {
+      console.error("Test speaker error:", e);
+    }
   }, [selectedSpeaker, speakerVolume]);
+
+  // Play a notification beep (used for hand raise)
+  const playNotificationBeep = useCallback(() => {
+    try {
+      const ctx = new AudioContext();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(880, ctx.currentTime);
+      gain.gain.setValueAtTime(0.15, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.3);
+      setTimeout(() => ctx.close(), 500);
+    } catch {}
+  }, []);
 
   // Build participant list from LiveKit + screen share tiles
   const allParticipants = useMemo(() => {
-    const participants: Array<{
-      identity: string;
-      name: string;
-      isLocal: boolean;
-      cameraEnabled: boolean;
-      microphoneEnabled: boolean;
-      screenShareEnabled: boolean;
-      metadata?: string;
-      isSpeaking: boolean;
-      isScreenShareTile?: boolean;
-      screenShareIdentity?: string;
-    }> = livekitParticipants.map((p) => ({
-      identity: p.identity,
-      name: p.name || p.identity,
-      isLocal: p.isLocal,
-      cameraEnabled: p.isCameraEnabled,
-      microphoneEnabled: p.isMicrophoneEnabled,
-      screenShareEnabled: p.isScreenShareEnabled,
-      metadata: p.metadata,
-      isSpeaking: p.isSpeaking,
-    }));
+    const mappedParticipants: Array<UIMappedParticipant> = livekitParticipants.map((p) => {
+      const socketParticipant = (participants.find(sp => sp.peerId === p.identity) || { state: {} as ParticipantState }).state;
+      return {
+        identity: p.identity,
+        name: p.name || p.identity,
+        isLocal: p.isLocal,
+        cameraEnabled: p.isCameraEnabled,
+        microphoneEnabled: p.isMicrophoneEnabled,
+        screenShareEnabled: p.isScreenShareEnabled,
+        metadata: p.metadata,
+        isSpeaking: p.isSpeaking,
+        isHandRaised: socketParticipant.isHandRaised || false, // Get from socket state
+      };
+    });
 
     // Add screen share tiles as separate entries (Zoom/Google Meet style)
     tracks
       .filter((t) => t.source === Track.Source.ScreenShare)
       .forEach((t) => {
-        const existingIdx = participants.findIndex(
+        const existingIdx = mappedParticipants.findIndex(
           (p) => p.identity === `screen-${t.participant.identity}`,
         );
         if (existingIdx === -1) {
-          participants.push({
+          mappedParticipants.push({
             identity: `screen-${t.participant.identity}`,
             name: `${t.participant.name || t.participant.identity}'s Screen`,
             isLocal: t.participant.isLocal,
@@ -960,25 +1238,55 @@ function MeetingRoomUI({
             isSpeaking: false,
             isScreenShareTile: true,
             screenShareIdentity: t.participant.identity,
+            isHandRaised: false, // Screen share tiles don't raise hands
           });
         }
       });
 
-    return participants;
-  }, [livekitParticipants, tracks]);
+    return mappedParticipants;
+  }, [livekitParticipants, tracks, participants]); // Add `participants` to dependency array to get `isHandRaised` from socket state
 
   const totalParticipants = allParticipants.filter(
     (p) => !p.isScreenShareTile,
   ).length;
   const hasScreenShare = allParticipants.some((p) => p.isScreenShareTile);
 
+  // Sync PiP state with local meeting state
+  useEffect(() => {
+    // Determine if ANY participant (local or remote) has their hand raised
+    const hasHandRaised = allParticipants.some(p => p.isHandRaised);
+    
+    meetingPiPUpdateState({
+      isMuted,
+      isCameraOn,
+      elapsedSeconds,
+      participantCount: livekitParticipants.length,
+      hasHandRaised,
+    });
+  }, [isMuted, isCameraOn, elapsedSeconds, livekitParticipants.length, allParticipants]);
+
+  // Validate pinned participant still exists
+  const validPinned = pinnedParticipantId && allParticipants.some(p => p.identity === pinnedParticipantId);
+  const effectivePinnedId = validPinned ? pinnedParticipantId : null;
+
+  // Determine if we're in spotlight mode (pinned or screen share)
+  const isSpotlightMode = !!effectivePinnedId || hasScreenShare;
+
+  // The main/focused content identity — pinned overrides screen share
+  const mainViewId = effectivePinnedId || allParticipants.find(p => p.isScreenShareTile)?.identity || null;
+
+  // Handle clicking a participant tile
+  // Don't allow pinning when you're the only participant
+  const handleTileClick = useCallback((identity: string) => {
+    if (totalParticipants <= 1) return; // No point pinning when alone
+    setPinnedParticipantId(prev => prev === identity ? null : identity);
+  }, [totalParticipants]);
+
   // Calculate grid layout - always show all participants like Zoom/Google Meet
   const getGridLayout = () => {
-    // If screen sharing, show screen share large + participants in sidebar
-    if (hasScreenShare) {
+    if (isSpotlightMode) {
       return { cols: 1, rows: 1 };
     }
-    // Grid layout for all participants - no spotlight single view
     if (totalParticipants === 1) {
       return { cols: 1, rows: 1 };
     }
@@ -1060,6 +1368,20 @@ function MeetingRoomUI({
           <span className="hidden md:inline text-white/50">
             ID: {meetingCode.slice(0, 11)}
           </span>
+          <div className="w-px h-4 bg-white/20 mx-1 hidden sm:block" />
+          <Button
+            variant="ghost"
+            size="icon"
+            className="w-8 h-8 rounded-full hover:bg-white/10 text-white/70 hover:text-white transition-colors"
+            onClick={toggleFullscreen}
+            title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
+          >
+            {isFullscreen ? (
+              <Minimize className="w-4 h-4" />
+            ) : (
+              <Maximize className="w-4 h-4" />
+            )}
+          </Button>
         </div>
       </header>
 
@@ -1085,25 +1407,31 @@ function MeetingRoomUI({
             </motion.div>
           )}
 
-          {/* Screen Share Layout (Zoom/Google Meet style) */}
-          {hasScreenShare ? (
+          {/* ═══════════════════════════════════════════════════════════
+              SPOTLIGHT / PINNED VIEW (Zoom/Google Meet style)
+              Active when: a participant is pinned OR screen share is active
+             ═══════════════════════════════════════════════════════════ */}
+          {isSpotlightMode ? (
             <div className="flex h-full w-full">
-              {/* Screen share - large on left */}
-              <div className="flex-1 p-2">
-                {allParticipants
-                  .filter((p) => p.isScreenShareTile)
-                  .map((p) => {
+              {/* ── Main View (large area) ── */}
+              <div className="flex-1 p-2 relative">
+                {(() => {
+                  const mainParticipant = allParticipants.find(p => p.identity === mainViewId);
+                  if (!mainParticipant) return null;
+
+                  // Screen share tile
+                  if (mainParticipant.isScreenShareTile) {
                     const screenTrack = tracks.find(
                       (t) =>
-                        t.participant.identity === p.screenShareIdentity &&
+                        t.participant.identity === mainParticipant.screenShareIdentity &&
                         t.source === Track.Source.ScreenShare,
                     );
                     if (!screenTrack) return null;
 
                     return (
                       <div
-                        key={p.identity}
-                        className="relative rounded-xl overflow-hidden bg-[#1a1a1a] border-2 border-[#2d2d2d] h-full"
+                        className="relative rounded-xl overflow-hidden bg-[#1a1a1a] border-2 border-[#2d2d2d] h-full cursor-pointer"
+                        onClick={() => handleTileClick(mainParticipant.identity)}
                       >
                         <div className="absolute inset-0 w-full h-full flex items-center justify-center bg-[#0a0a0a]">
                           <VideoTrack
@@ -1113,21 +1441,150 @@ function MeetingRoomUI({
                         </div>
                         <div className="absolute top-3 left-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 shadow-lg z-20">
                           <Monitor className="w-3.5 h-3.5" />
-                          <span>{p.name}</span>
+                          <span>{mainParticipant.name}</span>
                         </div>
+                        {/* Unpin button */}
+                        {effectivePinnedId && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setPinnedParticipantId(null); }}
+                            className="absolute top-3 right-3 bg-black/60 hover:bg-black/80 backdrop-blur-sm text-white px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 shadow-lg z-20 transition-all duration-200 hover:scale-105"
+                          >
+                            <PinOff className="w-3.5 h-3.5" />
+                            <span>Unpin</span>
+                          </button>
+                        )}
                       </div>
                     );
-                  })}
+                  }
+
+                  // Camera / participant tile
+                  const videoTrack = tracks.find(
+                    (t) =>
+                      t.participant.identity === mainParticipant.identity &&
+                      t.source === Track.Source.Camera,
+                  );
+                  const initials = mainParticipant.name
+                    .split(" ")
+                    .map((n) => n[0])
+                    .join("")
+                    .slice(0, 2)
+                    .toUpperCase();
+
+                  return (
+                    <div
+                      className={cn(
+                        "relative rounded-2xl overflow-hidden bg-[#202124] transition-all duration-300",
+                        mainParticipant.isSpeaking
+                          ? "ring-4 ring-green-500 shadow-[0_0_30px_rgba(34,197,94,0.3)] m-1"
+                          : "ring-1 ring-white/10 m-1",
+                      )}
+                      style={{ height: "calc(100% - 8px)" }}
+                    >
+                      <div className="absolute inset-0 w-full h-full flex items-center justify-center bg-[#202124]">
+                        {videoTrack && mainParticipant.cameraEnabled ? (
+                          <VideoTrack
+                            trackRef={videoTrack}
+                            className={cn(
+                              "w-full h-full object-contain",
+                              mainParticipant.isLocal && mirrorVideo && "scale-x-[-1]",
+                            )}
+                          />
+                        ) : (
+                          <div className="flex flex-col items-center justify-center">
+                            <Avatar className="w-32 h-32 bg-[#3c4043] ring-1 ring-white/10 shadow-xl">
+                              <AvatarFallback className="text-5xl text-white font-medium bg-[#3c4043]">
+                                {initials}
+                              </AvatarFallback>
+                            </Avatar>
+                          </div>
+                        )}
+                        
+                        {/* Hand Raise Badge (Spotlight) */}
+                        {mainParticipant.isHandRaised && (
+                          <div className="absolute top-4 right-4 bg-[#fbbc04] text-black p-2.5 rounded-full shadow-[0_0_20px_rgba(251,188,4,0.4)] animate-pulse z-20">
+                            <Hand className="w-5 h-5" />
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Participant Name Bar (Spotlight) */}
+                      <div className="absolute bottom-6 left-6 flex items-center gap-2 z-20">
+                        <div className="bg-black/60 backdrop-blur-md px-4 py-2.5 rounded-xl flex items-center gap-3 border border-white/10 shadow-lg">
+                          <span className="text-white text-[15px] font-medium tracking-wide">
+                            {mainParticipant.name}
+                            {mainParticipant.isLocal && " (You)"}
+                          </span>
+                        </div>
+                        
+                        {/* Status Badges */}
+                        <div className="flex items-center gap-1.5">
+                          {!mainParticipant.microphoneEnabled && (
+                            <div className="bg-[#ea4335]/90 backdrop-blur-md rounded-full p-2.5 shadow-lg border border-red-500/30">
+                              <MicOff className="w-4 h-4 text-white" />
+                            </div>
+                          )}
+                          {!mainParticipant.cameraEnabled && (
+                            <div className="bg-[#ea4335]/90 backdrop-blur-md rounded-full p-2.5 shadow-lg border border-red-500/30">
+                              <VideoOff className="w-4 h-4 text-white" />
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
 
-              {/* Participants - sidebar on right */}
-              <div className="w-48 p-2 flex flex-col gap-2 overflow-y-auto">
+              {/* ── Sidebar strip (all other tiles) ── */}
+              <div className="w-52 p-2 flex flex-col gap-2 overflow-y-auto">
+                {/* Show screen share tile in sidebar if it's not the main view */}
+                {hasScreenShare && mainViewId && !allParticipants.find(p => p.identity === mainViewId)?.isScreenShareTile && (
+                  allParticipants
+                    .filter((p) => p.isScreenShareTile)
+                    .map((p) => {
+                      const screenTrack = tracks.find(
+                        (t) =>
+                          t.participant.identity === p.screenShareIdentity &&
+                          t.source === Track.Source.ScreenShare,
+                      );
+                      if (!screenTrack) return null;
+
+                      return (
+                        <div
+                          key={p.identity}
+                          className="relative rounded-lg overflow-hidden bg-[#1a1a1a] border-2 border-blue-500/50 cursor-pointer transition-all duration-200 hover:border-blue-400 hover:shadow-lg hover:shadow-blue-500/20 group"
+                          style={{ aspectRatio: "16 / 9" }}
+                          onClick={() => handleTileClick(p.identity)}
+                          title="Click to focus screen share"
+                        >
+                          <div className="absolute inset-0 flex items-center justify-center bg-[#0a0a0a]">
+                            <VideoTrack
+                              trackRef={screenTrack}
+                              className="w-full h-full object-contain"
+                            />
+                          </div>
+                          <div className="absolute inset-0 bg-transparent group-hover:bg-white/5 transition-colors duration-200 z-10" />
+                          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 to-transparent p-1.5 z-20">
+                            <div className="flex items-center gap-1">
+                              <ScreenShare className="w-2.5 h-2.5 text-blue-400" />
+                              <span className="text-white text-[10px] font-medium truncate">
+                                {p.name}
+                              </span>
+                            </div>
+                          </div>
+                          {/* Focus hint */}
+                          <div className="absolute top-1 right-1 bg-blue-500/80 backdrop-blur-sm rounded p-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-20">
+                            <Pin className="w-2.5 h-2.5 text-white" />
+                          </div>
+                        </div>
+                      );
+                    })
+                )}
+
+                {/* Participant tiles (excluding the one in main view) */}
                 {allParticipants
-                  .filter((p) => !p.isScreenShareTile)
+                  .filter((p) => !p.isScreenShareTile && p.identity !== mainViewId)
                   .map((p) => {
-                    const participant = livekitParticipants.find(
-                      (lkp) => lkp.identity === p.identity,
-                    );
                     const videoTrack = tracks.find(
                       (t) =>
                         t.participant.identity === p.identity &&
@@ -1144,14 +1601,16 @@ function MeetingRoomUI({
                       <div
                         key={p.identity}
                         className={cn(
-                          "relative rounded-lg overflow-hidden bg-[#1a1a1a] border-2 transition-all duration-200",
+                          "relative rounded-xl overflow-hidden bg-[#202124] transition-all duration-300 cursor-pointer group m-0.5",
                           p.isSpeaking
-                            ? "border-green-500 shadow-lg shadow-green-500/30"
-                            : "border-[#2d2d2d]",
+                            ? "ring-2 ring-green-500 shadow-[0_0_15px_rgba(34,197,94,0.3)]"
+                            : "ring-1 ring-white/10 hover:ring-white/30",
                         )}
                         style={{ aspectRatio: "16 / 9" }}
+                        onClick={() => handleTileClick(p.identity)}
+                        title={`Click to focus ${p.name}`}
                       >
-                        <div className="absolute inset-0 flex items-center justify-center bg-[#0a0a0a]">
+                        <div className="absolute inset-0 flex items-center justify-center bg-[#202124]">
                           {videoTrack && p.cameraEnabled ? (
                             <VideoTrack
                               trackRef={videoTrack}
@@ -1161,28 +1620,44 @@ function MeetingRoomUI({
                               )}
                             />
                           ) : (
-                            <div className="flex flex-col items-center justify-center">
-                              <Avatar className="w-12 h-12 bg-[#3d3d3d]">
-                                <AvatarImage src={p.metadata} />
-                                <AvatarFallback className="text-sm font-semibold text-white bg-[#3d3d3d]">
+                            <div className="flex flex-col items-center justify-center text-white">
+                              <Avatar className="w-12 h-12 bg-[#3c4043] ring-1 ring-white/10 shadow-md">
+                                <AvatarFallback className="text-[14px] bg-[#3c4043] text-[#e8eaed]">
                                   {initials}
                                 </AvatarFallback>
                               </Avatar>
                             </div>
                           )}
                         </div>
-                        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 to-transparent p-1.5 z-20">
-                          <div className="flex items-center justify-between">
-                            <span className="text-white text-[10px] font-medium truncate">
-                              {p.name}
+
+                        {/* Hand Raise Badge (Sidebar) */}
+                        {p.isHandRaised && (
+                          <div className="absolute top-2 right-2 bg-[#fbbc04] text-black p-1.5 rounded-full shadow-[0_0_10px_rgba(251,188,4,0.4)] z-20">
+                            <Hand className="w-3.5 h-3.5" />
+                          </div>
+                        )}
+
+                        {/* Hover overlay */}
+                        <div className="absolute inset-0 bg-white/0 group-hover:bg-white/5 transition-colors duration-200 z-10" />
+                        
+                        {/* Name and Indicators Pill */}
+                        <div className="absolute bottom-2 left-2 flex items-center gap-1.5 z-20">
+                          <div className="bg-black/60 backdrop-blur-md px-2.5 py-1.5 rounded-lg flex items-center shadow-md border border-white/10 max-w-[120px]">
+                            <span className="text-white text-[11px] font-medium truncate">
+                              {p.name.split(" ")[0]}
                               {p.isLocal && " (You)"}
                             </span>
-                            <div className="flex items-center gap-0.5">
-                              {!p.microphoneEnabled && (
-                                <MicOff className="w-2.5 h-2.5 text-red-400" />
-                              )}
-                            </div>
                           </div>
+                          {!p.microphoneEnabled && (
+                            <div className="bg-[#ea4335]/90 backdrop-blur-md rounded-full p-1.5 shadow-md border border-red-500/30">
+                              <MicOff className="w-3 h-3 text-white" />
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Focus hint on hover */}
+                        <div className="absolute top-2 right-2 bg-black/60 backdrop-blur-sm rounded-lg p-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-20 border border-white/10">
+                          <Pin className="w-3.5 h-3.5 text-white" />
                         </div>
                       </div>
                     );
@@ -1190,7 +1665,9 @@ function MeetingRoomUI({
               </div>
             </div>
           ) : (
-            /* Normal Grid Layout */
+            /* ═══════════════════════════════════════════════════════════
+               GRID VIEW (default, no pin, no screen share)
+               ═══════════════════════════════════════════════════════════ */
             <div
               className={cn(
                 "grid h-full w-full",
@@ -1208,9 +1685,6 @@ function MeetingRoomUI({
               {allParticipants
                 .filter((p) => !p.isScreenShareTile)
                 .map((p) => {
-                  const participant = livekitParticipants.find(
-                    (lkp) => lkp.identity === p.identity,
-                  );
                   const videoTrack = tracks.find(
                     (t) =>
                       t.participant.identity === p.identity &&
@@ -1225,78 +1699,84 @@ function MeetingRoomUI({
 
                   return (
                     <div
-                      key={p.identity}
-                      className={cn(
-                        "relative rounded-xl overflow-hidden bg-[#1a1a1a] border-2 transition-all duration-300",
-                        p.isSpeaking
-                          ? "border-green-500 shadow-lg shadow-green-500/30 ring-2 ring-green-500/50"
-                          : "border-[#2d2d2d]",
-                        "group",
-                      )}
-                      style={{
-                        aspectRatio: "16 / 9",
-                        width: "100%",
-                        height: "100%",
-                      }}
-                    >
-                      <div className="absolute inset-0 w-full h-full flex items-center justify-center bg-[#0a0a0a]">
-                        {/* Show video ONLY if track exists AND camera is enabled */}
-                        {videoTrack && p.cameraEnabled ? (
-                          <VideoTrack
-                            trackRef={videoTrack}
-                            className={cn(
-                              "w-full h-full object-contain",
-                              p.isLocal && mirrorVideo && "scale-x-[-1]",
-                            )}
-                          />
-                        ) : (
-                          /* Show avatar if no video or camera off */
-                          <div className="flex flex-col items-center justify-center">
-                            <Avatar className="w-20 h-20 bg-[#3d3d3d]">
-                              <AvatarImage src={p.metadata} />
-                              <AvatarFallback className="text-2xl font-semibold text-white bg-[#3d3d3d]">
-                                {initials}
-                              </AvatarFallback>
-                            </Avatar>
-                            <p className="mt-3 text-white/70 text-sm">
-                              {p.name}
-                            </p>
-                          </div>
+                        key={p.identity}
+                        className={cn(
+                          "relative rounded-2xl overflow-hidden bg-[#202124] transition-all duration-300 group m-1",
+                          totalParticipants > 1 && "cursor-pointer",
+                          p.isSpeaking
+                            ? "ring-4 ring-green-500 shadow-[0_0_20px_rgba(34,197,94,0.3)]"
+                            : totalParticipants > 1 ? "ring-1 ring-white/10 hover:ring-white/30" : "ring-1 ring-white/10",
                         )}
-                      </div>
+                        style={{
+                          aspectRatio: "16 / 9",
+                          width: "calc(100% - 8px)",
+                          height: "calc(100% - 8px)",
+                        }}
+                        onClick={() => handleTileClick(p.identity)}
+                        title={totalParticipants > 1 ? `Click to focus ${p.name}` : undefined}
+                      >
+                        <div className="absolute inset-0 w-full h-full flex items-center justify-center bg-[#202124]">
+                          {videoTrack && p.cameraEnabled ? (
+                            <VideoTrack
+                              trackRef={videoTrack}
+                              className={cn(
+                                "w-full h-full object-contain",
+                                p.isLocal && mirrorVideo && "scale-x-[-1]",
+                              )}
+                            />
+                          ) : (
+                            <div className="flex flex-col items-center justify-center">
+                              <Avatar className="w-24 h-24 bg-[#3c4043] ring-1 ring-white/10 shadow-lg">
+                                <AvatarImage src={p.metadata} />
+                                <AvatarFallback className="text-3xl font-medium text-[#e8eaed] bg-[#3c4043]">
+                                  {initials}
+                                </AvatarFallback>
+                              </Avatar>
+                            </div>
+                          )}
+                        </div>
 
-                      {/* Participant Name Bar */}
-                      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/70 to-transparent p-3 z-20">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2 flex-1 min-w-0">
-                            <span className="text-white text-sm font-semibold truncate">
+                        {/* Hover overlay */}
+                        <div className="absolute inset-0 bg-white/0 group-hover:bg-white/5 transition-colors duration-200 z-10" />
+
+                        {/* Name and Indicators Pill */}
+                        <div className="absolute bottom-3 left-3 flex items-center gap-2 z-20">
+                          <div className="bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-xl flex items-center shadow-md border border-white/10 max-w-[200px]">
+                            <span className="text-white text-sm font-medium truncate">
                               {p.name}
                               {p.isLocal && " (You)"}
                             </span>
-                            {isHandRaised && p.isLocal && (
-                              <span
-                                className="text-lg animate-bounce flex-shrink-0"
-                                title="Hand raised"
-                              >
-                                ✋
-                              </span>
-                            )}
                           </div>
-                          <div className="flex items-center gap-1.5 flex-shrink-0">
+                          
+                          {/* Status Badges */}
+                          <div className="flex items-center gap-1.5">
                             {!p.microphoneEnabled && (
-                              <div className="bg-red-500/90 backdrop-blur-sm rounded-md p-1.5 shadow-md">
+                              <div className="bg-[#ea4335]/90 backdrop-blur-md rounded-full p-2 shadow-md border border-red-500/30">
                                 <MicOff className="w-3.5 h-3.5 text-white" />
                               </div>
                             )}
                             {!p.cameraEnabled && (
-                              <div className="bg-red-500/90 backdrop-blur-sm rounded-md p-1.5 shadow-md">
+                              <div className="bg-[#ea4335]/90 backdrop-blur-md rounded-full p-2 shadow-md border border-red-500/30">
                                 <VideoOff className="w-3.5 h-3.5 text-white" />
                               </div>
                             )}
                           </div>
                         </div>
+
+                        {/* Focus hint on hover (only when multiple participants) */}
+                        {totalParticipants > 1 && (
+                          <div className="absolute top-3 left-3 bg-black/60 backdrop-blur-sm rounded-lg p-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-20 border border-white/10">
+                            <Pin className="w-4 h-4 text-white" />
+                          </div>
+                        )}
+
+                        {/* Hand Raise Badge (Grid) */}
+                        {p.isHandRaised && (
+                          <div className="absolute top-3 right-3 bg-[#fbbc04] text-black p-2 rounded-full shadow-[0_0_15px_rgba(251,188,4,0.4)] animate-pulse z-20">
+                            <Hand className="w-4 h-4" />
+                          </div>
+                        )}
                       </div>
-                    </div>
                   );
                 })}
             </div>
@@ -1308,14 +1788,14 @@ function MeetingRoomUI({
           {(showParticipants || showChat) && (
             <motion.div
               initial={{ width: 0 }}
-              animate={{ width: 320 }}
+              animate={{ width: "100%", maxWidth: 380 }}
               exit={{ width: 0 }}
-              className="bg-[#232323] border-l border-[#333] flex flex-col overflow-hidden"
+              className="bg-[#232323] border-l border-[#333] flex flex-col overflow-hidden w-full sm:w-80 md:w-96 absolute sm:relative inset-0 sm:inset-auto z-30 sm:z-auto"
             >
               <div className="flex border-b border-[#333]">
                 <button
                   className={cn(
-                    "flex-1 py-3 text-sm font-medium",
+                    "flex-1 py-3 text-xs sm:text-sm font-medium",
                     showParticipants
                       ? "text-white border-b-2 border-[#0E71EB]"
                       : "text-white/50 hover:text-white",
@@ -1329,7 +1809,7 @@ function MeetingRoomUI({
                 </button>
                 <button
                   className={cn(
-                    "flex-1 py-3 text-sm font-medium",
+                    "flex-1 py-3 text-xs sm:text-sm font-medium",
                     showChat
                       ? "text-white border-b-2 border-[#0E71EB]"
                       : "text-white/50 hover:text-white",
@@ -1342,7 +1822,7 @@ function MeetingRoomUI({
                   Chat
                 </button>
                 <button
-                  className="px-3 text-white/50 hover:text-white"
+                  className="px-2 sm:px-3 text-white/50 hover:text-white"
                   onClick={() => {
                     setShowParticipants(false);
                     setShowChat(false);
@@ -1461,222 +1941,252 @@ function MeetingRoomUI({
                   </div>
                 )}
                 {showChat && (
-                  <div className="p-3 space-y-3">
-                    {chatMessages.length === 0 ? (
-                      <div className="text-center py-16">
-                        <MessageSquare className="w-12 h-12 text-white/20 mx-auto mb-3" />
-                        <p className="text-white/40 text-sm">No messages yet</p>
+                  <div className="flex flex-col h-full">
+                    {/* Chat Header */}
+                    <div className="px-4 py-3 border-b border-white/10 bg-gradient-to-r from-[#1a1a1a] to-[#1e1e1e]">
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-white font-semibold flex items-center gap-2">
+                          <MessageSquare className="w-4 h-4 text-blue-400" />
+                          Meeting Chat
+                        </h3>
+                        <span className="text-white/40 text-xs">
+                          {chatMessages.length} messages
+                        </span>
                       </div>
-                    ) : (
-                      chatMessages.map((msg) => (
-                        <div key={msg.id} className="text-sm">
-                          <div className="flex items-center gap-2 mb-0.5">
-                            <span className="text-white font-medium">
-                              {msg.sender}
-                            </span>
-                            <span className="text-white/40 text-xs">
-                              {msg.time}
-                            </span>
+                    </div>
+
+                    {/* Messages Area */}
+                    <div className="flex-1 overflow-y-auto p-3 space-y-3 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+                      {chatMessages.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center h-full text-center py-8">
+                          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500/20 to-purple-500/20 flex items-center justify-center mb-4">
+                            <MessageSquare className="w-8 h-8 text-blue-400" />
                           </div>
-                          <p className="text-white/80 break-words">
-                            {msg.text}
+                          <p className="text-white/60 text-sm font-medium">
+                            No messages yet
                           </p>
-                          {/* File attachment preview - Modern inline preview */}
-                          {msg.attachments && msg.attachments.length > 0 && (
-                            <div className="mt-2 space-y-2">
-                              {msg.attachments.map((file, i) => {
-                                const isImage = file.type.startsWith("image/");
-                                const isVideo = file.type.startsWith("video/");
-                                const isAudio = file.type.startsWith("audio/");
-                                const isPDF = file.type === "application/pdf";
-
-                                return (
-                                  <div
-                                    key={i}
-                                    className="bg-[#1e1e1e] rounded-2xl overflow-hidden border border-white/5 shadow-lg"
-                                  >
-                                    {/* Image - Full inline preview */}
-                                    {isImage && (
-                                      <div
-                                        className="relative group cursor-pointer"
-                                        onClick={() =>
-                                          window.open(file.url, "_blank")
-                                        }
-                                      >
-                                        <img
-                                          src={file.url}
-                                          alt={file.name}
-                                          className="w-full h-auto max-h-80 object-contain bg-[#0a0a0a]"
-                                        />
-                                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
-                                          <div className="opacity-0 group-hover:opacity-100 transition-opacity bg-black/60 rounded-full p-3">
-                                            <ExternalLink className="w-5 h-5 text-white" />
-                                          </div>
-                                        </div>
-                                        <div className="px-3 py-2 bg-gradient-to-r from-[#1e1e1e] to-[#252525] flex items-center gap-2">
-                                          <ImageIcon className="w-4 h-4 text-blue-400" />
-                                          <span className="text-white/80 text-xs truncate flex-1">
-                                            {file.name}
-                                          </span>
-                                          <a
-                                            href={file.url}
-                                            download
-                                            onClick={(e) => e.stopPropagation()}
-                                            className="p-1.5 hover:bg-white/10 rounded-lg transition-colors"
-                                          >
-                                            <Download className="w-4 h-4 text-white/60 hover:text-white" />
-                                          </a>
-                                        </div>
-                                      </div>
-                                    )}
-
-                                    {/* Video - Inline player */}
-                                    {isVideo && (
-                                      <div>
-                                        <video
-                                          src={file.url}
-                                          controls
-                                          className="w-full max-h-64 bg-black"
-                                          preload="metadata"
-                                        />
-                                        <div className="px-3 py-2 bg-gradient-to-r from-[#1e1e1e] to-[#252525] flex items-center gap-2">
-                                          <VideoIcon className="w-4 h-4 text-purple-400" />
-                                          <span className="text-white/80 text-xs truncate flex-1">
-                                            {file.name}
-                                          </span>
-                                          <a
-                                            href={file.url}
-                                            download
-                                            className="p-1.5 hover:bg-white/10 rounded-lg transition-colors"
-                                          >
-                                            <Download className="w-4 h-4 text-white/60 hover:text-white" />
-                                          </a>
-                                        </div>
-                                      </div>
-                                    )}
-
-                                    {/* Audio - Inline player */}
-                                    {isAudio && (
-                                      <div className="p-4">
-                                        <div className="flex items-center gap-3 mb-3">
-                                          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-green-500/30 to-emerald-500/30 flex items-center justify-center">
-                                            <Volume2 className="w-6 h-6 text-green-400" />
-                                          </div>
-                                          <div className="flex-1 min-w-0">
-                                            <p className="text-white text-sm font-medium truncate">
-                                              {file.name}
-                                            </p>
-                                            <p className="text-white/40 text-xs">
-                                              Audio file
-                                            </p>
-                                          </div>
-                                        </div>
-                                        <audio
-                                          src={file.url}
-                                          controls
-                                          className="w-full h-10"
-                                          preload="metadata"
-                                        />
-                                      </div>
-                                    )}
-
-                                    {/* PDF - Preview card */}
-                                    {isPDF && (
-                                      <a
-                                        href={file.url}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="flex items-stretch gap-4 p-4 hover:bg-[#252525] transition-colors group"
-                                      >
-                                        <div className="w-16 h-20 rounded-lg bg-gradient-to-br from-red-500/20 to-orange-500/20 flex items-center justify-center flex-shrink-0">
-                                          <FileText className="w-8 h-8 text-red-400" />
-                                        </div>
-                                        <div className="flex-1 min-w-0 flex flex-col justify-center">
-                                          <p className="text-white text-sm font-medium truncate">
-                                            {file.name}
-                                          </p>
-                                          <p className="text-white/40 text-xs mt-1">
-                                            PDF Document • Click to view
-                                          </p>
-                                        </div>
-                                        <div className="flex items-center">
-                                          <ExternalLink className="w-5 h-5 text-white/40 group-hover:text-white/70 transition-colors" />
-                                        </div>
-                                      </a>
-                                    )}
-
-                                    {/* Other files - Beautiful card */}
-                                    {!isImage &&
-                                      !isVideo &&
-                                      !isAudio &&
-                                      !isPDF && (
-                                        <a
-                                          href={file.url}
-                                          target="_blank"
-                                          rel="noopener noreferrer"
-                                          className="flex items-center gap-4 p-4 hover:bg-[#252525] transition-colors group"
-                                        >
-                                          <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-blue-500/20 via-purple-500/20 to-pink-500/20 flex items-center justify-center flex-shrink-0">
-                                            <FileText className="w-7 h-7 text-blue-400" />
-                                          </div>
-                                          <div className="flex-1 min-w-0">
-                                            <p className="text-white text-sm font-medium truncate">
-                                              {file.name}
-                                            </p>
-                                            <p className="text-white/40 text-xs mt-1">
-                                              Click to download
-                                            </p>
-                                          </div>
-                                          <Download className="w-5 h-5 text-white/40 group-hover:text-white/70 transition-colors" />
-                                        </a>
-                                      )}
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          )}
+                          <p className="text-white/40 text-xs mt-1">
+                            Start the conversation!
+                          </p>
                         </div>
-                      ))
-                    )}
-                    <div ref={chatEndRef} />
+                      ) : (
+                        chatMessages.map((msg) => {
+                          const isMe = msg.senderId === currentUser?.id;
+                          const initials = msg.sender
+                            .split(" ")
+                            .map((n) => n[0])
+                            .join("")
+                            .slice(0, 2)
+                            .toUpperCase();
+                          
+                          const hasText = msg.text && !msg.attachments?.some(a => a.name === msg.text);
+                          const hasAttachments = msg.attachments && msg.attachments.length > 0;
+
+                          return (
+                            <div
+                              key={msg.id}
+                              className={`flex gap-2.5 ${isMe ? "flex-row-reverse" : ""}`}
+                            >
+                              {/* Avatar */}
+                              <div className="flex-shrink-0 mt-1">
+                                <Avatar className="w-7 h-7 ring-1 ring-white/10">
+                                  {msg.senderAvatar ? (
+                                    <AvatarImage src={msg.senderAvatar} />
+                                  ) : (
+                                    <AvatarFallback className="bg-gradient-to-br from-blue-600/80 to-purple-600/80 text-white text-[9px] uppercase font-bold">
+                                      {initials}
+                                    </AvatarFallback>
+                                  )}
+                                </Avatar>
+                              </div>
+
+                              {/* Message Content */}
+                              <div
+                                className={`flex flex-col max-w-[85%] ${isMe ? "items-end" : "items-start"}`}
+                              >
+                                {/* Sender Name & Time */}
+                                <div
+                                  className={`flex items-center gap-2 mb-0.5 px-0.5 ${isMe ? "flex-row-reverse" : ""}`}
+                                >
+                                  <span
+                                    className={`text-[10px] font-semibold ${isMe ? "text-blue-400" : "text-white/50"}`}
+                                  >
+                                    {msg.sender}
+                                  </span>
+                                  <span className="text-white/20 text-[9px]">
+                                    {msg.time}
+                                  </span>
+                                </div>
+
+                                {/* Text Bubble */}
+                                {hasText && (
+                                  <div
+                                    className={`rounded-2xl px-3.5 py-2 shadow-sm mb-1.5 backdrop-blur-md transition-all duration-300 ${
+                                      isMe
+                                        ? "bg-gradient-to-br from-[#0E71EB] to-[#0556BF] text-white rounded-tr-sm ring-1 ring-inset ring-white/10"
+                                        : "bg-gradient-to-br from-[#222222] to-[#1a1a1a] text-white/95 rounded-tl-sm border border-white/10"
+                                    }`}
+                                  >
+                                    <p className="text-[13px] leading-relaxed break-words whitespace-pre-wrap font-medium tracking-wide">
+                                      {msg.text}
+                                    </p>
+                                  </div>
+                                )}
+
+                                {/* File Attachments — smoothly spaced and wrapped */}
+                                {hasAttachments && (
+                                  <div className={`flex flex-col gap-2 w-full ${isMe ? "items-end" : "items-start"}`}>
+                                    {msg.attachments!.map((file, i) => {
+                                      const fileType = file.type || getMimeFromExtension(file.name || "");
+                                      const isImage = fileType.startsWith("image/") || /\.(jpe?g|png|gif|webp|bmp|svg)$/i.test(file.name || "");
+                                      const isVideo = fileType.startsWith("video/") || /\.(mp4|webm|ogg|mov|avi)$/i.test(file.name || "");
+                                      const isAudio = fileType.startsWith("audio/") || /\.(mp3|wav|ogg|m4a|flac)$/i.test(file.name || "");
+                                      const isPDF = fileType === "application/pdf" || /\.pdf$/i.test(file.name || "");
+                                      const fileUrl = normalizeAttachmentUrl(file.url || "");
+
+                                      {/* ── Image ── */}
+                                      if (isImage) {
+                                        return <ImagePreview key={i} url={fileUrl} name={file.name} variant="meeting" />;
+                                      }
+
+                                      {/* ── PDF ── */}
+                                      if (isPDF) {
+                                        return <PDFViewer key={i} url={fileUrl} name={file.name} variant="meeting" />;
+                                      }
+
+                                      {/* ── Video ── */}
+                                      if (isVideo) {
+                                        return (
+                                          <div key={i} className="rounded-2xl overflow-hidden border border-white/10 bg-[#1a1a1a] shadow-sm max-w-[280px] sm:max-w-[320px] transition-all hover:border-white/20">
+                                            <video
+                                              src={fileUrl}
+                                              className="w-full h-auto max-h-[250px] bg-black/50"
+                                              controls
+                                              preload="metadata"
+                                            />
+                                            <div className="px-3 py-2 flex items-center gap-2 bg-gradient-to-r from-black/80 to-black/60 backdrop-blur-md">
+                                              <VideoIcon className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                                              <span className="text-white/80 font-medium text-[11px] truncate flex-1 tracking-wide">{file.name}</span>
+                                            </div>
+                                          </div>
+                                        );
+                                      }
+
+                                      {/* ── Audio ── */}
+                                      if (isAudio) {
+                                        return (
+                                          <div key={i} className="rounded-xl border border-white/10 bg-[#1a1a1a] p-3 max-w-[280px]">
+                                            <div className="flex items-center gap-2 mb-2">
+                                              <Volume2 className="w-3.5 h-3.5 text-purple-400 flex-shrink-0" />
+                                              <span className="text-white/60 text-[10px] truncate">{file.name}</span>
+                                            </div>
+                                            <audio src={fileUrl} className="w-full h-8" controls preload="metadata" />
+                                          </div>
+                                        );
+                                      }
+
+                                      {/* ── Other files ── */}
+                                      return <FilePreview key={i} url={fileUrl} name={file.name} variant="meeting" />;
+                                    })}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
+                      <div ref={chatEndRef} />
+                    </div>
+
+                    {/* Input Area */}
+                    <div className="p-2 sm:p-3 border-t border-white/10 bg-gradient-to-r from-[#1a1a1a] to-[#1e1e1e]">
+                      {/* Pending Attachments Preview */}
+                      {pendingAttachments.length > 0 && (
+                        <div className="flex flex-wrap gap-2.5 mb-3 px-1">
+                          {pendingAttachments.map((pa, idx) => {
+                            const isImg = pa.type.startsWith("image/");
+                            return (
+                              <div
+                                key={idx}
+                                className="relative group w-20 h-20 rounded-xl overflow-hidden shadow-sm border border-white/10 transition-all duration-300 hover:shadow-md hover:border-white/20"
+                              >
+                                {isImg ? (
+                                  <img src={pa.url} alt={pa.name} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110" />
+                                ) : (
+                                  <div className="w-full h-full flex flex-col items-center justify-center gap-1.5 px-2 bg-gradient-to-br from-blue-500/20 to-purple-500/20 backdrop-blur-md">
+                                    <FileText className="w-6 h-6 text-white/70" />
+                                    <span className="text-[9px] font-medium text-white/70 truncate w-full text-center tracking-wider">
+                                      {pa.name.split(".").pop()?.toUpperCase()}
+                                    </span>
+                                  </div>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => removePendingAttachment(idx)}
+                                  className="absolute top-1 right-1 w-5 h-5 rounded-full bg-red-500 text-white flex items-center justify-center text-[10px] opacity-0 group-hover:opacity-100 transition-all duration-300 hover:bg-red-600 hover:scale-110 shadow-sm z-10"
+                                  title="Remove"
+                                >
+                                  ✕
+                                </button>
+                                {/* Bottom Info Bar */}
+                                <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent px-1.5 pt-4 pb-1">
+                                  <span className="text-[9px] font-medium text-white/90 truncate block tracking-wide drop-shadow-md">{pa.name}</span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                      {/* Uploading Indicator */}
+                      {uploading && (
+                        <div className="flex items-center gap-2 mb-2 px-1">
+                          <Loader2 className="w-3.5 h-3.5 text-blue-400 animate-spin" />
+                          <span className="text-white/50 text-[11px]">Uploading file...</span>
+                        </div>
+                      )}
+                      <div className="flex gap-2 items-end">
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="ghost"
+                          className="h-9 w-9 sm:h-10 sm:w-10 text-white/50 hover:text-white hover:bg-white/10 rounded-xl flex-shrink-0"
+                          onClick={() => fileInputRef.current?.click()}
+                          disabled={uploading}
+                        >
+                          <Paperclip className="w-4 h-4 sm:w-5 sm:h-5" />
+                        </Button>
+                        <input
+                          type="file"
+                          ref={fileInputRef}
+                          className="hidden"
+                          onChange={handleFileUpload}
+                          accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt"
+                        />
+                        <div className="flex-1 relative">
+                          <Input
+                            value={chatInput}
+                            onChange={(e) => setChatInput(e.target.value)}
+                            onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && sendChat()}
+                            placeholder={pendingAttachments.length > 0 ? "Add a message (optional)..." : "Type a message..."}
+                            className="bg-[#2a2a2a] border border-white/10 text-white placeholder:text-white/30 h-9 sm:h-10 rounded-xl text-sm focus:border-blue-500/50 focus:ring-blue-500/20"
+                          />
+                        </div>
+                        <Button
+                          size="icon"
+                          className="h-9 w-9 sm:h-10 sm:w-10 bg-gradient-to-br from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 rounded-xl flex-shrink-0 shadow-lg shadow-blue-500/20"
+                          onClick={sendChat}
+                          disabled={!chatInput.trim() && pendingAttachments.length === 0}
+                        >
+                          <Send className="w-4 h-4" />
+                        </Button>
+                      </div>
+                      <p className="text-white/20 text-[9px] mt-1 text-center hidden sm:block">
+                        Press Enter to send • Attach files with 📎
+                      </p>
+                    </div>
                   </div>
                 )}
               </div>
-              {showChat && (
-                <div className="p-3 border-t border-[#333]">
-                  <div className="flex gap-2 relative">
-                    <Input
-                      value={chatInput}
-                      onChange={(e) => setChatInput(e.target.value)}
-                      onKeyDown={(e) => e.key === "Enter" && sendChat()}
-                      placeholder="Type message..."
-                      className="bg-[#3d3d3d] border-0 text-white placeholder:text-white/40 h-10 pr-10"
-                    />
-                    <Button
-                      type="button"
-                      size="icon"
-                      variant="ghost"
-                      className="absolute right-12 top-1 text-white/50 hover:text-white"
-                      onClick={() => fileInputRef.current?.click()}
-                    >
-                      <Paperclip className="w-5 h-5" />
-                    </Button>
-                    <input
-                      type="file"
-                      ref={fileInputRef}
-                      className="hidden"
-                      onChange={handleFileUpload}
-                    />
-                    <Button
-                      size="icon"
-                      className="h-10 w-10 bg-[#0E71EB] hover:bg-[#0D65D0]"
-                      onClick={sendChat}
-                    >
-                      <Send className="w-4 h-4" />
-                    </Button>
-                  </div>
-                </div>
-              )}
             </motion.div>
           )}
         </AnimatePresence>
@@ -1907,17 +2417,6 @@ function MeetingRoomUI({
             <DropdownMenuContent className="bg-[#2d2d2d] border-[#3d3d3d] text-white w-44">
               <DropdownMenuItem
                 className="hover:bg-white/10"
-                onClick={toggleFullscreen}
-              >
-                {isFullscreen ? (
-                  <Minimize className="w-4 h-4 mr-2" />
-                ) : (
-                  <Maximize className="w-4 h-4 mr-2" />
-                )}
-                {isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                className="hover:bg-white/10"
                 onClick={() => setShowSettings(true)}
               >
                 <Settings className="w-4 h-4 mr-2" /> Settings
@@ -1936,99 +2435,224 @@ function MeetingRoomUI({
         </Button>
       </div>
 
-      {/* Settings Dialog */}
+      {/* ═══════════════════════════════════════════════════════════
+          SETTINGS DIALOG (Zoom/Meet Style Sidebar Layout)
+          ═══════════════════════════════════════════════════════════ */}
       <Dialog open={showSettings} onOpenChange={setShowSettings}>
-        <DialogContent className="bg-[#2d2d2d] border-[#3d3d3d] text-white max-w-md">
-          <DialogHeader>
-            <DialogTitle>Settings</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-6 py-4">
-            <div className="space-y-3">
-              <h4 className="text-sm font-medium text-white/70 flex items-center gap-2">
-                <VideoIcon className="w-4 h-4" /> Camera
-              </h4>
-              <Select value={selectedCamera} onValueChange={switchCamera}>
-                <SelectTrigger className="bg-[#3d3d3d] border-[#4d4d4d] text-white">
-                  <SelectValue placeholder="Select camera" />
-                </SelectTrigger>
-                <SelectContent className="bg-[#3d3d3d] border-[#4d4d4d] text-white">
-                  {videoInputs.map((d) => (
-                    <SelectItem key={d.deviceId} value={d.deviceId}>
-                      {d.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <div className="flex items-center justify-between">
-                <Label className="text-sm">Mirror my video</Label>
-                <Switch
-                  checked={mirrorVideo}
-                  onCheckedChange={setMirrorVideo}
-                />
-              </div>
-            </div>
-            <div className="space-y-3">
-              <h4 className="text-sm font-medium text-white/70 flex items-center gap-2">
-                <Mic className="w-4 h-4" /> Microphone
-              </h4>
-              <Select value={selectedMic} onValueChange={switchMic}>
-                <SelectTrigger className="bg-[#3d3d3d] border-[#4d4d4d] text-white">
-                  <SelectValue placeholder="Select microphone" />
-                </SelectTrigger>
-                <SelectContent className="bg-[#3d3d3d] border-[#4d4d4d] text-white">
-                  {audioInputs.map((d) => (
-                    <SelectItem key={d.deviceId} value={d.deviceId}>
-                      {d.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-3">
-              <h4 className="text-sm font-medium text-white/70 flex items-center gap-2">
-                <Volume2 className="w-4 h-4" /> Speaker
-              </h4>
-              <Select
-                value={selectedSpeaker}
-                onValueChange={setSelectedSpeaker}
+        <DialogContent className="bg-[#1e1e1e] border-[#333] text-white max-w-2xl p-0 overflow-hidden shadow-2xl rounded-xl">
+          <div className="flex h-[450px]">
+            {/* Sidebar */}
+            <div className="w-48 bg-[#151515] border-r border-[#333] p-4 flex flex-col gap-2">
+              <h3 className="text-xl font-bold mb-4 px-2 text-white/90">Settings</h3>
+              <button
+                onClick={() => setSettingsTab("audio")}
+                className={cn(
+                  "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200",
+                  settingsTab === "audio"
+                    ? "bg-blue-500/20 text-blue-400"
+                    : "text-white/60 hover:bg-white/5 hover:text-white/90"
+                )}
               >
-                <SelectTrigger className="bg-[#3d3d3d] border-[#4d4d4d] text-white">
-                  <SelectValue placeholder="Select speaker" />
-                </SelectTrigger>
-                <SelectContent className="bg-[#3d3d3d] border-[#4d4d4d] text-white">
-                  {audioOutputs.map((d) => (
-                    <SelectItem key={d.deviceId} value={d.deviceId}>
-                      {d.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label className="text-sm">Volume</Label>
-                  <span className="text-xs text-white/50">
-                    {speakerVolume[0]}%
-                  </span>
+                <Mic className="w-4 h-4" />
+                Audio
+              </button>
+              <button
+                onClick={() => setSettingsTab("video")}
+                className={cn(
+                  "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200",
+                  settingsTab === "video"
+                    ? "bg-blue-500/20 text-blue-400"
+                    : "text-white/60 hover:bg-white/5 hover:text-white/90"
+                )}
+              >
+                <VideoIcon className="w-4 h-4" />
+                Video
+              </button>
+            </div>
+
+            {/* Content Area */}
+            <div className="flex-1 p-8 overflow-y-auto w-full">
+              {settingsTab === "audio" && (
+                <div className="space-y-8 animate-in fade-in duration-300">
+                  <h4 className="text-lg font-semibold text-white/90 border-b border-white/10 pb-2">Audio Settings</h4>
+                  
+                  {/* Speaker Section */}
+                  <div className="space-y-4">
+                    <Label className="text-sm font-semibold text-white/70">Speaker</Label>
+                    <div className="flex items-center gap-4">
+                      <Select value={selectedSpeaker} onValueChange={(deviceId) => {
+                        setSelectedSpeaker(deviceId);
+                        try {
+                          const currentPrefs = localStorage.getItem("device_preferences");
+                          const prefs = currentPrefs ? JSON.parse(currentPrefs) : {};
+                          localStorage.setItem("device_preferences", JSON.stringify({ ...prefs, speaker: deviceId }));
+                        } catch (e) {
+                          // Ignore
+                        }
+                      }}>
+                        <SelectTrigger className="flex-1 bg-[#2a2a2a] border-white/10 text-white hover:border-white/20 transition-colors h-10 rounded-lg">
+                          <SelectValue placeholder="Select speaker" />
+                        </SelectTrigger>
+                        <SelectContent className="bg-[#2a2a2a] border-[#3dd] text-white">
+                          {audioOutputs.map((d) => (
+                            <SelectItem key={d.deviceId} value={d.deviceId} className="hover:bg-white/10">
+                              {d.label || "Default Speaker"}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Button
+                        variant="outline"
+                        onClick={testSpeaker}
+                        className="bg-transparent border-white/20 text-white hover:bg-white/10 hover:text-white shrink-0"
+                      >
+                        <Volume2 className="w-4 h-4 mr-2" /> Test Speaker
+                      </Button>
+                    </div>
+                    
+                    <div className="space-y-2 mt-4 bg-[#2a2a2a] p-4 rounded-xl border border-white/5">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs text-white/50">Output Volume</Label>
+                        <span className="text-xs text-white/50 tabular-nums">{speakerVolume[0]}%</span>
+                      </div>
+                      <Slider
+                        value={speakerVolume}
+                        onValueChange={setSpeakerVolume}
+                        max={100}
+                        step={1}
+                        className="py-2 cursor-pointer"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Microphone Section */}
+                  <div className="space-y-4">
+                    <Label className="text-sm font-semibold text-white/70 mt-4">Microphone</Label>
+                    <div className="flex items-center gap-4">
+                      <Select value={selectedMic} onValueChange={switchMic}>
+                        <SelectTrigger className="flex-1 bg-[#2a2a2a] border-white/10 text-white hover:border-white/20 transition-colors h-10 rounded-lg">
+                          <SelectValue placeholder="Select microphone" />
+                        </SelectTrigger>
+                        <SelectContent className="bg-[#2a2a2a] border-[#3dd] text-white">
+                          {audioInputs.map((d) => (
+                            <SelectItem key={d.deviceId} value={d.deviceId} className="hover:bg-white/10">
+                              {d.label || "Default Microphone"}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    
+                    {/* Input Level visualizer - uses useAudioLevel hook for real-time data */}
+                    <MicLevelVisualizer tracks={tracks} isMuted={isMuted} />
+                  </div>
                 </div>
-                <Slider
-                  value={speakerVolume}
-                  onValueChange={setSpeakerVolume}
-                  max={100}
-                  step={1}
-                />
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full mt-2"
-                onClick={testSpeaker}
-              >
-                <Volume2 className="w-4 h-4 mr-2" /> Test Speaker
-              </Button>
+              )}
+
+              {settingsTab === "video" && (
+                <div className="space-y-6 animate-in fade-in duration-300">
+                  <h4 className="text-lg font-semibold text-white/90 border-b border-white/10 pb-2">Video Settings</h4>
+                  
+                  <div className="space-y-4">
+                    <Label className="text-sm font-semibold text-white/70">Camera</Label>
+                    <Select value={selectedCamera} onValueChange={switchCamera}>
+                      <SelectTrigger className="w-full bg-[#2a2a2a] border-white/10 text-white hover:border-white/20 transition-colors h-10 rounded-lg">
+                        <SelectValue placeholder="Select camera" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-[#2a2a2a] border-[#3dd] text-white">
+                        {videoInputs.map((d) => (
+                          <SelectItem key={d.deviceId} value={d.deviceId} className="hover:bg-white/10">
+                            {d.label || "Default Camera"}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Camera Preview Box */}
+                  <div className="aspect-video w-full rounded-xl overflow-hidden bg-black/60 border-2 border-white/10 shadow-inner flex items-center justify-center relative">
+                    {(() => {
+                      const localVideoTrack = tracks.find(
+                        (t) => t.participant.isLocal && t.source === Track.Source.Camera
+                      );
+                      if (localVideoTrack && isCameraOn) {
+                        return (
+                          <VideoTrack
+                            trackRef={localVideoTrack}
+                            className={cn(
+                              "w-full h-full object-contain",
+                              mirrorVideo && "scale-x-[-1]"
+                            )}
+                          />
+                        );
+                      }
+                      return (
+                        <div className="flex flex-col items-center justify-center text-white/30 gap-3">
+                          <VideoOff className="w-10 h-10" />
+                          <span className="text-sm font-medium">Camera is off</span>
+                        </div>
+                      );
+                    })()}
+                  </div>
+
+                  <div className="bg-[#2a2a2a] border border-white/5 rounded-xl p-4 flex items-center justify-between">
+                    <div>
+                      <Label className="text-sm font-medium text-white/90">Mirror my video</Label>
+                      <p className="text-xs text-white/40 mt-1">Useful for seeing yourself naturally</p>
+                    </div>
+                    <Switch
+                      checked={mirrorVideo}
+                      onCheckedChange={setMirrorVideo}
+                      className="data-[state=checked]:bg-blue-500"
+                    />
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Image Preview Modal */}
+      {previewImage && (
+        <div
+          className="fixed inset-0 z-[60] bg-black/80 flex items-center justify-center p-4"
+          onClick={() => setPreviewImage(null)}
+        >
+          <div
+            className="relative max-w-5xl max-h-[90vh] w-full"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <img
+              src={previewImage.url}
+              alt={previewImage.name || ""}
+              className="max-w-full max-h-[85vh] mx-auto object-contain rounded-lg shadow-2xl"
+            />
+            {previewImage.name && (
+              <div className="mt-3 text-center text-xs text-white/70 truncate">
+                {previewImage.name}
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={() => setPreviewImage(null)}
+              className="absolute top-2 right-2 w-8 h-8 rounded-full bg-black/70 text-white flex items-center justify-center text-xs hover:bg-black/90 transition-colors"
+            >
+              ✕
+            </button>
+            <a
+              href={previewImage.url}
+              download
+              onClick={(e) => e.stopPropagation()}
+              className="absolute top-2 right-12 w-8 h-8 rounded-full bg-black/70 text-white flex items-center justify-center text-xs hover:bg-black/90 transition-colors"
+            >
+              <Download className="w-4 h-4" />
+            </a>
+          </div>
+        </div>
+      )}
+
+
     </div>
   );
 }
@@ -2077,12 +2701,19 @@ export default function MeetingRoom() {
       </div>
     );
 
+  // ICE servers are configured in livekit.yaml on the server side
+  // LiveKit automatically provides them to clients on connection
   return (
     <LiveKitRoom
       video={false}
       audio={false}
       token={token}
-      serverUrl={import.meta.env.VITE_LIVEKIT_URL || (typeof window !== 'undefined' ? `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}` : "ws://localhost:7880")}
+      serverUrl={
+        import.meta.env.VITE_LIVEKIT_URL ||
+        (typeof window !== "undefined"
+          ? `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}`
+          : "ws://localhost:7880")
+      }
       connect={true}
     >
       <MeetingRoomUI meetingId={id} meetingTitle={title} />

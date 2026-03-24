@@ -8,6 +8,10 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   Popover, PopoverContent, PopoverTrigger,
 } from "@/components/ui/popover";
+import { ImagePreview } from "./ImagePreview";
+import { PDFViewer } from "./PDFViewer";
+import { FilePreview } from "./FilePreview";
+import { normalizeAttachmentUrl } from "@/lib/api";
 
 const QUICK_EMOJIS = [
   "👍", "❤️", "😂", "🎉", "🔥", "✅", "👀", "🚀",
@@ -73,7 +77,6 @@ function MessageBubble({
 }: MessageBubbleProps) {
   const [showActions, setShowActions] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-  const [previewImage, setPreviewImage] = useState<{ url: string; name?: string } | null>(null);
 
   // System message
   if (msg.isSystem) {
@@ -196,31 +199,20 @@ function MessageBubble({
           {hasAttachments && (
             <div className="flex flex-col gap-2 mt-2">
               {msg.attachments!.map((att, i) => {
-                const isImage = att.type?.startsWith("image/") || /\.(jpe?g|png|gif|webp|bmp|svg)$/i.test(att.name || "");
+                const fileType = att.type || "";
+                const isImage = fileType.startsWith("image/") || /\.(jpe?g|png|gif|webp|bmp|svg)$/i.test(att.name || "");
+                const isPDF = fileType === "application/pdf" || /\.pdf$/i.test(att.name || "");
+                const fileUrl = normalizeAttachmentUrl(att.url || "");
+
                 if (isImage) {
-                  return (
-                    <div
-                      key={i}
-                      className="rounded-xl overflow-hidden max-w-[520px] border border-border/20 bg-background/60"
-                    >
-                      <img
-                        src={att.url}
-                        alt={att.name}
-                        className="w-full max-h-[480px] object-cover cursor-pointer hover:opacity-95 transition-opacity bg-black/5"
-                        loading="lazy"
-                        onClick={() => setPreviewImage({ url: att.url, name: att.name })}
-                      />
-                    </div>
-                  );
+                  return <ImagePreview key={i} url={fileUrl} name={att.name || ""} variant="default" />;
                 }
-                return (
-                  <a key={i} href={att.url} target="_blank" rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2.5 px-3 py-2 rounded-lg border border-border/40 bg-muted/20 hover:bg-muted/40 hover:border-primary/30 transition-colors max-w-[280px]">
-                    <Paperclip className="w-4 h-4 text-muted-foreground/60 shrink-0" />
-                    <span className="text-xs font-medium truncate flex-1">{att.name}</span>
-                    <Download className="w-3.5 h-3.5 text-muted-foreground/40 shrink-0" />
-                  </a>
-                );
+                
+                if (isPDF) {
+                  return <PDFViewer key={i} url={fileUrl} name={att.name || "Document.pdf"} variant="default" />;
+                }
+
+                return <FilePreview key={i} url={fileUrl} name={att.name || "Attachment"} variant="default" />;
               })}
             </div>
           )}
@@ -250,35 +242,6 @@ function MessageBubble({
           )}
         </div>
       </div>
-      {previewImage && (
-        <div
-          className="fixed inset-0 z-[60] bg-black/80 flex items-center justify-center"
-          onClick={() => setPreviewImage(null)}
-        >
-          <div
-            className="relative max-w-5xl max-h-[90vh] mx-4"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <img
-              src={previewImage.url}
-              alt={previewImage.name || ""}
-              className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl"
-            />
-            {previewImage.name && (
-              <div className="mt-3 text-center text-xs text-muted-foreground/80 truncate">
-                {previewImage.name}
-              </div>
-            )}
-            <button
-              type="button"
-              onClick={() => setPreviewImage(null)}
-              className="absolute top-2 right-2 w-8 h-8 rounded-full bg-black/70 text-white flex items-center justify-center text-xs hover:bg-black/90"
-            >
-              ✕
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
