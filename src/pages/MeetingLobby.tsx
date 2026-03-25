@@ -112,6 +112,7 @@ export default function MeetingLobby() {
   const animationFrameRef = useRef<number>(0);
 
   const meetingCode = meetingId || "quick-huddle";
+  const isQuickHuddle = meetingCode.startsWith("quick-huddle");
   const userName = currentUser?.name || "Guest";
   const userInitials = userName
     .split(" ")
@@ -127,7 +128,7 @@ export default function MeetingLobby() {
       return;
     }
 
-    if (meetingCode === "quick-huddle") {
+    if (isQuickHuddle) {
       setMeetingTitle("Quick Huddle");
     } else {
       // Try to find meeting by ID first, then by code
@@ -166,7 +167,7 @@ export default function MeetingLobby() {
         }
       });
     }
-  }, [meetingCode, currentUser, navigate]);
+  }, [meetingCode, isQuickHuddle, currentUser, navigate]);
 
   useEffect(() => {
     const room = activeRooms.find((r) => r.roomId === meetingCode);
@@ -588,15 +589,20 @@ export default function MeetingLobby() {
 
   const handleJoin = async () => {
     setJoining(true);
+    const previewStream = streamRef.current;
+    const effectiveCameraOn = previewStream
+      ? previewStream.getVideoTracks().some((track) => track.enabled)
+      : isCameraOn;
+
     // Stop preview stream
-    streamRef.current?.getTracks().forEach((t) => t.stop());
+    previewStream?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
 
     // Pass states to meeting room via navigate state
     if (!currentUser) return;
 
     // Join meeting via API if it's a real meeting
-    if (meetingCode && meetingCode !== "quick-huddle" && meetingData) {
+    if (meetingCode && !isQuickHuddle && meetingData) {
       // Double-check if meeting has ended before joining
       const now = new Date();
       const endTime = meetingData.endTime ? new Date(meetingData.endTime) : null;
@@ -657,7 +663,7 @@ export default function MeetingLobby() {
     navigate(`/meeting-room/${meetingData?.id || meetingCode}`, {
       state: {
         initialMuted: isMuted,
-        initialCameraOn: isCameraOn,
+        initialCameraOn: effectiveCameraOn,
         selectedMicId: selectedMic,
         selectedCameraId: selectedCamera,
       },

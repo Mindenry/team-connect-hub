@@ -532,6 +532,9 @@ export default function Dashboard() {
     }
   };
 
+  const createQuickHuddlePath = () =>
+    `/meeting-lobby/quick-huddle-${crypto.randomUUID()}`;
+
   const kpiCards = [
     { 
       label: "Meetings Today", 
@@ -710,16 +713,14 @@ export default function Dashboard() {
                   </TooltipTrigger>
                   <TooltipContent>กำหนดการประชุม</TooltipContent>
                 </Tooltip>
-                <Button 
-                  size="sm" 
-                  className="h-9 gap-1.5 text-xs bg-gradient-to-r from-primary to-blue-600 hover:from-primary/90 hover:to-blue-500 shadow-md hover:shadow-lg transition-all group" 
-                  asChild
+                <Button
+                  size="sm"
+                  className="h-9 gap-1.5 text-xs bg-gradient-to-r from-primary to-blue-600 hover:from-primary/90 hover:to-blue-500 shadow-md hover:shadow-lg transition-all group"
+                  onClick={() => navigate(createQuickHuddlePath())}
                 >
-                  <Link to="/meeting-lobby/quick-huddle">
-                    <Video className="h-3.5 w-3.5 group-hover:scale-110 transition-transform" />
-                    <span className="hidden sm:inline">Start Meeting</span>
-                    <span className="sm:hidden">Start</span>
-                  </Link>
+                  <Video className="h-3.5 w-3.5 group-hover:scale-110 transition-transform" />
+                  <span className="hidden sm:inline">Start Meeting</span>
+                  <span className="sm:hidden">Start</span>
                 </Button>
               </div>
             </div>
@@ -828,7 +829,7 @@ export default function Dashboard() {
                   <CardContent className="p-4">
                     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                       {activeRooms.map((room, i) => {
-                        const isQuickHuddle = room.roomId === "quick-huddle";
+                        const isQuickHuddle = room.roomId.startsWith("quick-huddle");
                         const myParticipant = room.participants.find((p) => p.userId === currentUser?.id);
                         return (
                           <motion.div
@@ -953,11 +954,13 @@ export default function Dashboard() {
                           <Calendar className="h-4 w-4" />
                           Schedule
                         </Button>
-                        <Button size="sm" className="gap-1.5 h-8 text-xs bg-gradient-to-r from-primary to-blue-600" asChild>
-                          <Link to="/meeting-lobby/quick-huddle">
-                            <Video className="h-4 w-4" />
-                            Start Meeting
-                          </Link>
+                        <Button
+                          size="sm"
+                          className="gap-1.5 h-8 text-xs bg-gradient-to-r from-primary to-blue-600"
+                          onClick={() => navigate(createQuickHuddlePath())}
+                        >
+                          <Video className="h-4 w-4" />
+                          Start Meeting
                         </Button>
                       </div>
                     </div>
@@ -1333,11 +1336,13 @@ export default function Dashboard() {
                       </div>
                       <p className="text-sm font-bold text-foreground mb-1">No live rooms</p>
                       <p className="text-xs text-muted-foreground mb-3">Start a quick meeting</p>
-                      <Button size="sm" className="gap-1.5 h-8 text-xs bg-gradient-to-r from-primary to-blue-600" asChild>
-                        <Link to="/meeting-lobby/quick-huddle">
-                          <Video className="h-3.5 w-3.5" />
-                          Start Meeting
-                        </Link>
+                      <Button
+                        size="sm"
+                        className="gap-1.5 h-8 text-xs bg-gradient-to-r from-primary to-blue-600"
+                        onClick={() => navigate(createQuickHuddlePath())}
+                      >
+                        <Video className="h-3.5 w-3.5" />
+                        Start Meeting
                       </Button>
                     </div>
                   ) : (

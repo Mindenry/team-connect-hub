@@ -143,9 +143,14 @@ export default function AppSidebar({
     setOpenSections((prev) => ({ ...prev, [title]: !prev[title] }));
   };
 
-  // Quick Huddle participants from active rooms
-  const quickHuddleRoom = activeRooms.find((r) => r.roomId === "quick-huddle");
-  const quickHuddleParticipants = quickHuddleRoom?.participants || [];
+  const isQuickHuddleRoom = (roomId: string) => roomId.startsWith("quick-huddle");
+  const createQuickHuddlePath = () =>
+    `/meeting-lobby/quick-huddle-${crypto.randomUUID()}`;
+
+  // Quick Huddle participants from all active quick huddle rooms
+  const quickHuddleParticipants = activeRooms
+    .filter((r) => isQuickHuddleRoom(r.roomId))
+    .flatMap((r) => r.participants);
 
   // Derived current status
   const derivedCurrentStatus = useMemo(() => {
@@ -203,7 +208,7 @@ export default function AppSidebar({
   };
 
   const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'org_owner';
-  const activeMeetingsCount = activeRooms.filter(r => r.roomId !== "quick-huddle").length;
+  const activeMeetingsCount = activeRooms.filter((r) => !isQuickHuddleRoom(r.roomId)).length;
 
   // Enhance nav items with dynamic badges
   const enhancedMainNav = useMemo(
@@ -369,9 +374,12 @@ export default function AppSidebar({
         {/* Quick Huddle */}
         {showContent ? (
           <div className="px-3 py-2 border-b border-sidebar-border/20 shrink-0">
-            <Link
-              to="/meeting-lobby/quick-huddle"
-              onClick={handleNav}
+            <button
+              type="button"
+              onClick={() => {
+                handleNav();
+                navigate(createQuickHuddlePath());
+              }}
               className={cn(
                 "relative w-full flex items-center gap-2.5 px-3 py-2 rounded-lg",
                 "bg-sidebar-primary/10 hover:bg-sidebar-primary/20",
@@ -390,22 +398,25 @@ export default function AppSidebar({
               ) : (
                 <span className="text-[9px] text-sidebar-muted/50">Start</span>
               )}
-            </Link>
+            </button>
           </div>
         ) : (
           <div className="flex justify-center py-2 border-b border-sidebar-border/20 shrink-0">
             <Tooltip>
               <TooltipTrigger asChild>
-                <Link
-                  to="/meeting-lobby/quick-huddle"
-                  onClick={handleNav}
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleNav();
+                    navigate(createQuickHuddlePath());
+                  }}
                   className="relative p-2 rounded-lg text-sidebar-primary hover:bg-sidebar-primary/15 transition-all"
                 >
                   <Headphones className="w-4 h-4" />
                   {quickHuddleParticipants.length > 0 && (
                     <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-sidebar-primary animate-pulse" />
                   )}
-                </Link>
+                </button>
               </TooltipTrigger>
               <TooltipContent side="right" className="text-xs">
                 Quick Huddle{quickHuddleParticipants.length > 0 ? ` (${quickHuddleParticipants.length})` : ""}
@@ -433,7 +444,7 @@ export default function AppSidebar({
                   <p className="px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-sidebar-muted/50">
                     Live
                   </p>
-                  {activeRooms.filter(r => r.roomId !== "quick-huddle").slice(0, 3).map((room) => (
+                  {activeRooms.filter((r) => !isQuickHuddleRoom(r.roomId)).slice(0, 3).map((room) => (
                     <Link
                       key={room.roomId}
                       to={`/meeting-lobby/${room.roomId}`}
@@ -482,7 +493,7 @@ export default function AppSidebar({
                 </>
               ) : (
                 /* Collapsed: icon indicators with tooltip */
-                activeRooms.filter(r => r.roomId !== "quick-huddle").slice(0, 3).map((room) => (
+                activeRooms.filter((r) => !isQuickHuddleRoom(r.roomId)).slice(0, 3).map((room) => (
                   <Tooltip key={room.roomId}>
                     <TooltipTrigger asChild>
                       <Link

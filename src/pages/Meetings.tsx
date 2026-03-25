@@ -550,7 +550,7 @@ function MeetingCardList({
 function ActiveRoomCard({ room, index }: { room: ActiveRoom; index: number }) {
   const navigate = useNavigate();
   const currentUser = auth.getUser();
-  const isQuickHuddle = room.roomId === "quick-huddle";
+  const isQuickHuddle = room.roomId.startsWith("quick-huddle");
   const myParticipant = room.participants.find(
     (p) => p.userId === currentUser?.id,
   );
@@ -650,6 +650,8 @@ export default function Meetings() {
   const [error, setError] = useState<string | null>(null);
   const [teams, setTeams] = useState<any[]>([]);
   const { activeRooms } = usePresence();
+  const createQuickHuddlePath = () =>
+    `/meeting-lobby/quick-huddle-${crypto.randomUUID()}`;
 
   useEffect(() => {
     apiGet<any[]>("/teams")
@@ -871,7 +873,7 @@ export default function Meetings() {
                       variant="outline"
                       size="sm"
                       className="h-8 sm:h-9 gap-1.5 px-2.5 text-[11px] sm:text-xs border-border/60 bg-background/50 hover:bg-background"
-                      onClick={() => navigate("/meeting-lobby/quick-huddle")}
+                      onClick={() => navigate(createQuickHuddlePath())}
                     >
                       <Zap className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
                       <span className="hidden sm:inline">Quick Huddle</span>
@@ -1247,9 +1249,7 @@ export default function Meetings() {
                                 </Button>
                                 <Button
                                   variant="outline"
-                                  onClick={() =>
-                                    navigate("/meeting-lobby/quick-huddle")
-                                  }
+                                  onClick={() => navigate(createQuickHuddlePath())}
                                   className="gap-2"
                                 >
                                   <Zap className="w-4 h-4" />

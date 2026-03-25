@@ -412,6 +412,9 @@ function MeetingRoomUI({
   const [kickLoadingUserId, setKickLoadingUserId] = useState<string | null>(
     null,
   );
+  const [isMutingAll, setIsMutingAll] = useState(false);
+  const [isAdmittingAll, setIsAdmittingAll] = useState(false);
+  const [quickHuddleHostUserId, setQuickHuddleHostUserId] = useState<string | null>(null);
 
   // LiveKit hooks
   const room = useRoomContext();
@@ -462,9 +465,15 @@ function MeetingRoomUI({
   const socketRef = useRef(getSocket());
   const waitingRoomIntervalRef = useRef<number | null>(null);
   const hasInitializedMedia = useRef(false);
+  const cameraRecoveryAttemptRef = useRef(0);
 
   const userName = currentUser?.name || "Guest";
   const meetingCode = meetingId || "quick-huddle";
+  const isQuickHuddle = meetingCode.startsWith("quick-huddle");
+  const effectiveHostUserId = isQuickHuddle
+    ? quickHuddleHostUserId
+    : (meetingData?.hostId as string | undefined);
+  const effectiveIsHost = !!currentUser?.id && effectiveHostUserId === currentUser.id;
 
   const formatTime = (s: number) => {
     const m = Math.floor(s / 60);
@@ -512,6 +521,25 @@ function MeetingRoomUI({
     }
   }, []);
 
+  const ensureCameraEnabled = useCallback(async () => {
+    if (!lkLocal) return;
+
+    try {
+      await lkLocal.setCameraEnabled(true, {
+        deviceId: selectedCamera || undefined,
+        resolution: VideoPresets.h1080,
+      });
+    } catch (cameraError) {
+      console.warn(
+        "[MeetingRoom] Preferred camera unavailable, retrying with default",
+        cameraError,
+      );
+      await lkLocal.setCameraEnabled(true, {
+        resolution: VideoPresets.h1080,
+      });
+    }
+  }, [lkLocal, selectedCamera]);
+
   // Initialize meeting and media
   useEffect(() => {
     const init = async () => {
@@ -521,7 +549,7 @@ function MeetingRoomUI({
       }
 
       // Load meeting info
-      if (meetingId && meetingId !== "quick-huddle") {
+      if (meetingId && !isQuickHuddle) {
         try {
           const res = await fetch(`${API_BASE}/meetings/${meetingId}`, {
             headers: getAuthHeaders(),
@@ -577,10 +605,7 @@ function MeetingRoomUI({
           // Set initial camera state from lobby - use h1080 for better quality
           if (initialCameraOn) {
             console.log("[MeetingRoom] Turning on camera...");
-            await lkLocal.setCameraEnabled(true, {
-              deviceId: initialSelectedCameraId || undefined,
-              resolution: VideoPresets.h1080,
-            });
+            await ensureCameraEnabled();
             setIsCameraOn(true);
             console.log("[MeetingRoom] Camera turned on");
           }
@@ -602,7 +627,7 @@ function MeetingRoomUI({
       setLoading(false);
 
       // Register with PiP store
-      meetingPiPJoin(meetingId || "quick-huddle", meetingTitle);
+      meetingPiPJoin(meetingCode, meetingTitle);
     };
 
     init();
@@ -623,6 +648,8 @@ function MeetingRoomUI({
     };
   }, [
     meetingId,
+    meetingCode,
+    isQuickHuddle,
     currentUser,
     navigate,
     enumerateDevices,
@@ -631,6 +658,7 @@ function MeetingRoomUI({
     initialMuted,
     initialSelectedCameraId,
     initialSelectedMicId,
+    ensureCameraEnabled,
   ]);
 
   // Socket events for meeting state sync
@@ -784,6 +812,14 @@ function MeetingRoomUI({
     socket.on("meeting:participant:left", handleLeft);
     socket.on("meeting:participant:force_mute", handleForceMute);
     socket.on("meeting:recording:status", handleRecordingStatus);
+    socket.on("meeting:host:set", (data: { meetingId: string; hostUserId: string }) => {
+      if (data?.meetingId === meetingCode) {
+        setQuickHuddleHostUserId(data.hostUserId);
+        if (isQuickHuddle) {
+          setIsHost(data.hostUserId === currentUser?.id);
+        }
+      }
+    });
 
     return () => {
       // DON'T emit meeting:leave on unmount - user might just be navigating
@@ -799,8 +835,9 @@ function MeetingRoomUI({
       socket.off("meeting:participant:left", handleLeft);
       socket.off("meeting:participant:force_mute", handleForceMute);
       socket.off("meeting:recording:status", handleRecordingStatus);
+      socket.off("meeting:host:set");
     };
-  }, [loading, meetingCode]);
+  }, [loading, meetingCode, isQuickHuddle, currentUser?.id]);
 
   // Sync state to socket
   useEffect(() => {
@@ -880,10 +917,7 @@ function MeetingRoomUI({
 
     try {
       if (newCameraOn) {
-        await lkLocal.setCameraEnabled(true, {
-          deviceId: selectedCamera || undefined,
-          resolution: VideoPresets.h1080,
-        });
+        await ensureCameraEnabled();
       } else {
         await lkLocal.setCameraEnabled(false);
       }
@@ -891,7 +925,35 @@ function MeetingRoomUI({
     } catch (e) {
       console.error("Error toggling camera:", e);
     }
-  }, [lkLocal, isCameraOn, selectedCamera]);
+  }, [lkLocal, isCameraOn, ensureCameraEnabled]);
+
+  const localCameraTrack = tracks.find(
+    (t: any) =>
+      t.participant?.isLocal &&
+      t.source === Track.Source.Camera &&
+      !!t.publication?.track,
+  );
+
+  // If UI says camera is on but local camera track is still missing, recover automatically.
+  useEffect(() => {
+    if (!lkLocal || !isCameraOn || localCameraTrack) {
+      cameraRecoveryAttemptRef.current = 0;
+      return;
+    }
+
+    if (cameraRecoveryAttemptRef.current >= 2) return;
+
+    const timer = window.setTimeout(async () => {
+      cameraRecoveryAttemptRef.current += 1;
+      try {
+        await ensureCameraEnabled();
+      } catch (error) {
+        console.warn("[MeetingRoom] Camera recovery failed:", error);
+      }
+    }, 700);
+
+    return () => window.clearTimeout(timer);
+  }, [lkLocal, isCameraOn, localCameraTrack, ensureCameraEnabled]);
 
   const toggleScreenShare = useCallback(async () => {
     if (!lkLocal) return;
@@ -1339,7 +1401,7 @@ function MeetingRoomUI({
   );
 
   const loadWaitingRoom = useCallback(async () => {
-    if (!meetingId || meetingId === "quick-huddle") return;
+    if (!meetingId || isQuickHuddle) return;
     try {
       const authHeaders = await auth.getAuthHeaders();
       const res = await fetch(
@@ -1363,11 +1425,11 @@ function MeetingRoomUI({
     } catch (err) {
       console.error("Failed to load waiting room:", err);
     }
-  }, [meetingId]);
+  }, [meetingId, isQuickHuddle]);
 
   const admitParticipant = useCallback(
     async (userId: string) => {
-      if (!meetingId || !isHost) return;
+    if (!meetingId || !effectiveIsHost) return;
       try {
         const authHeaders = await auth.getAuthHeaders();
         const res = await fetch(
@@ -1384,12 +1446,12 @@ function MeetingRoomUI({
         console.error("Failed to admit participant:", err);
       }
     },
-    [meetingId, isHost, loadWaitingRoom],
+    [meetingId, effectiveIsHost, loadWaitingRoom],
   );
 
   const denyParticipant = useCallback(
     async (userId: string) => {
-      if (!meetingId || !isHost) return;
+      if (!meetingId || !effectiveIsHost) return;
       try {
         const authHeaders = await auth.getAuthHeaders();
         const res = await fetch(
@@ -1406,8 +1468,33 @@ function MeetingRoomUI({
         console.error("Failed to deny participant:", err);
       }
     },
-    [meetingId, isHost, loadWaitingRoom],
+    [meetingId, effectiveIsHost, loadWaitingRoom],
   );
+
+  const admitAllParticipants = useCallback(async () => {
+    if (!meetingId || !effectiveIsHost || isAdmittingAll || waitingRoomParticipants.length === 0) {
+      return;
+    }
+    setIsAdmittingAll(true);
+    try {
+      const authHeaders = await auth.getAuthHeaders();
+      await Promise.allSettled(
+        waitingRoomParticipants.map((p: any) =>
+          fetch(`${API_BASE}/meetings/${meetingId}/participants/${p.userId}/admit`, {
+            method: "POST",
+            headers: authHeaders,
+          }),
+        ),
+      );
+      await loadWaitingRoom();
+      toast.success("Admitted everyone from waiting room");
+    } catch (err) {
+      console.error("Failed to admit all participants:", err);
+      toast.error("Failed to admit all participants");
+    } finally {
+      setIsAdmittingAll(false);
+    }
+  }, [meetingId, effectiveIsHost, isAdmittingAll, waitingRoomParticipants, loadWaitingRoom]);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -1512,7 +1599,7 @@ function MeetingRoomUI({
       stopRecording();
     }
 
-    if (meetingId && meetingId !== "quick-huddle" && currentUser?.id) {
+    if (meetingId && !isQuickHuddle && currentUser?.id) {
       try {
         const authHeaders = await auth.getAuthHeaders();
         await fetch(
@@ -1541,10 +1628,11 @@ function MeetingRoomUI({
     currentUser,
     isRecording,
     stopRecording,
+    isQuickHuddle,
   ]);
 
   const endAndSummarizeMeeting = useCallback(async () => {
-    if (!isHost || !meetingId || meetingId === "quick-huddle") {
+    if (!isHost || !meetingId || isQuickHuddle) {
       leaveMeeting();
       return;
     }
@@ -1569,15 +1657,15 @@ function MeetingRoomUI({
     meetingPiPLeave();
     navigate("/meetings");
     setEndingMeeting(false);
-  }, [isHost, meetingId, meetingCode, navigate, leaveMeeting]);
+  }, [isHost, meetingId, meetingCode, navigate, leaveMeeting, isQuickHuddle]);
 
   const handleLeaveClick = useCallback(() => {
-    if (isHost && meetingId && meetingId !== "quick-huddle") {
+    if (isHost && meetingId && !isQuickHuddle) {
       void endAndSummarizeMeeting();
     } else {
       leaveMeeting();
     }
-  }, [isHost, meetingId, endAndSummarizeMeeting, leaveMeeting]);
+  }, [isHost, meetingId, endAndSummarizeMeeting, leaveMeeting, isQuickHuddle]);
 
   const testSpeaker = useCallback(async () => {
     try {
@@ -1731,6 +1819,74 @@ function MeetingRoomUI({
       setPinnedParticipantId((prev) => (prev === identity ? null : identity));
     },
     [totalParticipants],
+  );
+
+  const inMeetingParticipants = useMemo(
+    () => allParticipants.filter((p) => !p.isScreenShareTile),
+    [allParticipants],
+  );
+
+  const sortedParticipantsForPanel = useMemo(() => {
+    const hostId = effectiveHostUserId;
+    return [...inMeetingParticipants].sort((a, b) => {
+      const aIsHost = hostId ? a.identity === hostId : false;
+      const bIsHost = hostId ? b.identity === hostId : false;
+      if (aIsHost !== bIsHost) return aIsHost ? -1 : 1;
+
+      const aRaised = !!a.isHandRaised;
+      const bRaised = !!b.isHandRaised;
+      if (aRaised !== bRaised) return aRaised ? -1 : 1;
+
+      if (a.isLocal !== b.isLocal) return a.isLocal ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    });
+  }, [inMeetingParticipants, effectiveHostUserId]);
+
+  const handleMuteAll = useCallback(async () => {
+    if (!effectiveIsHost || isMutingAll) return;
+    const muteableCount = inMeetingParticipants.filter(
+      (p) => !p.isLocal && p.identity !== effectiveHostUserId,
+    ).length;
+    if (muteableCount === 0) return;
+    setIsMutingAll(true);
+    try {
+      socketRef.current.emit("meeting:participant:mute_all", {
+        meetingId: meetingCode,
+      });
+      toast.success(`Muted ${muteableCount} participant(s)`);
+    } finally {
+      setIsMutingAll(false);
+    }
+  }, [
+    effectiveIsHost,
+    isMutingAll,
+    inMeetingParticipants,
+    effectiveHostUserId,
+    meetingCode,
+  ]);
+
+  const hasCameraTrack = useCallback(
+    (identity: string) =>
+      tracks.some(
+        (t) =>
+          t.participant.identity === identity &&
+          t.source === Track.Source.Camera &&
+          !!t.publication?.track,
+      ),
+    [tracks],
+  );
+
+  const canRenderCameraTrack = useCallback(
+    (trackRef: any) => {
+      if (!trackRef?.publication?.track) return false;
+      if (trackRef.publication?.isMuted) return false;
+      const mediaTrack = trackRef.publication.track.mediaStreamTrack as
+        | MediaStreamTrack
+        | undefined;
+      if (!mediaTrack) return false;
+      return mediaTrack.readyState === "live" && mediaTrack.enabled;
+    },
+    [],
   );
 
   // Calculate grid layout - always show all participants like Zoom/Google Meet
@@ -1938,6 +2094,10 @@ function MeetingRoomUI({
                     .slice(0, 2)
                     .toUpperCase();
 
+                  const mainCameraOn =
+                    canRenderCameraTrack(videoTrack) ||
+                    (!videoTrack && hasCameraTrack(mainParticipant.identity));
+
                   return (
                     <div
                       className={cn(
@@ -1949,7 +2109,7 @@ function MeetingRoomUI({
                       style={{ height: "calc(100% - 8px)" }}
                     >
                       <div className="absolute inset-0 w-full h-full flex items-center justify-center bg-[#202124]">
-                        {videoTrack && mainParticipant.cameraEnabled ? (
+                        {mainCameraOn ? (
                           <VideoTrack
                             trackRef={videoTrack}
                             className={cn(
@@ -1993,7 +2153,7 @@ function MeetingRoomUI({
                               <MicOff className="w-4 h-4 text-white" />
                             </div>
                           )}
-                          {!mainParticipant.cameraEnabled && (
+                          {!mainCameraOn && (
                             <div className="bg-[#ea4335]/90 backdrop-blur-md rounded-full p-2.5 shadow-lg border border-red-500/30">
                               <VideoOff className="w-4 h-4 text-white" />
                             </div>
@@ -2071,6 +2231,10 @@ function MeetingRoomUI({
                       .slice(0, 2)
                       .toUpperCase();
 
+                    const tileCameraOn =
+                      canRenderCameraTrack(videoTrack) ||
+                      (!videoTrack && hasCameraTrack(p.identity));
+
                     return (
                       <div
                         key={p.identity}
@@ -2085,7 +2249,7 @@ function MeetingRoomUI({
                         title={`Click to focus ${p.name}`}
                       >
                         <div className="absolute inset-0 flex items-center justify-center bg-[#202124]">
-                          {videoTrack && p.cameraEnabled ? (
+                          {tileCameraOn ? (
                             <VideoTrack
                               trackRef={videoTrack}
                               className={cn(
@@ -2171,6 +2335,10 @@ function MeetingRoomUI({
                     .slice(0, 2)
                     .toUpperCase();
 
+                  const gridCameraOn =
+                    canRenderCameraTrack(videoTrack) ||
+                    (!videoTrack && hasCameraTrack(p.identity));
+
                   return (
                     <div
                       key={p.identity}
@@ -2196,7 +2364,7 @@ function MeetingRoomUI({
                       }
                     >
                       <div className="absolute inset-0 w-full h-full flex items-center justify-center bg-[#202124]">
-                        {videoTrack && p.cameraEnabled ? (
+                        {gridCameraOn ? (
                           <VideoTrack
                             trackRef={videoTrack}
                             className={cn(
@@ -2235,7 +2403,7 @@ function MeetingRoomUI({
                               <MicOff className="w-3.5 h-3.5 text-white" />
                             </div>
                           )}
-                          {!p.cameraEnabled && (
+                          {!gridCameraOn && (
                             <div className="bg-[#ea4335]/90 backdrop-blur-md rounded-full p-2 shadow-md border border-red-500/30">
                               <VideoOff className="w-3.5 h-3.5 text-white" />
                             </div>
@@ -2315,15 +2483,26 @@ function MeetingRoomUI({
                 {showParticipants && (
                   <div className="p-3 space-y-1">
                     {/* Waiting Room Section */}
-                    {isHost && waitingRoomParticipants.length > 0 && (
+                    {effectiveIsHost && waitingRoomParticipants.length > 0 && (
                       <div className="mb-4 pb-4 border-b border-[#333]">
                         <div className="flex items-center justify-between mb-2">
                           <h3 className="text-xs font-semibold text-white/70 uppercase tracking-wider">
                             Waiting Room
                           </h3>
-                          <Badge className="bg-yellow-500/20 text-yellow-400 text-[10px]">
-                            {waitingRoomParticipants.length}
-                          </Badge>
+                          <div className="flex items-center gap-2">
+                            <Badge className="bg-yellow-500/20 text-yellow-400 text-[10px]">
+                              {waitingRoomParticipants.length}
+                            </Badge>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 px-2 text-[10px] border-yellow-400/40 text-yellow-300 hover:bg-yellow-500/10"
+                              onClick={admitAllParticipants}
+                              disabled={isAdmittingAll}
+                            >
+                              {isAdmittingAll ? "Admitting..." : "Admit All"}
+                            </Button>
+                          </div>
                         </div>
                         <div className="space-y-1">
                           {waitingRoomParticipants.map((p: any) => {
@@ -2355,7 +2534,7 @@ function MeetingRoomUI({
                                     className="h-7 px-2 bg-green-500 hover:bg-green-600 text-xs"
                                     onClick={() => admitParticipant(p.userId)}
                                   >
-                                    Admit
+                                    Add / Admit
                                   </Button>
                                   <Button
                                     size="sm"
@@ -2379,7 +2558,7 @@ function MeetingRoomUI({
                         In Meeting
                       </h3>
                     </div>
-                    {allParticipants.map((p) => {
+                    {sortedParticipantsForPanel.map((p) => {
                       const initials = p.name
                         .split(" ")
                         .map((n) => n[0])
@@ -2414,10 +2593,29 @@ function MeetingRoomUI({
                             {!p.cameraEnabled && (
                               <VideoOff className="w-4 h-4 text-red-500" />
                             )}
+                            {p.isHandRaised && (
+                              <Hand className="w-4 h-4 text-yellow-400" />
+                            )}
+                            {effectiveHostUserId === p.identity && (
+                              <Badge className="h-5 px-1.5 bg-blue-500/20 text-blue-300 border-0 text-[10px]">
+                                Host
+                              </Badge>
+                            )}
                           </div>
                         </div>
                       );
                     })}
+                    {effectiveIsHost && (
+                      <div className="sticky bottom-0 pt-3 mt-3 border-t border-[#333] bg-[#232323]">
+                        <Button
+                          className="w-full bg-red-500 hover:bg-red-600 text-white"
+                          onClick={handleMuteAll}
+                          disabled={isMutingAll}
+                        >
+                          {isMutingAll ? "Muting..." : "Mute All"}
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 )}
                 {showChat && (
@@ -3336,19 +3534,56 @@ export default function MeetingRoom() {
       </div>
     );
 
-  // ICE servers are configured in livekit.yaml on the server side
-  // LiveKit automatically provides them to clients on connection
+  // LiveKit server URL:
+  // - The LiveKit client expects a base server URL and will internally append the `/rtc` paths.
+  // - If `VITE_LIVEKIT_URL` is left as localhost/127.0.0.1 in non-local deployments, the browser will try to
+  //   connect to the user's own machine, causing obvious delay/failure. We guard against that and derive
+  //   a working value from `VITE_API_URL` or current host instead.
+  const envLivekitUrl = (import.meta.env.VITE_LIVEKIT_URL as string | undefined)
+    ?.trim()
+    .replace(/\/+$/, "");
+
+  const looksLikeLocalhost = (s: string) =>
+    s.includes("localhost") || s.includes("127.0.0.1");
+
+  const deriveWsFromApiUrl = (apiUrl?: string) => {
+    if (!apiUrl) return null;
+    try {
+      const u = new URL(apiUrl);
+      u.search = "";
+      u.hash = "";
+      // Backend is usually served at `/api`, but LiveKit signaling is proxied under `/rtc` so we strip `/api`.
+      u.pathname = u.pathname.replace(/\/api\/?$/, "");
+      if (u.protocol === "http:") u.protocol = "ws:";
+      if (u.protocol === "https:") u.protocol = "wss:";
+      return u.toString().replace(/\/+$/, "");
+    } catch {
+      return null;
+    }
+  };
+
+  const derivedServerUrl = (() => {
+    const fromApi = deriveWsFromApiUrl(import.meta.env.VITE_API_URL as string | undefined);
+    if (fromApi && !looksLikeLocalhost(fromApi)) return fromApi;
+
+    return typeof window !== "undefined"
+      ? `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}`
+      : "ws://localhost:7880";
+  })();
+
+  const serverUrl =
+    envLivekitUrl && !looksLikeLocalhost(envLivekitUrl)
+      ? envLivekitUrl
+      : derivedServerUrl;
+
+  // ICE servers are configured in `livekit.yaml` on the server side.
+  // LiveKit automatically provides them to clients on connection.
   return (
     <LiveKitRoom
       video={false}
       audio={false}
       token={token}
-      serverUrl={
-        import.meta.env.VITE_LIVEKIT_URL ||
-        (typeof window !== "undefined"
-          ? `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}`
-          : "ws://localhost:7880")
-      }
+      serverUrl={serverUrl}
       connect={true}
     >
       <MeetingRoomUI meetingId={id} meetingTitle={title} />
