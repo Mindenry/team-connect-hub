@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import { cn } from "@/lib/utils";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import TaskCard, { InlineCreateCard, type TaskCardData } from "./TaskCard";
@@ -57,6 +57,17 @@ export default function TaskBoard({
   const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
   const [columns, setColumns] = useState<WorkflowStatus[]>(propStatuses || FALLBACK_COLUMNS);
 
+  // Avoid doing `tasks.filter(...)` for every column on every render.
+  const tasksByStatus = useMemo(() => {
+    const map: Record<string, TaskCardData[]> = {};
+    for (const t of tasks) {
+      const key = t.status;
+      if (!map[key]) map[key] = [];
+      map[key].push(t);
+    }
+    return map;
+  }, [tasks]);
+
   // Fetch statuses from API
   useEffect(() => {
     if (propStatuses && propStatuses.length > 0) {
@@ -80,11 +91,6 @@ export default function TaskBoard({
     return () => { cancelled = true; };
   }, [teamId, propStatuses]);
 
-  const getColumnTasks = useCallback(
-    (status: string) => tasks.filter((t) => t.status === status),
-    [tasks]
-  );
-
   const handleDragStart = (e: React.DragEvent, task: TaskCardData) => {
     e.dataTransfer.setData("taskId", task.id);
     e.dataTransfer.setData("fromStatus", task.status);
@@ -95,7 +101,8 @@ export default function TaskBoard({
   const handleDragOver = (e: React.DragEvent, columnKey: string) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = "move";
-    setDragOverColumn(columnKey);
+    // Prevent unnecessary state updates during drag (helps on slower machines).
+    setDragOverColumn((prev) => (prev === columnKey ? prev : columnKey));
   };
 
   const handleDragLeave = (e: React.DragEvent) => {
@@ -117,7 +124,7 @@ export default function TaskBoard({
     // Optimistically update UI in parent first so column changes immediately
     onTaskMoved?.(taskId, fromStatus, targetStatus);
 
-    const columnTasks = getColumnTasks(targetStatus);
+    const columnTasks = tasksByStatus[targetStatus] || [];
     try {
       await apiPatch(`/tasks/${taskId}/position`, { status: targetStatus, position: columnTasks.length });
     } catch (err) {
@@ -156,7 +163,7 @@ export default function TaskBoard({
       )}
     >
       {columns.map((column) => {
-        const columnTasks = getColumnTasks(column.key);
+        const columnTasks = tasksByStatus[column.key] || [];
         const isDragOver = dragOverColumn === column.key;
 
         return (

@@ -38,31 +38,95 @@ export default function TaskBacklog({ tasks, sprints, onTaskClick, onCreateTask 
   const groupedTasks = useMemo(() => {
     const activeSprint = sprints.find((s) => s.status === "active");
     const futureSprints = sprints.filter((s) => s.status === "planned" || s.status === "future");
+    const sprintIds = new Set(sprints.map((s) => s.id));
 
-    const groups: { key: string; label: string; sprint?: Sprint; tasks: TaskCardData[]; isActive?: boolean }[] = [];
+    // One pass to group tasks by sprint id (or backlog).
+    const tasksBySprintId = new Map<string, TaskCardData[]>();
+    const backlogTasks: TaskCardData[] = [];
+    for (const t of tasks) {
+      const sprintId = t.sprint?.id;
+      if (sprintId && sprintIds.has(sprintId)) {
+        const arr = tasksBySprintId.get(sprintId) || [];
+        arr.push(t);
+        tasksBySprintId.set(sprintId, arr);
+      } else {
+        backlogTasks.push(t);
+      }
+    }
+
+    const computeGroupMetrics = (groupTasks: TaskCardData[]) => {
+      let todo = 0;
+      let inProgress = 0;
+      let inReview = 0;
+      let done = 0;
+      for (const t of groupTasks) {
+        switch (t.status) {
+          case "todo":
+            todo++;
+            break;
+          case "in_progress":
+            inProgress++;
+            break;
+          case "in_review":
+            inReview++;
+            break;
+          case "done":
+            done++;
+            break;
+          default:
+            break;
+        }
+      }
+      const total = groupTasks.length;
+      const progress = total > 0 ? Math.round((done / total) * 100) : 0;
+      return { todo, inProgress, inReview, done, progress };
+    };
+
+    const groups: Array<{
+      key: string;
+      label: string;
+      sprint?: Sprint;
+      tasks: TaskCardData[];
+      isActive?: boolean;
+      todo: number;
+      inProgress: number;
+      inReview: number;
+      done: number;
+      progress: number;
+    }> = [];
 
     if (activeSprint) {
+      const groupTasks = tasksBySprintId.get(activeSprint.id) || [];
+      const metrics = computeGroupMetrics(groupTasks);
       groups.push({
         key: `sprint-${activeSprint.id}`,
         label: activeSprint.name,
         sprint: activeSprint,
-        tasks: tasks.filter((t) => t.sprint?.id === activeSprint.id),
+        tasks: groupTasks,
         isActive: true,
+        ...metrics,
       });
     }
 
     for (const sprint of futureSprints) {
+      const groupTasks = tasksBySprintId.get(sprint.id) || [];
+      const metrics = computeGroupMetrics(groupTasks);
       groups.push({
         key: `sprint-${sprint.id}`,
         label: sprint.name,
         sprint,
-        tasks: tasks.filter((t) => t.sprint?.id === sprint.id),
+        tasks: groupTasks,
+        ...metrics,
       });
     }
 
-    const sprintIds = new Set(sprints.map((s) => s.id));
-    const backlogTasks = tasks.filter((t) => !t.sprint?.id || !sprintIds.has(t.sprint.id));
-    groups.push({ key: "backlog", label: "Backlog", tasks: backlogTasks });
+    const backlogMetrics = computeGroupMetrics(backlogTasks);
+    groups.push({
+      key: "backlog",
+      label: "Backlog",
+      tasks: backlogTasks,
+      ...backlogMetrics,
+    });
 
     return groups;
   }, [tasks, sprints]);
@@ -76,16 +140,6 @@ export default function TaskBacklog({ tasks, sprints, onTaskClick, onCreateTask 
       <div className="p-4 sm:p-6 space-y-4">
         {groupedTasks.map((group) => {
           const isCollapsed = collapsedSections.has(group.key);
-          const doneTasks = group.tasks.filter((t) => t.status === "done").length;
-          const progress = group.tasks.length > 0 ? Math.round((doneTasks / group.tasks.length) * 100) : 0;
-
-          // Status breakdown
-          const statusCounts = {
-            todo: group.tasks.filter(t => t.status === "todo").length,
-            in_progress: group.tasks.filter(t => t.status === "in_progress").length,
-            in_review: group.tasks.filter(t => t.status === "in_review").length,
-            done: doneTasks,
-          };
 
           return (
             <div
@@ -166,28 +220,28 @@ export default function TaskBacklog({ tasks, sprints, onTaskClick, onCreateTask 
                       {/* Status mini summary */}
                       {group.tasks.length > 0 && (
                         <div className="flex items-center gap-1.5">
-                          {statusCounts.todo > 0 && (
+                          {group.todo > 0 && (
                             <div className="flex items-center gap-1">
                               <span className="h-1.5 w-1.5 rounded-full bg-slate-500" />
-                              <span className="tabular-nums text-foreground/80">{statusCounts.todo}</span>
+                              <span className="tabular-nums text-foreground/80">{group.todo}</span>
                             </div>
                           )}
-                          {statusCounts.in_progress > 0 && (
+                          {group.inProgress > 0 && (
                             <div className="flex items-center gap-1">
                               <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
-                              <span className="tabular-nums text-foreground/80">{statusCounts.in_progress}</span>
+                              <span className="tabular-nums text-foreground/80">{group.inProgress}</span>
                             </div>
                           )}
-                          {statusCounts.in_review > 0 && (
+                          {group.inReview > 0 && (
                             <div className="flex items-center gap-1">
                               <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-                              <span className="tabular-nums text-foreground/80">{statusCounts.in_review}</span>
+                              <span className="tabular-nums text-foreground/80">{group.inReview}</span>
                             </div>
                           )}
-                          {statusCounts.done > 0 && (
+                          {group.done > 0 && (
                             <div className="flex items-center gap-1">
                               <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                              <span className="tabular-nums text-foreground/80">{statusCounts.done}</span>
+                              <span className="tabular-nums text-foreground/80">{group.done}</span>
                             </div>
                           )}
                         </div>
@@ -196,9 +250,9 @@ export default function TaskBacklog({ tasks, sprints, onTaskClick, onCreateTask 
                       {/* Progress */}
                       {group.tasks.length > 0 && (
                         <div className="ml-auto hidden items-center gap-1.5 md:flex">
-                          <Progress value={progress} className="h-1 flex-1 w-20" />
+                          <Progress value={group.progress} className="h-1 flex-1 w-20" />
                           <span className="w-8 text-right text-[10px] font-semibold tabular-nums">
-                            {progress}%
+                            {group.progress}%
                           </span>
                         </div>
                       )}

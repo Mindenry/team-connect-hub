@@ -124,8 +124,9 @@ export default function MeetingLobby() {
     .slice(0, 2)
     .toUpperCase();
 
-  // Check if user is already in this meeting from another tab (prevent duplicate tabs)
-  // Only redirect if user is in activeRooms AND it's from a different session
+  // Prevent showing "meeting lobby" when user is already inside the meeting.
+  // - Same tab/session: redirect back to `meeting-room` (so they don't see "screen 2" lobby).
+  // - Different tab/session: do not allow joining again; go back to meetings list.
   useEffect(() => {
     if (!currentUser) return;
 
@@ -134,17 +135,18 @@ export default function MeetingLobby() {
       (p) => p.userId === currentUser.id,
     );
 
-    // Only redirect if user is already in the meeting from a DIFFERENT tab
-    // If isCurrentSessionInMeeting() is true, it means THIS tab is the one in the meeting
-    if (myParticipant && !isCurrentSessionInMeeting()) {
-      // User is already in this meeting from another tab, redirect directly to meeting room
-      console.log(
-        "[MeetingLobby] User already in meeting from another tab, redirecting to room",
-      );
-      navigate(`/meeting-room/${meetingData?.id || meetingCode}`, {
-        replace: true,
-      });
+    if (!myParticipant) return;
+
+    const targetMeetingRoom = `/meeting-room/${meetingData?.id || meetingCode}`;
+
+    if (isCurrentSessionInMeeting()) {
+      // User is already in this meeting in this same session/tab, just return them to the room UI.
+      navigate(targetMeetingRoom, { replace: true });
+      return;
     }
+
+    // User is already in this meeting in another tab/session: do not join again.
+    navigate("/meetings", { replace: true });
   }, [activeRooms, meetingCode, currentUser, navigate, meetingData]);
 
   // Fetch meeting info
