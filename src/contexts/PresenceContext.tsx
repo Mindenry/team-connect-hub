@@ -43,17 +43,22 @@ interface PresenceContextType {
 const PresenceContext = createContext<PresenceContextType | null>(null);
 
 // Shared state for current meeting (set by MeetingRoom when user joins)
+// Includes sessionId to distinguish between different browser tabs/sessions
 let currentMeetingInfo: {
   meetingId: string;
   peerId: string;
   peerName: string;
   state: any;
   userId?: string;
+  sessionId?: string; // Unique per tab/session
 } | null = null;
+
+// Generate a unique session ID for this browser tab
+const SESSION_ID = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
 /** Call this when user joins a meeting to enable auto-rejoin on reconnect */
 export function setCurrentMeeting(info: typeof currentMeetingInfo) {
-  currentMeetingInfo = info;
+  currentMeetingInfo = info ? { ...info, sessionId: SESSION_ID } : null;
 }
 
 /** Call this when user leaves a meeting */
@@ -64,6 +69,16 @@ export function clearCurrentMeeting() {
 /** Get current meeting info - useful for detecting if user is already in a meeting */
 export function getCurrentMeeting() {
   return currentMeetingInfo;
+}
+
+/** Check if current session owns the meeting (same tab) */
+export function isCurrentSessionInMeeting() {
+  return currentMeetingInfo?.sessionId === SESSION_ID;
+}
+
+/** Get the session ID for this tab */
+export function getCurrentSessionId() {
+  return SESSION_ID;
 }
 
 export function PresenceProvider({ children }: { children: ReactNode }) {

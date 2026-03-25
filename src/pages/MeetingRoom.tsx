@@ -78,6 +78,7 @@ import {
   setCurrentMeeting,
   clearCurrentMeeting,
   getCurrentMeeting,
+  isCurrentSessionInMeeting,
 } from "@/hooks/usePresence";
 import {
   meetingPiPJoin,
@@ -555,11 +556,13 @@ function MeetingRoomUI({
       }
 
       // Check if user is already in this meeting from another tab/window
+      // Only redirect if the meeting info exists AND it's from a different session/tab
       const existingMeeting = getCurrentMeeting();
       if (
         existingMeeting &&
         existingMeeting.meetingId === meetingCode &&
-        existingMeeting.userId === currentUser.id
+        existingMeeting.userId === currentUser.id &&
+        !isCurrentSessionInMeeting() // Different tab/session
       ) {
         // User is already in this meeting in another tab - redirect back to meetings
         console.log(

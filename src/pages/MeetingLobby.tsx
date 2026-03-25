@@ -40,6 +40,7 @@ import { auth, useAuth } from "@/lib/auth";
 import { apiGet } from "@/lib/api";
 import { getSocket } from "@/lib/websocket";
 import { usePresence } from "@/hooks/usePresence";
+import { isCurrentSessionInMeeting } from "@/hooks/usePresence";
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
 
@@ -123,7 +124,8 @@ export default function MeetingLobby() {
     .slice(0, 2)
     .toUpperCase();
 
-  // Check if user is already in this meeting (prevent duplicate tabs)
+  // Check if user is already in this meeting from another tab (prevent duplicate tabs)
+  // Only redirect if user is in activeRooms AND it's from a different session
   useEffect(() => {
     if (!currentUser) return;
 
@@ -132,13 +134,15 @@ export default function MeetingLobby() {
       (p) => p.userId === currentUser.id,
     );
 
-    if (myParticipant) {
-      // User is already in this meeting, redirect directly to meeting room
+    // Only redirect if user is already in the meeting from a DIFFERENT tab
+    // If isCurrentSessionInMeeting() is true, it means THIS tab is the one in the meeting
+    if (myParticipant && !isCurrentSessionInMeeting()) {
+      // User is already in this meeting from another tab, redirect directly to meeting room
       console.log(
-        "[MeetingLobby] User already in meeting, redirecting to room",
+        "[MeetingLobby] User already in meeting from another tab, redirecting to room",
       );
       navigate(`/meeting-room/${meetingData?.id || meetingCode}`, {
-        replace: true, // Replace history to prevent back button loop
+        replace: true,
       });
     }
   }, [activeRooms, meetingCode, currentUser, navigate, meetingData]);
