@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import { useIsMobile } from "@/hooks/use-mobile";
 import {
   Plus,
   Search,
@@ -112,6 +113,7 @@ export default function Teams() {
   const { isUserOnline } = usePresence();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const isMobile = useIsMobile();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedTeam, setSelectedTeam] = useState<string | null>(null);
   const [showAddMember, setShowAddMember] = useState(false);
@@ -453,45 +455,45 @@ export default function Teams() {
         </div>
 
         <div className="flex-1 overflow-hidden">
-          <div className="max-w-7xl mx-auto px-6 lg:px-8 h-full flex flex-col">
-            <div className="py-5 space-y-4">
-              <div className="flex flex-wrap items-center gap-3">
-                <div className="relative flex-1 min-w-[220px] sm:min-w-[260px]">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 h-full flex flex-col">
+            <div className="py-3 sm:py-4 md:py-5 space-y-3 sm:space-y-4">
+              <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                <div className="relative flex-1 min-w-0 sm:min-w-[220px] md:min-w-[260px]">
+                  <Search className="absolute left-2.5 sm:left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 sm:w-4 sm:h-4 text-muted-foreground" />
                   <Input
                     placeholder="ค้นหาทีมตามชื่อหรือคำอธิบาย..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-9 h-10 bg-background/60 border-border/60 focus-visible:ring-2 focus-visible:ring-primary/20"
+                    className="pl-8 sm:pl-9 h-9 sm:h-10 text-sm bg-background/60 border-border/60 focus-visible:ring-2 focus-visible:ring-primary/20"
                   />
                   {searchQuery && (
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8"
+                      className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 sm:h-8 sm:w-8"
                       onClick={() => setSearchQuery("")}
                     >
-                      <X className="w-4 h-4" />
+                      <X className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                     </Button>
                   )}
                 </div>
 
-                <div className="flex items-center gap-1.5 rounded-xl border border-border/60 bg-muted/40 px-1 py-1 backdrop-blur-sm">
-                  <span className="hidden sm:inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] text-muted-foreground">
+                <div className="flex items-center gap-0.5 sm:gap-1 rounded-lg sm:rounded-xl border border-border/60 bg-muted/40 px-0.5 sm:px-1 py-0.5 sm:py-1 backdrop-blur-sm overflow-x-auto">
+                  <span className="hidden md:inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] text-muted-foreground">
                     <Filter className="w-3 h-3" />
                     มุมมอง
                   </span>
                   {[
                     { key: "all", label: "ทั้งหมด" },
                     { key: "mine", label: "ของฉัน" },
-                    { key: "favorites", label: "ที่ปักหมุด" },
-                    { key: "active", label: "มีงานเปิดอยู่" },
+                    { key: "favorites", label: "ปักหมุด" },
+                    { key: "active", label: "งานเปิด" },
                   ].map((item) => (
                     <button
                       key={item.key}
                       onClick={() => setActiveFilter(item.key as TeamsFilter)}
                       className={cn(
-                        "px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all",
+                        "px-2 sm:px-2.5 py-1 rounded-md sm:rounded-lg text-[10px] sm:text-[11px] font-medium transition-all whitespace-nowrap",
                         activeFilter === item.key
                           ? "bg-background shadow-sm ring-1 ring-border/60 text-foreground"
                           : "text-muted-foreground hover:text-foreground hover:bg-background/50"
@@ -502,11 +504,11 @@ export default function Teams() {
                   ))}
                 </div>
 
-                <div className="flex items-center gap-1 rounded-xl border border-border/60 bg-background/60 px-1 py-1">
+                <div className="flex items-center gap-0.5 rounded-lg sm:rounded-xl border border-border/60 bg-background/60 px-0.5 sm:px-1 py-0.5 sm:py-1">
                   <button
                     onClick={() => setViewMode("gallery")}
                     className={cn(
-                      "px-2.5 py-1 rounded-lg text-[11px] font-medium",
+                      "px-2 sm:px-2.5 py-1 rounded-md sm:rounded-lg text-[10px] sm:text-[11px] font-medium",
                       viewMode === "gallery"
                         ? "bg-primary/10 text-primary"
                         : "text-muted-foreground hover:text-foreground"
@@ -517,7 +519,7 @@ export default function Teams() {
                   <button
                     onClick={() => setViewMode("compact")}
                     className={cn(
-                      "px-2.5 py-1 rounded-lg text-[11px] font-medium",
+                      "px-2 sm:px-2.5 py-1 rounded-md sm:rounded-lg text-[10px] sm:text-[11px] font-medium",
                       viewMode === "compact"
                         ? "bg-primary/10 text-primary"
                         : "text-muted-foreground hover:text-foreground"
@@ -529,45 +531,50 @@ export default function Teams() {
               </div>
             </div>
 
-            <div className="flex-1 flex gap-5 pb-6 overflow-hidden min-h-0">
-              <div className="w-[260px] shrink-0 flex flex-col rounded-2xl border border-border/60 bg-card/70 backdrop-blur-sm overflow-hidden">
-                <div className="px-4 py-3 border-b border-border/60 flex items-center justify-between">
-                  <div>
-                    <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
-                      Teams index
-                    </p>
-                    <p className="text-[11px] text-muted-foreground/80">
-                      {filteredTeams.length} จาก {teams.length} ทีม
-                    </p>
+            <div className="flex-1 flex flex-col md:flex-row gap-3 sm:gap-4 md:gap-5 pb-4 sm:pb-6 overflow-hidden min-h-0">
+              {/* Teams sidebar - hidden on mobile, shown as drawer or bottom sheet on mobile */}
+              {(!isMobile || selectedTeam === null) && (
+                <div className={cn(
+                  "shrink-0 flex flex-col rounded-xl sm:rounded-2xl border border-border/60 bg-card/70 backdrop-blur-sm overflow-hidden",
+                  isMobile ? "w-full" : "w-[260px]"
+                )}>
+                  <div className="px-3 sm:px-4 py-2 sm:py-3 border-b border-border/60 flex items-center justify-between">
+                    <div>
+                      <p className="text-[10px] sm:text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
+                        Teams index
+                      </p>
+                      <p className="text-[10px] sm:text-[11px] text-muted-foreground/80">
+                        {filteredTeams.length} จาก {teams.length} ทีม
+                      </p>
+                    </div>
+                    {favoriteTeamIds.length > 0 && (
+                      <Badge variant="outline" className="h-5 sm:h-6 px-1.5 sm:px-2 text-[9px] sm:text-[10px]">
+                        <Star className="w-2.5 h-2.5 sm:w-3 sm:h-3 mr-0.5 sm:mr-1 text-amber-500" />
+                        {favoriteTeamIds.length}
+                      </Badge>
+                    )}
                   </div>
-                  {favoriteTeamIds.length > 0 && (
-                    <Badge variant="outline" className="h-6 px-2 text-[10px]">
-                      <Star className="w-3 h-3 mr-1 text-amber-500" />
-                      {favoriteTeamIds.length}
-                    </Badge>
-                  )}
-                </div>
                 <ScrollArea className="flex-1">
                   {loading ? (
-                    <div className="p-3 space-y-2">
+                    <div className="p-2 sm:p-3 space-y-1.5 sm:space-y-2">
                       {[...Array(6)].map((_, i) => (
                         <div
                           key={i}
-                          className="rounded-xl border border-border/40 bg-muted/40 px-3 py-2 flex items-center gap-3"
+                          className="rounded-lg sm:rounded-xl border border-border/40 bg-muted/40 px-2.5 sm:px-3 py-2 sm:py-2.5 flex items-center gap-2 sm:gap-3"
                         >
-                          <Skeleton className="h-8 w-8 rounded-lg" />
+                          <Skeleton className="h-7 w-7 sm:h-8 sm:w-8 rounded-md sm:rounded-lg" />
                           <div className="flex-1 space-y-1">
-                            <Skeleton className="h-3 w-4/5" />
-                            <Skeleton className="h-2.5 w-1/2" />
+                            <Skeleton className="h-2.5 sm:h-3 w-4/5" />
+                            <Skeleton className="h-2 sm:h-2.5 w-1/2" />
                           </div>
                         </div>
                       ))}
                     </div>
                   ) : filteredTeams.length === 0 ? (
-                    <div className="px-4 py-8 text-center text-xs text-muted-foreground space-y-3">
+                    <div className="px-3 sm:px-4 py-6 sm:py-8 text-center text-[10px] sm:text-xs text-muted-foreground space-y-2 sm:space-y-3">
                       <div className="flex justify-center">
-                        <div className="w-10 h-10 rounded-full bg-muted/50 flex items-center justify-center">
-                          <Users className="w-5 h-5 text-muted-foreground" />
+                        <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-muted/50 flex items-center justify-center">
+                          <Users className="w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground" />
                         </div>
                       </div>
                       <p className="font-medium">
@@ -578,14 +585,14 @@ export default function Teams() {
                           variant="outline"
                           size="sm"
                           onClick={() => setShowCreateTeam(true)}
-                          className="h-8 text-xs"
+                          className="h-7 sm:h-8 text-[10px] sm:text-xs"
                         >
                           สร้างทีมแรกของคุณ
                         </Button>
                       )}
                     </div>
                   ) : (
-                    <div className="p-3 space-y-1.5">
+                    <div className="p-2 sm:p-3 space-y-1 sm:space-y-1.5">
                       {filteredTeams.map((team) => {
                         const isSelected = team.id === selectedTeam;
                         const isFavorite = favoriteTeamIds.includes(team.id);
@@ -596,7 +603,10 @@ export default function Teams() {
                             initial={{ opacity: 0, x: -8 }}
                             animate={{ opacity: 1, x: 0 }}
                             transition={{ duration: 0.18 }}
-                            onClick={() => setSelectedTeam(team.id)}
+                            onClick={() => {
+                              setSelectedTeam(team.id);
+                              // On mobile, show team details after selection
+                            }}
                             role="button"
                             tabIndex={0}
                             onKeyDown={(e) => {
@@ -606,60 +616,60 @@ export default function Teams() {
                               }
                             }}
                             className={cn(
-                              "w-full text-left rounded-xl border transition-all flex items-center cursor-pointer select-none",
+                              "w-full text-left rounded-lg sm:rounded-xl border transition-all flex items-center cursor-pointer select-none",
                               "hover:border-primary/40 hover:bg-primary/5",
                               isSelected
                                 ? "border-primary/60 bg-primary/10 shadow-sm"
                                 : "border-border/40 bg-background/40",
                               viewMode === "gallery"
-                                ? "px-3 py-2.5 gap-3"
-                                : "px-2.5 py-1.5 gap-2 text-[11px]"
+                                ? "px-2.5 sm:px-3 py-2 sm:py-2.5 gap-2 sm:gap-3"
+                                : "px-2 sm:px-2.5 py-1.5 gap-2 text-[10px] sm:text-[11px]"
                             )}
                           >
                             <div className="relative">
                               <div
                                 className={cn(
-                                  "rounded-lg bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center",
-                                  viewMode === "gallery" ? "w-9 h-9" : "w-7 h-7"
+                                  "rounded-md sm:rounded-lg bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center",
+                                  viewMode === "gallery" ? "w-8 h-8 sm:w-9 sm:h-9" : "w-6 h-6 sm:w-7 sm:h-7"
                                 )}
                               >
-                                <Users className={cn("text-primary", viewMode === "gallery" ? "w-4 h-4" : "w-3.5 h-3.5")} />
+                                <Users className={cn("text-primary", viewMode === "gallery" ? "w-3.5 h-3.5 sm:w-4 sm:h-4" : "w-3 h-3.5 sm:w-3.5 sm:h-3.5")} />
                               </div>
                               {isFavorite && (
-                                <Star className="w-3 h-3 text-amber-500 absolute -top-1 -right-1 drop-shadow-sm" />
+                                <Star className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-amber-500 absolute -top-0.5 -right-0.5 drop-shadow-sm" />
                               )}
                             </div>
                             <div className="flex-1 min-w-0">
                               <p
                                 className={cn(
                                   "font-medium text-foreground truncate",
-                                  viewMode === "gallery" ? "text-xs" : "text-[11px]"
+                                  viewMode === "gallery" ? "text-[11px] sm:text-xs" : "text-[10px] sm:text-[11px]"
                                 )}
                               >
                                 {team.name}
                               </p>
-                              <div className="mt-0.5 flex items-center gap-2 text-[10px] text-muted-foreground">
-                                <span className="inline-flex items-center gap-1">
-                                  <Users className="w-3 h-3" />
+                              <div className="mt-0.5 flex items-center gap-1.5 sm:gap-2 text-[9px] sm:text-[10px] text-muted-foreground">
+                                <span className="inline-flex items-center gap-0.5">
+                                  <Users className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
                                   {team.members.length}
                                 </span>
-                                <span className="inline-flex items-center gap-1">
-                                  <Hash className="w-3 h-3" />
+                                <span className="inline-flex items-center gap-0.5">
+                                  <Hash className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
                                   {team.channels.length}
                                 </span>
                                 {team.activeTasks > 0 && (
-                                  <span className="inline-flex items-center gap-1 text-amber-600 dark:text-amber-400">
-                                    <CheckSquare className="w-3 h-3" />
+                                  <span className="inline-flex items-center gap-0.5 text-amber-600 dark:text-amber-400">
+                                    <CheckSquare className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
                                     {team.activeTasks}
                                   </span>
                                 )}
                               </div>
                             </div>
-                            <div className="flex flex-col items-end gap-1">
+                            <div className="flex flex-col items-end gap-0.5 sm:gap-1">
                               {isMyTeam && (
                                 <Badge
                                   variant="outline"
-                                  className="h-4 px-1.5 text-[9px] border-primary/40 text-primary"
+                                  className="h-3.5 sm:h-4 px-1 sm:px-1.5 text-[8px] sm:text-[9px] border-primary/40 text-primary"
                                 >
                                   My
                                 </Badge>
@@ -672,12 +682,12 @@ export default function Teams() {
                                       e.stopPropagation();
                                       toggleFavorite(team.id);
                                     }}
-                                    className="inline-flex items-center justify-center rounded-full h-6 w-6 hover:bg-background/80"
+                                    className="inline-flex items-center justify-center rounded-full h-5 w-5 sm:h-6 sm:w-6 hover:bg-background/80"
                                   >
                                     {isFavorite ? (
-                                      <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
+                                      <Star className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-amber-500 fill-amber-500" />
                                     ) : (
-                                      <StarOff className="w-3.5 h-3.5 text-muted-foreground" />
+                                      <StarOff className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-muted-foreground" />
                                     )}
                                   </button>
                                 </TooltipTrigger>
@@ -694,7 +704,9 @@ export default function Teams() {
                 </ScrollArea>
               </div>
 
-              <div className="flex-1 min-w-0 min-h-0 flex flex-col gap-4">
+              {/* Team details panel */}
+              {(!isMobile || selectedTeam !== null) && (
+                <div className="flex-1 min-w-0 min-h-0 flex flex-col gap-3 sm:gap-4">
                 {loading ? (
                   <div className="space-y-4">
                     <Card className="border-border/60 bg-card/70">

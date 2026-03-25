@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useIsMobile } from "@/hooks/use-mobile";
 import {
   CalendarDays,
   CalendarRange,
@@ -314,6 +315,7 @@ function DroppableDay({ date, children, id, className }: DroppableDayProps) {
 // --- Main Component ---
 
 export default function TeamCalendar() {
+  const isMobile = useIsMobile();
   const [view, setView] = useState<ViewMode>("week");
   const [currentDate, setCurrentDate] = useState(() => new Date());
   const [teamFilter, setTeamFilter] = useState<string>("all");
@@ -758,70 +760,88 @@ export default function TeamCalendar() {
       <div className="flex flex-col h-screen bg-gradient-to-br from-background via-background to-muted/20">
         {/* Modern Header */}
         <div className="border-b border-border/50 bg-background/95 backdrop-blur-xl supports-[backdrop-filter]:bg-background/80">
-          <div className="max-w-[1920px] mx-auto px-6 lg:px-8">
-            <div className="h-20 flex items-center justify-between gap-6">
+          <div className="max-w-[1920px] mx-auto px-3 sm:px-4 md:px-6 lg:px-8">
+            <div className="h-14 sm:h-16 md:h-20 flex items-center justify-between gap-2 sm:gap-4 md:gap-6">
               {/* Left: Logo & Title */}
-              <div className="flex items-center gap-4 min-w-0 flex-1">
-                <div className="relative">
-                  <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-primary/20 via-primary/10 to-primary/5 flex items-center justify-center shadow-lg shadow-primary/5 ring-1 ring-primary/10">
-                    <CalendarDays className="w-6 h-6 text-primary" />
+              <div className="flex items-center gap-2 sm:gap-3 md:gap-4 min-w-0 flex-1">
+                <div className="relative shrink-0">
+                  <div className="w-9 h-9 sm:w-10 sm:h-10 md:w-12 md:h-12 rounded-xl sm:rounded-2xl bg-gradient-to-br from-primary/20 via-primary/10 to-primary/5 flex items-center justify-center shadow-lg shadow-primary/5 ring-1 ring-primary/10">
+                    <CalendarDays className="w-4 h-4 sm:w-5 sm:h-5 md:w-6 md:h-6 text-primary" />
                   </div>
-                  <div className="absolute -top-1 -right-1 w-4 h-4 bg-primary rounded-full border-2 border-background animate-pulse-soft" />
+                  <div className="absolute -top-0.5 -right-0.5 sm:-top-1 sm:-right-1 w-3 h-3 sm:w-4 sm:h-4 bg-primary rounded-full border-2 border-background animate-pulse-soft" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <h1 className="text-xl font-bold text-foreground tracking-tight">Team Calendar</h1>
-                  <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                  <h1 className="text-base sm:text-lg md:text-xl font-bold text-foreground tracking-tight">Team Calendar</h1>
+                  <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5 truncate hidden sm:block">
                     ดูการประชุม · กำหนดส่งงาน · วันหยุด · จัดการตารางงานของทีม
                   </p>
                 </div>
               </div>
 
               {/* Right: View Toggle & Navigation */}
-              <div className="flex items-center gap-3">
-                <Tabs value={view} onValueChange={(v) => setView(v as ViewMode)}>
-                  <TabsList className="h-10 bg-muted/40 border border-border/50 p-1">
-                    <TabsTrigger
-                      value="day"
-                      className={cn(
-                        "h-8 px-4 text-xs font-medium transition-all duration-200",
-                        "data-[state=active]:bg-background data-[state=active]:shadow-sm data-[state=active]:ring-1 data-[state=active]:ring-border/50"
-                      )}
-                    >
-                      <CalendarSearch className="w-3.5 h-3.5 mr-1.5" />
-                      วัน
-                    </TabsTrigger>
-                    <TabsTrigger
-                      value="week"
-                      className={cn(
-                        "h-8 px-4 text-xs font-medium transition-all duration-200",
-                        "data-[state=active]:bg-background data-[state=active]:shadow-sm data-[state=active]:ring-1 data-[state=active]:ring-border/50"
-                      )}
-                    >
-                      <CalendarRange className="w-3.5 h-3.5 mr-1.5" />
-                      สัปดาห์
-                    </TabsTrigger>
-                    <TabsTrigger
-                      value="month"
-                      className={cn(
-                        "h-8 px-4 text-xs font-medium transition-all duration-200",
-                        "data-[state=active]:bg-background data-[state=active]:shadow-sm data-[state=active]:ring-1 data-[state=active]:ring-border/50"
-                      )}
-                    >
-                      <CalendarDays className="w-3.5 h-3.5 mr-1.5" />
-                      เดือน
-                    </TabsTrigger>
-                  </TabsList>
-                </Tabs>
-                <div className="flex items-center gap-1 border border-border/50 rounded-lg p-1 bg-muted/30">
+              <div className="flex items-center gap-1.5 sm:gap-2 md:gap-3 shrink-0">
+                {/* View Tabs - Hidden on mobile, shown in dropdown */}
+                {!isMobile && (
+                  <Tabs value={view} onValueChange={(v) => setView(v as ViewMode)}>
+                    <TabsList className="h-9 md:h-10 bg-muted/40 border border-border/50 p-1">
+                      <TabsTrigger
+                        value="day"
+                        className={cn(
+                          "h-7 md:h-8 px-3 md:px-4 text-[10px] md:text-xs font-medium transition-all duration-200",
+                          "data-[state=active]:bg-background data-[state=active]:shadow-sm data-[state=active]:ring-1 data-[state=active]:ring-border/50"
+                        )}
+                      >
+                        <CalendarSearch className="w-3 h-3 md:w-3.5 md:h-3.5 mr-1 md:mr-1.5" />
+                        วัน
+                      </TabsTrigger>
+                      <TabsTrigger
+                        value="week"
+                        className={cn(
+                          "h-7 md:h-8 px-3 md:px-4 text-[10px] md:text-xs font-medium transition-all duration-200",
+                          "data-[state=active]:bg-background data-[state=active]:shadow-sm data-[state=active]:ring-1 data-[state=active]:ring-border/50"
+                        )}
+                      >
+                        <CalendarRange className="w-3 h-3 md:w-3.5 md:h-3.5 mr-1 md:mr-1.5" />
+                        สัปดาห์
+                      </TabsTrigger>
+                      <TabsTrigger
+                        value="month"
+                        className={cn(
+                          "h-7 md:h-8 px-3 md:px-4 text-[10px] md:text-xs font-medium transition-all duration-200",
+                          "data-[state=active]:bg-background data-[state=active]:shadow-sm data-[state=active]:ring-1 data-[state=active]:ring-border/50"
+                        )}
+                      >
+                        <CalendarDays className="w-3 h-3 md:w-3.5 md:h-3.5 mr-1 md:mr-1.5" />
+                        เดือน
+                      </TabsTrigger>
+                    </TabsList>
+                  </Tabs>
+                )}
+                
+                {/* Mobile View Selector */
+                {isMobile && (
+                  <Select value={view} onValueChange={(v) => setView(v as ViewMode)}>
+                    <SelectTrigger className="h-8 w-[100px] text-xs border-border/50 bg-background/50">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="day">วัน</SelectItem>
+                      <SelectItem value="week">สัปดาห์</SelectItem>
+                      <SelectItem value="month">เดือน</SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
+                
+                <div className="flex items-center gap-0.5 sm:gap-1 border border-border/50 rounded-lg p-0.5 sm:p-1 bg-muted/30">
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-8 w-8 hover:bg-background"
+                        className="h-7 w-7 sm:h-8 sm:w-8 hover:bg-background"
                         onClick={handlePrev}
                       >
-                        <ChevronLeft className="w-4 h-4" />
+                        <ChevronLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                       </Button>
                     </TooltipTrigger>
                     <TooltipContent>ก่อนหน้า</TooltipContent>
@@ -831,10 +851,10 @@ export default function TeamCalendar() {
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-8 w-8 hover:bg-background"
+                        className="h-7 w-7 sm:h-8 sm:w-8 hover:bg-background"
                         onClick={handleNext}
                       >
-                        <ChevronRight className="w-4 h-4" />
+                        <ChevronRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                       </Button>
                     </TooltipTrigger>
                     <TooltipContent>ถัดไป</TooltipContent>
@@ -842,7 +862,7 @@ export default function TeamCalendar() {
                   <Button
                     variant="outline"
                     size="sm"
-                    className="h-8 text-xs px-3 border-border/50 bg-background/50 hover:bg-background"
+                    className="h-7 sm:h-8 text-[10px] sm:text-xs px-2 sm:px-3 border-border/50 bg-background/50 hover:bg-background hidden sm:inline-flex"
                     onClick={handleToday}
                   >
                     วันนี้
@@ -855,41 +875,41 @@ export default function TeamCalendar() {
 
         {/* Toolbar */}
         <div className="border-b border-border/50 bg-gradient-to-r from-muted/30 to-transparent">
-          <div className="max-w-[1920px] mx-auto px-6 lg:px-8 py-4">
-            <div className="flex items-center justify-between gap-4 flex-wrap">
-              <div className="flex items-center gap-4">
-                <div>
-                  <h2 className="text-base font-bold text-foreground">{titleLabel}</h2>
-                  <div className="flex items-center gap-2 mt-1">
-                    <Badge variant="secondary" className="text-[10px] px-2 py-0.5 h-5 bg-primary/10 text-primary border-primary/20">
+          <div className="max-w-[1920px] mx-auto px-3 sm:px-4 md:px-6 lg:px-8 py-2.5 sm:py-3 md:py-4">
+            <div className="flex items-center justify-between gap-2 sm:gap-3 md:gap-4 flex-wrap">
+              <div className="flex items-center gap-2 sm:gap-3 md:gap-4 min-w-0">
+                <div className="min-w-0">
+                  <h2 className="text-sm sm:text-base font-bold text-foreground truncate">{titleLabel}</h2>
+                  <div className="flex items-center gap-1 sm:gap-2 mt-0.5 sm:mt-1 flex-wrap">
+                    <Badge variant="secondary" className="text-[9px] sm:text-[10px] px-1.5 sm:px-2 py-0.5 h-4 sm:h-5 bg-primary/10 text-primary border-primary/20">
                       {eventsInRange.length} รายการ
                     </Badge>
                     {stats.totalMeetings > 0 && (
-                      <Badge variant="outline" className="text-[10px] px-2 py-0.5 h-5 border-primary/30 text-primary bg-primary/5">
-                        <Video className="w-2.5 h-2.5 mr-1" />
-                        {stats.totalMeetings} การประชุม
+                      <Badge variant="outline" className="text-[9px] sm:text-[10px] px-1.5 sm:px-2 py-0.5 h-4 sm:h-5 border-primary/30 text-primary bg-primary/5">
+                        <Video className="w-2 h-2 sm:w-2.5 sm:h-2.5 mr-0.5 sm:mr-1" />
+                        {stats.totalMeetings}
                       </Badge>
                     )}
                     {stats.totalTasks > 0 && (
-                      <Badge variant="outline" className="text-[10px] px-2 py-0.5 h-5 border-amber-300 text-amber-700 bg-amber-50">
-                        <CheckSquare className="w-2.5 h-2.5 mr-1" />
-                        {stats.totalTasks} งาน
+                      <Badge variant="outline" className="text-[9px] sm:text-[10px] px-1.5 sm:px-2 py-0.5 h-4 sm:h-5 border-amber-300 text-amber-700 bg-amber-50">
+                        <CheckSquare className="w-2 h-2 sm:w-2.5 sm:h-2.5 mr-0.5 sm:mr-1" />
+                        {stats.totalTasks}
                       </Badge>
                     )}
                     {stats.totalHolidays > 0 && (
-                      <Badge variant="outline" className="text-[10px] px-2 py-0.5 h-5 border-red-300 text-red-700 bg-red-50">
-                        <Sparkles className="w-2.5 h-2.5 mr-1" />
-                        {stats.totalHolidays} วันหยุด
+                      <Badge variant="outline" className="text-[9px] sm:text-[10px] px-1.5 sm:px-2 py-0.5 h-4 sm:h-5 border-red-300 text-red-700 bg-red-50">
+                        <Sparkles className="w-2 h-2 sm:w-2.5 sm:h-2.5 mr-0.5 sm:mr-1" />
+                        {stats.totalHolidays}
                       </Badge>
                     )}
                   </div>
                 </div>
               </div>
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-muted-foreground font-medium">ทีม</span>
+              <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+                <div className="flex items-center gap-1.5 sm:gap-2">
+                  <span className="text-[10px] sm:text-xs text-muted-foreground font-medium hidden sm:inline">ทีม</span>
                   <Select value={teamFilter} onValueChange={setTeamFilter}>
-                    <SelectTrigger className="h-9 w-[180px] text-xs border-border/50 bg-background/50 hover:bg-background">
+                    <SelectTrigger className="h-8 sm:h-9 w-[120px] sm:w-[160px] md:w-[180px] text-[10px] sm:text-xs border-border/50 bg-background/50 hover:bg-background">
                       <SelectValue placeholder="ทุกทีม" />
                     </SelectTrigger>
                     <SelectContent>
@@ -997,7 +1017,7 @@ export default function TeamCalendar() {
 
         {/* Content */}
         <div className="flex-1 overflow-hidden flex flex-col">
-          <div className="max-w-[1920px] mx-auto px-6 lg:px-8 py-4 h-full flex flex-col">
+          <div className="max-w-[1920px] mx-auto px-3 sm:px-4 md:px-6 lg:px-8 py-2.5 sm:py-3 md:py-4 h-full flex flex-col">
             {loading ? (
               <div className="h-full flex items-center justify-center">
                 <div className="flex flex-col items-center gap-3">
@@ -1029,13 +1049,13 @@ export default function TeamCalendar() {
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: -20 }}
                       transition={{ duration: 0.2 }}
-                      className="grid grid-cols-7 gap-3"
+                      className="grid grid-cols-7 gap-1 sm:gap-2 md:gap-3 overflow-x-auto"
                     >
                       {/* Weekday headers */}
                       {["อา", "จ", "อ", "พ", "พฤ", "ศ", "ส"].map((day) => (
                         <div
                           key={day}
-                          className="text-center py-3 text-xs font-bold text-muted-foreground uppercase tracking-wider bg-muted/30 rounded-lg"
+                          className="text-center py-1.5 sm:py-2 md:py-3 text-[9px] sm:text-[10px] md:text-xs font-bold text-muted-foreground uppercase tracking-wider bg-muted/30 rounded sm:rounded-md md:rounded-lg"
                         >
                           {day}
                         </div>
@@ -1063,11 +1083,11 @@ export default function TeamCalendar() {
                                 !isCurrentMonth && "opacity-50"
                               )}
                             >
-                              <CardHeader className="py-3.5 px-3.5 flex flex-row items-center justify-between bg-gradient-to-r from-transparent via-muted/10 to-transparent">
-                                <div className="flex items-center gap-2.5">
+                              <CardHeader className="py-1.5 sm:py-2.5 md:py-3.5 px-1.5 sm:px-2.5 md:px-3.5 flex flex-row items-center justify-between bg-gradient-to-r from-transparent via-muted/10 to-transparent">
+                                <div className="flex items-center gap-1 sm:gap-2 md:gap-2.5">
                                   <span
                                     className={cn(
-                                      "text-base font-bold transition-all duration-200",
+                                      "text-xs sm:text-sm md:text-base font-bold transition-all duration-200",
                                       isToday(day) && "text-primary scale-110",
                                       !isCurrentMonth && "text-muted-foreground"
                                     )}
@@ -1075,35 +1095,35 @@ export default function TeamCalendar() {
                                     {day.getDate()}
                                   </span>
                                   {isToday(day) && (
-                                    <div className="w-2 h-2 rounded-full bg-primary animate-pulse shadow-lg shadow-primary/50" />
+                                    <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-primary animate-pulse shadow-lg shadow-primary/50" />
                                   )}
                                 </div>
-                                <div className="flex items-center gap-1 flex-wrap">
+                                <div className="flex items-center gap-0.5 sm:gap-1 flex-wrap">
                                   {summary.holidays > 0 && (
-                                    <Badge className="bg-gradient-to-r from-red-100 via-red-50 to-red-100 text-red-900 border-0 text-[9px] px-2 h-4.5 shadow-sm font-semibold">
+                                    <Badge className="bg-gradient-to-r from-red-100 via-red-50 to-red-100 text-red-900 border-0 text-[8px] sm:text-[9px] px-1 sm:px-2 h-3.5 sm:h-4.5 shadow-sm font-semibold">
                                       🎉
                                     </Badge>
                                   )}
                                   {summary.meetings > 0 && (
-                                    <Badge className="bg-gradient-to-r from-primary/20 via-primary/15 to-primary/20 text-primary border-0 text-[9px] px-2 h-4.5 shadow-sm font-semibold">
+                                    <Badge className="bg-gradient-to-r from-primary/20 via-primary/15 to-primary/20 text-primary border-0 text-[8px] sm:text-[9px] px-1 sm:px-2 h-3.5 sm:h-4.5 shadow-sm font-semibold">
                                       {summary.meetings}
                                     </Badge>
                                   )}
                                   {summary.tasks > 0 && (
-                                    <Badge className="bg-gradient-to-r from-amber-100 via-amber-50 to-amber-100 text-amber-900 border-0 text-[9px] px-2 h-4.5 shadow-sm font-semibold">
+                                    <Badge className="bg-gradient-to-r from-amber-100 via-amber-50 to-amber-100 text-amber-900 border-0 text-[8px] sm:text-[9px] px-1 sm:px-2 h-3.5 sm:h-4.5 shadow-sm font-semibold">
                                       {summary.tasks}
                                     </Badge>
                                   )}
                                 </div>
                               </CardHeader>
-                              <CardContent className="px-3 pb-3">
-                                <DroppableDay date={day}>
-                                  {dayEvents.slice(0, 4).map((ev) => (
+                              <CardContent className="px-1 sm:px-2 md:px-3 pb-1.5 sm:pb-2 md:pb-3">
+                                <DroppableDay date={day} className="min-h-[40px] sm:min-h-[50px] md:min-h-[60px]">
+                                  {dayEvents.slice(0, isMobile ? 2 : 3).map((ev) => (
                                     <DraggableEventCard key={`${ev.id}-${refreshKey}`} event={ev} />
                                   ))}
-                                  {dayEvents.length > 4 && (
-                                    <div className="text-[10px] text-muted-foreground mt-1 font-medium px-1">
-                                      +{dayEvents.length - 4} เพิ่มเติม
+                                  {dayEvents.length > (isMobile ? 2 : 3) && (
+                                    <div className="text-[8px] sm:text-[10px] text-muted-foreground mt-0.5 sm:mt-1 font-medium px-0.5 sm:px-1">
+                                      +{dayEvents.length - (isMobile ? 2 : 3)} เพิ่มเติม
                                     </div>
                                   )}
                                 </DroppableDay>
@@ -1123,28 +1143,33 @@ export default function TeamCalendar() {
                       className="h-full"
                     >
                       <Card className="flex-1 border-border/50 bg-card/50 shadow-xl flex flex-col min-h-0">
-                        <CardContent className="p-4 flex-1 flex flex-col min-h-0 overflow-hidden">
-                          <div className="grid grid-cols-[70px_minmax(0,1fr)] flex-1 gap-3 min-h-0">
-                            {/* Time column */}
-                            <div className="flex flex-col text-xs text-muted-foreground pr-3 border-r border-border/60 shrink-0">
-                              {Array.from({ length: 12 }).map((_, i) => {
-                                const hour = 8 + i;
-                                return (
-                                  <div
-                                    key={hour}
-                                    className="h-12 flex items-start justify-end pr-2 pt-0.5"
-                                  >
-                                    <span className="font-medium text-[11px]">{`${hour.toString().padStart(2, "0")}:00`}</span>
-                                  </div>
-                                );
-                              })}
-                            </div>
+                        <CardContent className="p-1.5 sm:p-3 md:p-4 flex-1 flex flex-col min-h-0 overflow-hidden">
+                          <div className={cn(
+                            "grid flex-1 gap-1 sm:gap-2 md:gap-3 min-h-0",
+                            isMobile ? "grid-cols-1" : "grid-cols-[70px_minmax(0,1fr)]"
+                          )}>
+                            {/* Time column - Hidden on mobile */}
+                            {!isMobile && (
+                              <div className="flex flex-col text-xs text-muted-foreground pr-3 border-r border-border/60 shrink-0">
+                                {Array.from({ length: 12 }).map((_, i) => {
+                                  const hour = 8 + i;
+                                  return (
+                                    <div
+                                      key={hour}
+                                      className="h-12 flex items-start justify-end pr-2 pt-0.5"
+                                    >
+                                      <span className="font-medium text-[11px]">{`${hour.toString().padStart(2, "0")}:00`}</span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
                             {/* Day columns */}
                             <div className="flex flex-col overflow-x-auto overflow-y-hidden min-w-0">
                               <div
                                 className={cn(
-                                  "grid gap-2 flex-1 min-h-0",
-                                  view === "day" ? "grid-cols-1" : "grid-cols-7"
+                                  "grid gap-1 sm:gap-2 flex-1 min-h-0",
+                                  view === "day" ? "grid-cols-1" : isMobile ? "grid-cols-1" : "grid-cols-7"
                                 )}
                               >
                                 {(view === "day" ? [currentDate] : visibleDays.slice(0, 7)).map(
@@ -1158,13 +1183,13 @@ export default function TeamCalendar() {
                                     // Use events as part of key to force re-render when events change
                                     const eventsKey = `${key}-${dayEvents.length}-${dayEvents.map(e => e.id).join(',')}`;
                                     return (
-                                      <div key={eventsKey} className="flex flex-col">
+                                      <div key={eventsKey} className="flex flex-col min-w-0">
                                         {/* Column header */}
-                                        <div className="flex items-center justify-between mb-2 px-2">
-                                          <div className="flex items-baseline gap-2">
+                                        <div className="flex items-center justify-between mb-1 sm:mb-2 px-1 sm:px-2">
+                                          <div className="flex items-baseline gap-1 sm:gap-2">
                                             <span
                                               className={cn(
-                                                "text-sm font-bold",
+                                                "text-xs sm:text-sm font-bold",
                                                 isToday(day) && "text-primary"
                                               )}
                                             >
@@ -1174,22 +1199,22 @@ export default function TeamCalendar() {
                                               })}
                                             </span>
                                             {isToday(day) && (
-                                              <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+                                              <div className="w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full bg-primary animate-pulse" />
                                             )}
                                           </div>
-                                          <div className="flex items-center gap-1">
+                                          <div className="flex items-center gap-0.5 sm:gap-1">
                                             {summary.holidays > 0 && (
-                                              <Badge className="bg-red-100 text-red-900 border-0 text-[9px] px-1.5 h-4">
+                                              <Badge className="bg-red-100 text-red-900 border-0 text-[8px] sm:text-[9px] px-1 sm:px-1.5 h-3.5 sm:h-4">
                                                 🎉
                                               </Badge>
                                             )}
                                             {summary.meetings > 0 && (
-                                              <Badge className="bg-primary/10 text-primary border-0 text-[9px] px-1.5 h-4">
+                                              <Badge className="bg-primary/10 text-primary border-0 text-[8px] sm:text-[9px] px-1 sm:px-1.5 h-3.5 sm:h-4">
                                                 {summary.meetings}
                                               </Badge>
                                             )}
                                             {summary.tasks > 0 && (
-                                              <Badge className="bg-amber-100 text-amber-900 border-0 text-[9px] px-1.5 h-4">
+                                              <Badge className="bg-amber-100 text-amber-900 border-0 text-[8px] sm:text-[9px] px-1 sm:px-1.5 h-3.5 sm:h-4">
                                                 {summary.tasks}
                                               </Badge>
                                             )}
@@ -1197,28 +1222,28 @@ export default function TeamCalendar() {
                                         </div>
 
                                         {/* All-day row */}
-                                        <DroppableDay date={day} id={`day-${key}-all`}>
+                                        <DroppableDay date={day} id={`day-${key}-all`} className="min-h-[30px] sm:min-h-[40px]">
                                           {allDayEvents.map((ev) => (
                                             <DraggableEventCard key={`${ev.id}-${refreshKey}`} event={ev} />
                                           ))}
                                         </DroppableDay>
 
                                         {/* Timed events grid */}
-                                        <div className="mt-1.5 relative border border-border/60 rounded-lg bg-gradient-to-br from-muted/40 via-muted/25 to-background overflow-hidden shadow-md flex-1 min-h-0">
+                                        <div className="mt-1 sm:mt-1.5 relative border border-border/60 rounded-md sm:rounded-lg bg-gradient-to-br from-muted/40 via-muted/25 to-background overflow-hidden shadow-md flex-1 min-h-0">
                                           <div className="absolute inset-0 pointer-events-none">
                                             {Array.from({ length: 12 }).map((_, i) => (
                                               <div
                                                 key={i}
                                                 className={cn(
                                                   "border-b border-border/40",
-                                                  "h-12",
+                                                  isMobile ? "h-10" : "h-12",
                                                   i === 0 && "border-t"
                                                 )}
                                               />
                                             ))}
                                           </div>
                                           <DroppableDay date={day} id={`day-${key}-time`} className="h-full min-h-0">
-                                            <div className="relative h-full overflow-y-auto pt-0.5 px-1">
+                                            <div className="relative h-full overflow-y-auto pt-0.5 px-0.5 sm:px-1">
                                               {timedEvents.map((ev) => (
                                                 <StaticEventCard key={`${ev.id}-${refreshKey}`} event={ev} />
                                               ))}
