@@ -63,7 +63,7 @@ export default function MeetingLobby() {
         const profile = await apiGet<any>(`/users/${cachedUser.id}`);
         if (profile?.id) {
           let avatarUrl = profile.avatar || undefined;
-          if (avatarUrl && avatarUrl.startsWith('/')) {
+          if (avatarUrl && avatarUrl.startsWith("/")) {
             avatarUrl = `${API_BASE}${avatarUrl}`;
           }
           setCurrentUser({ ...cachedUser, ...profile, avatar: avatarUrl });
@@ -87,7 +87,9 @@ export default function MeetingLobby() {
   const [joining, setJoining] = useState(false);
   const [participantCount, setParticipantCount] = useState(0);
   const [participantNames, setParticipantNames] = useState<string[]>([]);
-  const [roomParticipants, setRoomParticipants] = useState<Array<{ peerId: string; name: string; userId?: string; avatar?: string }>>([]);
+  const [roomParticipants, setRoomParticipants] = useState<
+    Array<{ peerId: string; name: string; userId?: string; avatar?: string }>
+  >([]);
   const { activeRooms } = usePresence();
   const [hasAudio, setHasAudio] = useState(false);
   const [hasVideo, setHasVideo] = useState(false);
@@ -121,6 +123,26 @@ export default function MeetingLobby() {
     .slice(0, 2)
     .toUpperCase();
 
+  // Check if user is already in this meeting (prevent duplicate tabs)
+  useEffect(() => {
+    if (!currentUser) return;
+
+    const room = activeRooms.find((r) => r.roomId === meetingCode);
+    const myParticipant = room?.participants.find(
+      (p) => p.userId === currentUser.id,
+    );
+
+    if (myParticipant) {
+      // User is already in this meeting, redirect directly to meeting room
+      console.log(
+        "[MeetingLobby] User already in meeting, redirecting to room",
+      );
+      navigate(`/meeting-room/${meetingData?.id || meetingCode}`, {
+        replace: true, // Replace history to prevent back button loop
+      });
+    }
+  }, [activeRooms, meetingCode, currentUser, navigate, meetingData]);
+
   // Fetch meeting info
   useEffect(() => {
     if (!currentUser) {
@@ -136,8 +158,12 @@ export default function MeetingLobby() {
         const headers = await auth.getAuthHeaders();
         const unwrap = (d: any) => d?.data ?? d; // unwrap TransformInterceptor { success, data, timestamp }
         const [byId, byCode] = await Promise.all([
-          fetch(`${API_BASE}/api/meetings/${meetingCode}`, { headers }).then((r) => (r.ok ? r.json().then(unwrap) : null)).catch(() => null),
-          fetch(`${API_BASE}/api/meetings/code/${meetingCode}`, { headers }).then((r) => (r.ok ? r.json().then(unwrap) : null)).catch(() => null),
+          fetch(`${API_BASE}/api/meetings/${meetingCode}`, { headers })
+            .then((r) => (r.ok ? r.json().then(unwrap) : null))
+            .catch(() => null),
+          fetch(`${API_BASE}/api/meetings/code/${meetingCode}`, { headers })
+            .then((r) => (r.ok ? r.json().then(unwrap) : null))
+            .catch(() => null),
         ]);
         return byId || byCode;
       };
@@ -148,13 +174,13 @@ export default function MeetingLobby() {
           const endTime = meeting.endTime ? new Date(meeting.endTime) : null;
           const isPast = endTime && endTime.getTime() < now.getTime();
           const isEnded = meeting.status === "ended" || isPast;
-          
+
           if (isEnded) {
             setError("This meeting has already ended and cannot be joined.");
             setLoading(false);
             return;
           }
-          
+
           setMeetingData(meeting);
           setShowPasswordInput(!!meeting.password);
           if (meeting.title) {
@@ -174,7 +200,7 @@ export default function MeetingLobby() {
     if (room) {
       setParticipantCount(room.participants.length);
       setParticipantNames(
-        room.participants.map((p: any) => p.name?.split(" ")[0] || "Someone")
+        room.participants.map((p: any) => p.name?.split(" ")[0] || "Someone"),
       );
       setRoomParticipants(room.participants || []);
     } else {
@@ -191,20 +217,21 @@ export default function MeetingLobby() {
     }
     if (stream) {
       // Force video to play and show immediately
-      videoRef.current.play()
+      videoRef.current
+        .play()
         .then(() => {
           // Ensure video is visible
           if (videoRef.current) {
-            videoRef.current.style.display = 'block';
-            videoRef.current.style.opacity = '1';
+            videoRef.current.style.display = "block";
+            videoRef.current.style.opacity = "1";
           }
         })
         .catch((err) => {
-          console.warn('Video play error:', err);
+          console.warn("Video play error:", err);
           // Retry after a short delay
           setTimeout(() => {
             if (videoRef.current && stream) {
-      videoRef.current.play().catch(() => {});
+              videoRef.current.play().catch(() => {});
             }
           }, 100);
         });
@@ -258,7 +285,7 @@ export default function MeetingLobby() {
     // Try to load preferences from localStorage for initial stream
     let preferredCamera = selectedCamera;
     let preferredMic = selectedMic;
-    
+
     try {
       const devicePrefs = localStorage.getItem("device_preferences");
       if (devicePrefs) {
@@ -276,11 +303,19 @@ export default function MeetingLobby() {
 
     // Use selected devices from preferences if available
     const videoConstraints = preferredCamera
-      ? { deviceId: { exact: preferredCamera }, width: { ideal: 1280 }, height: { ideal: 720 } }
+      ? {
+          deviceId: { exact: preferredCamera },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        }
       : { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } };
-    
+
     const audioConstraints = preferredMic
-      ? { deviceId: { exact: preferredMic }, echoCancellation: true, noiseSuppression: true }
+      ? {
+          deviceId: { exact: preferredMic },
+          echoCancellation: true,
+          noiseSuppression: true,
+        }
       : { echoCancellation: true, noiseSuppression: true };
 
     const stream = await navigator.mediaDevices.getUserMedia({
@@ -292,10 +327,10 @@ export default function MeetingLobby() {
 
     const hasAudio = stream.getAudioTracks().length > 0;
     const hasVideo = stream.getVideoTracks().length > 0;
-    
+
     setHasAudio(hasAudio);
     setHasVideo(hasVideo);
-    
+
     // Set camera state based on actual video track
     const videoTrack = stream.getVideoTracks()[0];
     if (videoTrack) {
@@ -311,7 +346,7 @@ export default function MeetingLobby() {
 
     // Attach video immediately and ensure it's visible
     attachVideo(stream);
-    
+
     // Force update after a short delay to ensure video shows
     setTimeout(() => {
       if (videoRef.current && streamRef.current) {
@@ -345,18 +380,28 @@ export default function MeetingLobby() {
   }, []);
 
   // Save device preferences to localStorage
-  const saveDevicePreferences = (mic?: string, camera?: string, speaker?: string) => {
+  const saveDevicePreferences = (
+    mic?: string,
+    camera?: string,
+    speaker?: string,
+  ) => {
     try {
       const currentPrefs = localStorage.getItem("device_preferences");
       const prefs = currentPrefs ? JSON.parse(currentPrefs) : {};
-      
+
       const newPrefs = {
         ...prefs,
-        mic: mic !== undefined ? mic : (selectedMic || prefs.mic || "default"),
-        camera: camera !== undefined ? camera : (selectedCamera || prefs.camera || "default"),
-        speaker: speaker !== undefined ? speaker : (selectedSpeaker || prefs.speaker || "default"),
+        mic: mic !== undefined ? mic : selectedMic || prefs.mic || "default",
+        camera:
+          camera !== undefined
+            ? camera
+            : selectedCamera || prefs.camera || "default",
+        speaker:
+          speaker !== undefined
+            ? speaker
+            : selectedSpeaker || prefs.speaker || "default",
       };
-      
+
       localStorage.setItem("device_preferences", JSON.stringify(newPrefs));
     } catch (e) {
       console.warn("Failed to save device preferences:", e);
@@ -396,38 +441,56 @@ export default function MeetingLobby() {
       const devicePrefs = localStorage.getItem("device_preferences");
       if (devicePrefs) {
         const prefs = JSON.parse(devicePrefs);
-        
+
         // Check if saved mic exists in available devices
-        if (prefs.mic && prefs.mic !== "default" && audios.some(d => d.deviceId === prefs.mic)) {
+        if (
+          prefs.mic &&
+          prefs.mic !== "default" &&
+          audios.some((d) => d.deviceId === prefs.mic)
+        ) {
           setSelectedMic(prefs.mic);
         } else if (!selectedMic && audios[0]?.deviceId) {
           setSelectedMic(audios[0].deviceId);
         }
-        
+
         // Check if saved camera exists in available devices
-        if (prefs.camera && prefs.camera !== "default" && videos.some(d => d.deviceId === prefs.camera)) {
+        if (
+          prefs.camera &&
+          prefs.camera !== "default" &&
+          videos.some((d) => d.deviceId === prefs.camera)
+        ) {
           setSelectedCamera(prefs.camera);
         } else if (!selectedCamera && videos[0]?.deviceId) {
           setSelectedCamera(videos[0].deviceId);
         }
-        
+
         // Check if saved speaker exists in available devices
-        if (prefs.speaker && prefs.speaker !== "default" && speakers.some(d => d.deviceId === prefs.speaker)) {
+        if (
+          prefs.speaker &&
+          prefs.speaker !== "default" &&
+          speakers.some((d) => d.deviceId === prefs.speaker)
+        ) {
           setSelectedSpeaker(prefs.speaker);
         } else if (!selectedSpeaker && speakers[0]?.deviceId) {
           setSelectedSpeaker(speakers[0].deviceId);
         }
       } else {
         // No preferences saved, use defaults
-        if (!selectedMic && audios[0]?.deviceId) setSelectedMic(audios[0].deviceId);
-        if (!selectedCamera && videos[0]?.deviceId) setSelectedCamera(videos[0].deviceId);
-        if (!selectedSpeaker && speakers[0]?.deviceId) setSelectedSpeaker(speakers[0].deviceId);
+        if (!selectedMic && audios[0]?.deviceId)
+          setSelectedMic(audios[0].deviceId);
+        if (!selectedCamera && videos[0]?.deviceId)
+          setSelectedCamera(videos[0].deviceId);
+        if (!selectedSpeaker && speakers[0]?.deviceId)
+          setSelectedSpeaker(speakers[0].deviceId);
       }
     } catch (e) {
       // Fallback to defaults if parsing fails
-      if (!selectedMic && audios[0]?.deviceId) setSelectedMic(audios[0].deviceId);
-      if (!selectedCamera && videos[0]?.deviceId) setSelectedCamera(videos[0].deviceId);
-      if (!selectedSpeaker && speakers[0]?.deviceId) setSelectedSpeaker(speakers[0].deviceId);
+      if (!selectedMic && audios[0]?.deviceId)
+        setSelectedMic(audios[0].deviceId);
+      if (!selectedCamera && videos[0]?.deviceId)
+        setSelectedCamera(videos[0].deviceId);
+      if (!selectedSpeaker && speakers[0]?.deviceId)
+        setSelectedSpeaker(speakers[0].deviceId);
     }
   };
 
@@ -440,7 +503,7 @@ export default function MeetingLobby() {
         if (!alive) return;
         await enumerate();
         setupAudioMeter(stream);
-        
+
         // Force video to show after stream is ready
         setTimeout(() => {
           if (alive && videoRef.current && streamRef.current) {
@@ -464,7 +527,8 @@ export default function MeetingLobby() {
 
     return () => {
       alive = false;
-      if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+      if (animationFrameRef.current)
+        cancelAnimationFrame(animationFrameRef.current);
       audioContextRef.current?.close();
       navigator.mediaDevices?.removeEventListener?.("devicechange", handler);
     };
@@ -485,7 +549,11 @@ export default function MeetingLobby() {
     const stream = await ensureLocalStream();
     const oldTrack = stream.getAudioTracks()[0];
     const newStream = await navigator.mediaDevices.getUserMedia({
-      audio: { deviceId: { exact: deviceId }, echoCancellation: true, noiseSuppression: true },
+      audio: {
+        deviceId: { exact: deviceId },
+        echoCancellation: true,
+        noiseSuppression: true,
+      },
     });
     const newTrack = newStream.getAudioTracks()[0];
 
@@ -508,7 +576,11 @@ export default function MeetingLobby() {
     const stream = await ensureLocalStream();
     const oldTrack = stream.getVideoTracks()[0];
     const newStream = await navigator.mediaDevices.getUserMedia({
-      video: { deviceId: { exact: deviceId }, width: { ideal: 1280 }, height: { ideal: 720 } },
+      video: {
+        deviceId: { exact: deviceId },
+        width: { ideal: 1280 },
+        height: { ideal: 720 },
+      },
     });
     const newTrack = newStream.getVideoTracks()[0];
 
@@ -542,14 +614,14 @@ export default function MeetingLobby() {
       await ensureLocalStream();
       return;
     }
-    
+
     const newOn = !isCameraOn;
     const videoTracks = stream.getVideoTracks();
-    
+
     if (videoTracks.length > 0) {
       videoTracks.forEach((t) => (t.enabled = newOn));
-    setIsCameraOn(newOn);
-      
+      setIsCameraOn(newOn);
+
       // Force re-attach video if turning on
       if (newOn) {
         setTimeout(() => {
@@ -605,10 +677,12 @@ export default function MeetingLobby() {
     if (meetingCode && !isQuickHuddle && meetingData) {
       // Double-check if meeting has ended before joining
       const now = new Date();
-      const endTime = meetingData.endTime ? new Date(meetingData.endTime) : null;
+      const endTime = meetingData.endTime
+        ? new Date(meetingData.endTime)
+        : null;
       const isPast = endTime && endTime.getTime() < now.getTime();
       const isEnded = meetingData.status === "ended" || isPast;
-      
+
       if (isEnded) {
         setError("This meeting has already ended and cannot be joined.");
         setJoining(false);
@@ -620,18 +694,21 @@ export default function MeetingLobby() {
         }
         return;
       }
-      
+
       try {
         const headers = await auth.getAuthHeaders();
-        const res = await fetch(`${API_BASE}/api/meetings/${meetingData.id}/participants`, {
-          method: "POST",
-          headers: { ...headers, "Content-Type": "application/json" },
-          body: JSON.stringify({
-            userId: currentUser.id,
-            password: password || undefined,
-            skipWaitingRoom: false, // Will be in waiting room if enabled
-          }),
-        });
+        const res = await fetch(
+          `${API_BASE}/api/meetings/${meetingData.id}/participants`,
+          {
+            method: "POST",
+            headers: { ...headers, "Content-Type": "application/json" },
+            body: JSON.stringify({
+              userId: currentUser.id,
+              password: password || undefined,
+              skipWaitingRoom: false, // Will be in waiting room if enabled
+            }),
+          },
+        );
 
         if (!res.ok) {
           const data = await res.json().catch(() => ({}));
@@ -656,7 +733,10 @@ export default function MeetingLobby() {
       } catch (err: any) {
         console.error("Failed to join meeting (non-blocking):", err);
         // Show message but still allow navigation to proceed
-        setError(err?.message || "Failed to register this meeting in database, but you can still join.");
+        setError(
+          err?.message ||
+            "Failed to register this meeting in database, but you can still join.",
+        );
       }
     }
 
@@ -695,7 +775,6 @@ export default function MeetingLobby() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#0a0a0a] via-[#1a1a1a] to-[#0f0f0f] text-white flex items-center justify-center font-sans overflow-hidden p-4">
       <div className="w-full max-w-[1400px] grid grid-cols-1 lg:grid-cols-[1.2fr_0.8fr] gap-8 items-center">
-        
         {/* Left: Video Preview Section - Clean & Unobstructed */}
         <div className="space-y-6">
           {/* Header */}
@@ -710,8 +789,8 @@ export default function MeetingLobby() {
             </h1>
             <div className="flex items-center justify-center lg:justify-start gap-2 text-white/60">
               <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-            <span className="text-sm font-medium">{participantsInfo}</span>
-          </div>
+              <span className="text-sm font-medium">{participantsInfo}</span>
+            </div>
           </motion.div>
 
           {/* Video Preview - Full Width, No Overlays */}
@@ -723,16 +802,18 @@ export default function MeetingLobby() {
           >
             {/* Video element */}
             <video
-                    ref={videoRef}
-                    autoPlay
-                    playsInline
-                    muted
+              ref={videoRef}
+              autoPlay
+              playsInline
+              muted
               className={cn(
                 "absolute inset-0 w-full h-full object-cover scale-x-[-1] transition-opacity duration-500",
-                isCameraOn ? "opacity-100 z-10" : "opacity-0 z-0 pointer-events-none"
+                isCameraOn
+                  ? "opacity-100 z-10"
+                  : "opacity-0 z-0 pointer-events-none",
               )}
             />
-            
+
             {/* Avatar fallback */}
             <AnimatePresence>
               {!isCameraOn && (
@@ -750,11 +831,20 @@ export default function MeetingLobby() {
                     className="relative"
                   >
                     <Avatar className="w-40 h-40 ring-4 ring-white/10 shadow-2xl">
-                      <AvatarImage src={currentUser?.avatar ? (currentUser.avatar.startsWith('/') ? `${API_BASE}${currentUser.avatar}` : currentUser.avatar) : undefined} alt={userName} />
+                      <AvatarImage
+                        src={
+                          currentUser?.avatar
+                            ? currentUser.avatar.startsWith("/")
+                              ? `${API_BASE}${currentUser.avatar}`
+                              : currentUser.avatar
+                            : undefined
+                        }
+                        alt={userName}
+                      />
                       <AvatarFallback className="bg-gradient-to-br from-[#0E71EB] via-blue-600 to-indigo-700 text-white text-5xl font-bold">
-                          {userInitials}
-                        </AvatarFallback>
-                      </Avatar>
+                        {userInitials}
+                      </AvatarFallback>
+                    </Avatar>
                     <motion.div
                       animate={{ scale: [1, 1.1, 1] }}
                       transition={{ repeat: Infinity, duration: 2 }}
@@ -769,12 +859,16 @@ export default function MeetingLobby() {
                     transition={{ delay: 0.3 }}
                     className="mt-6 text-center"
                   >
-                    <h3 className="text-2xl font-bold text-white mb-2">{userName}</h3>
-                    <p className="text-white/50 text-sm">Your camera is turned off</p>
+                    <h3 className="text-2xl font-bold text-white mb-2">
+                      {userName}
+                    </h3>
+                    <p className="text-white/50 text-sm">
+                      Your camera is turned off
+                    </p>
                   </motion.div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             {/* Status Badge - Top Right Corner Only */}
             <div className="absolute top-4 right-4 z-30 flex flex-col gap-2">
@@ -787,7 +881,7 @@ export default function MeetingLobby() {
                   <Shield className="w-3 h-3 mr-1.5 text-green-400" /> Encrypted
                 </Badge>
               </motion.div>
-                {isMuted && (
+              {isMuted && (
                 <motion.div
                   initial={{ opacity: 0, scale: 0.8 }}
                   animate={{ opacity: 1, scale: 1 }}
@@ -797,8 +891,8 @@ export default function MeetingLobby() {
                     <MicOff className="w-3 h-3 mr-1.5" /> Muted
                   </Badge>
                 </motion.div>
-                )}
-              </div>
+              )}
+            </div>
           </motion.div>
 
           {/* Control Buttons - Below Video, Clean Design */}
@@ -808,18 +902,22 @@ export default function MeetingLobby() {
             transition={{ duration: 0.5, delay: 0.3 }}
             className="flex items-center justify-center gap-4"
           >
-                      <Button
-                        onClick={toggleMute}
+            <Button
+              onClick={toggleMute}
               size="lg"
-                        className={cn(
+              className={cn(
                 "px-8 py-6 rounded-xl border-2 transition-all duration-300 shadow-xl font-semibold text-base",
                 "hover:scale-105 active:scale-95",
-                          isMuted
+                isMuted
                   ? "bg-red-500/20 border-red-500/50 text-red-400 hover:bg-red-500/30 hover:border-red-400 hover:shadow-red-500/20"
-                  : "bg-green-500/20 border-green-500/50 text-green-400 hover:bg-green-500/30 hover:border-green-400 hover:shadow-green-500/20"
+                  : "bg-green-500/20 border-green-500/50 text-green-400 hover:bg-green-500/30 hover:border-green-400 hover:shadow-green-500/20",
               )}
             >
-              {isMuted ? <MicOff className="w-5 h-5 mr-2" /> : <Mic className="w-5 h-5 mr-2" />}
+              {isMuted ? (
+                <MicOff className="w-5 h-5 mr-2" />
+              ) : (
+                <Mic className="w-5 h-5 mr-2" />
+              )}
               {isMuted ? "Unmute" : "Mute"}
             </Button>
             <Button
@@ -830,12 +928,16 @@ export default function MeetingLobby() {
                 "hover:scale-105 active:scale-95",
                 !isCameraOn
                   ? "bg-red-500/20 border-red-500/50 text-red-400 hover:bg-red-500/30 hover:border-red-400 hover:shadow-red-500/20"
-                  : "bg-green-500/20 border-green-500/50 text-green-400 hover:bg-green-500/30 hover:border-green-400 hover:shadow-green-500/20"
-                        )}
-                      >
-              {isCameraOn ? <VideoIcon className="w-5 h-5 mr-2" /> : <VideoOff className="w-5 h-5 mr-2" />}
+                  : "bg-green-500/20 border-green-500/50 text-green-400 hover:bg-green-500/30 hover:border-green-400 hover:shadow-green-500/20",
+              )}
+            >
+              {isCameraOn ? (
+                <VideoIcon className="w-5 h-5 mr-2" />
+              ) : (
+                <VideoOff className="w-5 h-5 mr-2" />
+              )}
               {isCameraOn ? "Stop Video" : "Start Video"}
-                      </Button>
+            </Button>
           </motion.div>
 
           {/* Audio Meter - Subtle Indicator */}
@@ -848,7 +950,9 @@ export default function MeetingLobby() {
               <Volume2 className="w-4 h-4 text-green-400" />
               <div className="flex-1 h-2 bg-white/5 rounded-full overflow-hidden">
                 <motion.div
-                  animate={{ width: `${Math.min(100, (audioLevel / 255) * 100)}%` }}
+                  animate={{
+                    width: `${Math.min(100, (audioLevel / 255) * 100)}%`,
+                  }}
                   transition={{ duration: 0.1 }}
                   className="h-full bg-gradient-to-r from-green-400 to-green-500 rounded-full"
                 />
@@ -885,22 +989,39 @@ export default function MeetingLobby() {
                 className="flex items-center gap-4 p-6 bg-gradient-to-br from-white/5 to-white/0 rounded-xl border border-white/10"
               >
                 <Avatar className="h-20 w-20 ring-4 ring-[#0E71EB]/30 shadow-xl">
-                  <AvatarImage src={currentUser?.avatar ? (currentUser.avatar.startsWith('/') ? `${API_BASE}${currentUser.avatar}` : currentUser.avatar) : undefined} alt={userName} />
+                  <AvatarImage
+                    src={
+                      currentUser?.avatar
+                        ? currentUser.avatar.startsWith("/")
+                          ? `${API_BASE}${currentUser.avatar}`
+                          : currentUser.avatar
+                        : undefined
+                    }
+                    alt={userName}
+                  />
                   <AvatarFallback className="bg-gradient-to-br from-[#0E71EB] to-indigo-600 text-white text-2xl font-bold">
                     {userInitials}
                   </AvatarFallback>
                 </Avatar>
                 <div className="min-w-0 flex-1">
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-white/40 mb-1.5">Joining as</p>
-                  <p className="text-xl font-bold text-white truncate leading-tight mb-1">{userName}</p>
-                  <p className="text-xs text-white/50 truncate">{currentUser?.email}</p>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-white/40 mb-1.5">
+                    Joining as
+                  </p>
+                  <p className="text-xl font-bold text-white truncate leading-tight mb-1">
+                    {userName}
+                  </p>
+                  <p className="text-xs text-white/50 truncate">
+                    {currentUser?.email}
+                  </p>
                 </div>
               </motion.div>
 
               {/* Device Controls - Advanced Settings */}
               <div className="space-y-5">
                 <div className="flex items-center justify-between px-1">
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">Device Controls</p>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">
+                    Device Controls
+                  </p>
                   <Dialog>
                     <DialogTrigger asChild>
                       <button
@@ -915,7 +1036,8 @@ export default function MeetingLobby() {
                       <DialogHeader>
                         <DialogTitle>Device settings</DialogTitle>
                         <DialogDescription className="text-white/60">
-                          Choose your microphone, speaker, and camera before joining.
+                          Choose your microphone, speaker, and camera before
+                          joining.
                         </DialogDescription>
                       </DialogHeader>
                       <div className="space-y-5 pt-2">
@@ -932,7 +1054,8 @@ export default function MeetingLobby() {
                                   onClick={() => handleSelectMic(d.deviceId)}
                                   className={cn(
                                     "w-full flex items-center justify-between rounded-lg px-3 py-2 text-sm bg-white/5 hover:bg-white/10 transition-colors",
-                                    selectedMic === d.deviceId && "ring-1 ring-[#0E71EB] bg-white/10"
+                                    selectedMic === d.deviceId &&
+                                      "ring-1 ring-[#0E71EB] bg-white/10",
                                   )}
                                 >
                                   <span className="truncate">{d.label}</span>
@@ -942,7 +1065,9 @@ export default function MeetingLobby() {
                                 </button>
                               ))
                             ) : (
-                              <p className="text-xs text-white/40">No microphones detected</p>
+                              <p className="text-xs text-white/40">
+                                No microphones detected
+                              </p>
                             )}
                           </div>
                         </div>
@@ -957,10 +1082,13 @@ export default function MeetingLobby() {
                                 <button
                                   key={d.deviceId}
                                   type="button"
-                                  onClick={() => handleSelectSpeaker(d.deviceId)}
+                                  onClick={() =>
+                                    handleSelectSpeaker(d.deviceId)
+                                  }
                                   className={cn(
                                     "w-full flex items-center justify-between rounded-lg px-3 py-2 text-sm bg-white/5 hover:bg-white/10 transition-colors",
-                                    selectedSpeaker === d.deviceId && "ring-1 ring-[#0E71EB] bg-white/10"
+                                    selectedSpeaker === d.deviceId &&
+                                      "ring-1 ring-[#0E71EB] bg-white/10",
                                   )}
                                 >
                                   <span className="truncate">{d.label}</span>
@@ -970,7 +1098,9 @@ export default function MeetingLobby() {
                                 </button>
                               ))
                             ) : (
-                              <p className="text-xs text-white/40">No speakers detected</p>
+                              <p className="text-xs text-white/40">
+                                No speakers detected
+                              </p>
                             )}
                           </div>
                         </div>
@@ -988,7 +1118,8 @@ export default function MeetingLobby() {
                                   onClick={() => handleSelectCamera(d.deviceId)}
                                   className={cn(
                                     "w-full flex items-center justify-between rounded-lg px-3 py-2 text-sm bg-white/5 hover:bg-white/10 transition-colors",
-                                    selectedCamera === d.deviceId && "ring-1 ring-[#0E71EB] bg-white/10"
+                                    selectedCamera === d.deviceId &&
+                                      "ring-1 ring-[#0E71EB] bg-white/10",
                                   )}
                                 >
                                   <span className="truncate">{d.label}</span>
@@ -998,7 +1129,9 @@ export default function MeetingLobby() {
                                 </button>
                               ))
                             ) : (
-                              <p className="text-xs text-white/40">No cameras detected</p>
+                              <p className="text-xs text-white/40">
+                                No cameras detected
+                              </p>
                             )}
                           </div>
                         </div>
@@ -1006,62 +1139,89 @@ export default function MeetingLobby() {
                     </DialogContent>
                   </Dialog>
                 </div>
-                
+
                 {/* Microphone Control */}
                 <div className="space-y-2">
                   <div className="flex items-center justify-between px-1">
-                    <span className="text-sm font-medium text-white/80">Microphone</span>
+                    <span className="text-sm font-medium text-white/80">
+                      Microphone
+                    </span>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="sm" className="h-8 px-2 text-white/60 hover:text-white">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 px-2 text-white/60 hover:text-white"
+                        >
                           <ChevronUp className="w-3 h-3" />
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent className="bg-[#1a1a1a] border-white/10 text-white w-64">
-                        <div className="px-3 py-2 text-xs font-bold uppercase tracking-wider text-white/30">Select Microphone</div>
-                      {audioInputs.map((d) => (
-                        <DropdownMenuItem
-                          key={d.deviceId}
-                          onClick={() => handleSelectMic(d.deviceId)}
-                            className={cn("px-3 py-2 text-sm", selectedMic === d.deviceId && "bg-white/10")}
-                        >
-                            {selectedMic === d.deviceId && <Check className="w-3 h-3 mr-2 text-[#0E71EB]" />}
-                          <span className="truncate">{d.label}</span>
-                        </DropdownMenuItem>
-                      ))}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-                  <div className={cn(
-                    "flex items-center gap-3 p-4 rounded-xl border transition-all duration-300",
-                    isMuted ? "bg-red-500/10 border-red-500/30" : "bg-green-500/10 border-green-500/30"
-                  )}>
-                    {isMuted ? <MicOff className="w-5 h-5 text-red-400" /> : <Mic className="w-5 h-5 text-green-400" />}
-                    <span className="text-sm font-semibold text-white/90 flex-1">{isMuted ? "Muted" : "Active"}</span>
-                      <Button
+                        <div className="px-3 py-2 text-xs font-bold uppercase tracking-wider text-white/30">
+                          Select Microphone
+                        </div>
+                        {audioInputs.map((d) => (
+                          <DropdownMenuItem
+                            key={d.deviceId}
+                            onClick={() => handleSelectMic(d.deviceId)}
+                            className={cn(
+                              "px-3 py-2 text-sm",
+                              selectedMic === d.deviceId && "bg-white/10",
+                            )}
+                          >
+                            {selectedMic === d.deviceId && (
+                              <Check className="w-3 h-3 mr-2 text-[#0E71EB]" />
+                            )}
+                            <span className="truncate">{d.label}</span>
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                  <div
+                    className={cn(
+                      "flex items-center gap-3 p-4 rounded-xl border transition-all duration-300",
+                      isMuted
+                        ? "bg-red-500/10 border-red-500/30"
+                        : "bg-green-500/10 border-green-500/30",
+                    )}
+                  >
+                    {isMuted ? (
+                      <MicOff className="w-5 h-5 text-red-400" />
+                    ) : (
+                      <Mic className="w-5 h-5 text-green-400" />
+                    )}
+                    <span className="text-sm font-semibold text-white/90 flex-1">
+                      {isMuted ? "Muted" : "Active"}
+                    </span>
+                    <Button
                       onClick={toggleMute}
                       size="sm"
                       variant="ghost"
-                        className={cn(
+                      className={cn(
                         "h-8 px-3 rounded-lg transition-all",
-                        isMuted ? "text-red-400 hover:bg-red-500/20" : "text-green-400 hover:bg-green-500/20"
-                        )}
-                      >
+                        isMuted
+                          ? "text-red-400 hover:bg-red-500/20"
+                          : "text-green-400 hover:bg-green-500/20",
+                      )}
+                    >
                       {isMuted ? "Unmute" : "Mute"}
-                      </Button>
+                    </Button>
                   </div>
                 </div>
 
                 {showPasswordInput && (
                   <div className="space-y-2">
                     <div className="flex items-center justify-between px-1">
-                      <span className="text-sm font-medium text-white/80">Meeting Password</span>
+                      <span className="text-sm font-medium text-white/80">
+                        Meeting Password
+                      </span>
                     </div>
                     <div className="flex items-center gap-3 p-4 rounded-xl border bg-white/5 border-white/10">
                       <Shield className="w-5 h-5 text-[#0E71EB]" />
-                      <Input 
-                        type="password" 
-                        placeholder="Enter room password" 
+                      <Input
+                        type="password"
+                        placeholder="Enter room password"
                         className="bg-transparent border-0 focus-visible:ring-0 text-white placeholder:text-white/20 p-0 h-auto"
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
@@ -1073,52 +1233,80 @@ export default function MeetingLobby() {
                 {/* Camera Control */}
                 <div className="space-y-2">
                   <div className="flex items-center justify-between px-1">
-                    <span className="text-sm font-medium text-white/80">Camera</span>
+                    <span className="text-sm font-medium text-white/80">
+                      Camera
+                    </span>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="sm" className="h-8 px-2 text-white/60 hover:text-white">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 px-2 text-white/60 hover:text-white"
+                        >
                           <ChevronUp className="w-3 h-3" />
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent className="bg-[#1a1a1a] border-white/10 text-white w-64">
-                        <div className="px-3 py-2 text-xs font-bold uppercase tracking-wider text-white/30">Select Camera</div>
-                      {videoInputs.map((d) => (
-                        <DropdownMenuItem
-                          key={d.deviceId}
-                          onClick={() => handleSelectCamera(d.deviceId)}
-                            className={cn("px-3 py-2 text-sm", selectedCamera === d.deviceId && "bg-white/10")}
-                        >
-                            {selectedCamera === d.deviceId && <Check className="w-3 h-3 mr-2 text-[#0E71EB]" />}
-                          <span className="truncate">{d.label}</span>
-                        </DropdownMenuItem>
-                      ))}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                        <div className="px-3 py-2 text-xs font-bold uppercase tracking-wider text-white/30">
+                          Select Camera
+                        </div>
+                        {videoInputs.map((d) => (
+                          <DropdownMenuItem
+                            key={d.deviceId}
+                            onClick={() => handleSelectCamera(d.deviceId)}
+                            className={cn(
+                              "px-3 py-2 text-sm",
+                              selectedCamera === d.deviceId && "bg-white/10",
+                            )}
+                          >
+                            {selectedCamera === d.deviceId && (
+                              <Check className="w-3 h-3 mr-2 text-[#0E71EB]" />
+                            )}
+                            <span className="truncate">{d.label}</span>
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
-                    <div className={cn(
-                    "flex items-center gap-3 p-4 rounded-xl border transition-all duration-300",
-                    !isCameraOn ? "bg-red-500/10 border-red-500/30" : "bg-green-500/10 border-green-500/30"
-                    )}>
-                      {!isCameraOn ? <VideoOff className="w-5 h-5 text-red-400" /> : <VideoIcon className="w-5 h-5 text-green-400" />}
-                    <span className="text-sm font-semibold text-white/90 flex-1">{isCameraOn ? "Video On" : "Video Off"}</span>
+                  <div
+                    className={cn(
+                      "flex items-center gap-3 p-4 rounded-xl border transition-all duration-300",
+                      !isCameraOn
+                        ? "bg-red-500/10 border-red-500/30"
+                        : "bg-green-500/10 border-green-500/30",
+                    )}
+                  >
+                    {!isCameraOn ? (
+                      <VideoOff className="w-5 h-5 text-red-400" />
+                    ) : (
+                      <VideoIcon className="w-5 h-5 text-green-400" />
+                    )}
+                    <span className="text-sm font-semibold text-white/90 flex-1">
+                      {isCameraOn ? "Video On" : "Video Off"}
+                    </span>
                     <Button
                       onClick={toggleCamera}
                       size="sm"
                       variant="ghost"
                       className={cn(
                         "h-8 px-3 rounded-lg transition-all",
-                        !isCameraOn ? "text-red-400 hover:bg-red-500/20" : "text-green-400 hover:bg-green-500/20"
+                        !isCameraOn
+                          ? "text-red-400 hover:bg-red-500/20"
+                          : "text-green-400 hover:bg-green-500/20",
                       )}
                     >
                       {isCameraOn ? "Stop" : "Start"}
                     </Button>
-                    </div>
                   </div>
                 </div>
+              </div>
 
               {/* Action Buttons - Premium Design */}
               <div className="pt-4 space-y-3">
-                <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+                <motion.div
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                >
                   <Button
                     className="w-full h-14 text-base font-bold bg-gradient-to-r from-[#0E71EB] to-blue-600 hover:from-[#0c62cc] hover:to-blue-700 text-white rounded-xl shadow-[0_8px_24px_rgba(14,113,235,0.4)] transition-all flex items-center justify-center gap-2"
                     onClick={handleJoin}
@@ -1132,21 +1320,25 @@ export default function MeetingLobby() {
                     ) : (
                       <>
                         <Check className="w-5 h-5" />
-                        <span>{participantCount > 0 ? "Join Meeting" : "Start Meeting"}</span>
+                        <span>
+                          {participantCount > 0
+                            ? "Join Meeting"
+                            : "Start Meeting"}
+                        </span>
                       </>
                     )}
                   </Button>
                 </motion.div>
-                  <Button
-                    variant="ghost"
+                <Button
+                  variant="ghost"
                   className="w-full h-11 text-white/50 hover:text-white hover:bg-white/5 rounded-xl font-medium transition-all"
-                    onClick={handleCancel}
-                  >
+                  onClick={handleCancel}
+                >
                   Cancel
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
 
           {/* People in this meeting */}
           {roomParticipants.length > 0 && (
@@ -1160,7 +1352,9 @@ export default function MeetingLobby() {
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2">
                       <Users className="w-4 h-4 text-green-400" />
-                      <p className="text-xs font-bold uppercase tracking-widest text-white/40">In this meeting</p>
+                      <p className="text-xs font-bold uppercase tracking-widest text-white/40">
+                        In this meeting
+                      </p>
                     </div>
                     <Badge className="bg-green-500/20 text-green-400 border-0 text-[10px] px-2">
                       {roomParticipants.length}
@@ -1195,8 +1389,12 @@ export default function MeetingLobby() {
                             </AvatarFallback>
                           </Avatar>
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-white truncate">{p.name}</p>
-                            <p className="text-[10px] text-white/40">In meeting</p>
+                            <p className="text-sm font-medium text-white truncate">
+                              {p.name}
+                            </p>
+                            <p className="text-[10px] text-white/40">
+                              In meeting
+                            </p>
                           </div>
                           <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
                         </div>
@@ -1214,20 +1412,25 @@ export default function MeetingLobby() {
           )}
 
           {/* Waiting Room Notice */}
-          {meetingData?.waitingRoom && meetingData?.hostId !== currentUser?.id && (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.65 }}
-              className="flex items-center gap-3 p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-xl backdrop-blur-sm"
-            >
-              <Shield className="w-5 h-5 text-yellow-400 flex-shrink-0" />
-              <div>
-                <p className="text-sm font-medium text-yellow-300">Waiting Room Enabled</p>
-                <p className="text-[11px] text-yellow-400/60">The host will let you in when they're ready</p>
-              </div>
-            </motion.div>
-          )}
+          {meetingData?.waitingRoom &&
+            meetingData?.hostId !== currentUser?.id && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.65 }}
+                className="flex items-center gap-3 p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-xl backdrop-blur-sm"
+              >
+                <Shield className="w-5 h-5 text-yellow-400 flex-shrink-0" />
+                <div>
+                  <p className="text-sm font-medium text-yellow-300">
+                    Waiting Room Enabled
+                  </p>
+                  <p className="text-[11px] text-yellow-400/60">
+                    The host will let you in when they're ready
+                  </p>
+                </div>
+              </motion.div>
+            )}
 
           {/* Security Badge */}
           <motion.div

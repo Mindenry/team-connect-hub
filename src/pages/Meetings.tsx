@@ -859,111 +859,111 @@ export default function Meetings() {
                 </div>
               </div>
 
-              <div className="flex items-center gap-1.5 sm:gap-2 self-stretch sm:self-auto justify-end">
+              <div className="flex items-center gap-1 sm:gap-1.5 md:gap-2 self-stretch sm:self-auto justify-end flex-wrap">
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-8 sm:h-9 px-2.5 text-[11px] sm:text-xs text-muted-foreground hover:text-foreground"
+                  className="h-8 sm:h-9 px-2 sm:px-2.5 text-[10px] sm:text-[11px] md:text-xs text-muted-foreground hover:text-foreground"
                   onClick={() => setShowJoinByCode(true)}
                 >
-                  <Grid3x3 className="w-3.5 h-3.5 mr-1" />
-                  Join by code
+                  <Grid3x3 className="w-3 h-3 sm:w-3.5 sm:h-3.5 mr-0.5 sm:mr-1" />
+                  <span className="hidden xs:inline">Join by code</span>
                 </Button>
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button
                       variant="outline"
                       size="sm"
-                      className="h-8 sm:h-9 gap-1.5 px-2.5 text-[11px] sm:text-xs border-border/60 bg-background/50 hover:bg-background"
+                      className="h-8 sm:h-9 gap-1 sm:gap-1.5 px-2 sm:px-2.5 text-[10px] sm:text-[11px] md:text-xs border-border/60 bg-background/50 hover:bg-background"
                       onClick={() => navigate(createQuickHuddlePath())}
                     >
-                      <Zap className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
-                      <span className="hidden sm:inline">Quick Huddle</span>
+                      <Zap className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                      <span className="hidden md:inline">Quick Huddle</span>
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>เริ่มประชุมด่วนทันที</TooltipContent>
                 </Tooltip>
                 <Button
                   size="sm"
-                  className="h-8 sm:h-9 gap-1.5 px-2.5 text-[11px] sm:text-xs font-medium shrink-0"
+                  className="h-8 sm:h-9 gap-1 sm:gap-1.5 px-2 sm:px-2.5 text-[10px] sm:text-[11px] md:text-xs font-medium shrink-0"
                   onClick={() => setShowCreateMeeting(true)}
                 >
-                  <Plus className="w-3.5 h-3.5 shrink-0" />
+                  <Plus className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
                   <span className="hidden sm:inline">New Meeting</span>
                 </Button>
               </div>
             </div>
 
             {/* Overview stats */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-2.5 sm:gap-3">
-              <div className="rounded-xl border border-border/60 bg-card/60 px-3 py-2.5 flex flex-col justify-between">
-                <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-2 sm:gap-3">
+              <div className="rounded-xl border border-border/60 bg-card/60 px-2.5 sm:px-3 py-2 sm:py-2.5 flex flex-col justify-between">
+                <span className="text-[9px] sm:text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
                   ทั้งหมด
                 </span>
-                <div className="flex items-baseline gap-1 mt-1.5">
-                  <span className="text-lg sm:text-xl font-semibold tabular-nums">
+                <div className="flex items-baseline gap-0.5 sm:gap-1 mt-1">
+                  <span className="text-base sm:text-lg md:text-xl font-semibold tabular-nums">
                     {stats.total}
                   </span>
-                  <span className="text-[10px] text-muted-foreground">
+                  <span className="text-[9px] sm:text-[10px] text-muted-foreground">
                     meetings
                   </span>
                 </div>
               </div>
               <div
                 className={cn(
-                  "rounded-xl border px-3 py-2.5 flex flex-col justify-between",
+                  "rounded-xl border px-2.5 sm:px-3 py-2 sm:py-2.5 flex flex-col justify-between",
                   stats.live > 0
                     ? "border-emerald-500/60 bg-emerald-500/5"
                     : "border-border/60 bg-card/60",
                 )}
               >
-                <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
-                  Live ตอนนี้
+                <span className="text-[9px] sm:text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+                  Live
                 </span>
-                <div className="flex items-baseline gap-1 mt-1.5">
-                  <span className="text-lg sm:text-xl font-semibold tabular-nums">
+                <div className="flex items-baseline gap-0.5 sm:gap-1 mt-1">
+                  <span className="text-base sm:text-lg md:text-xl font-semibold tabular-nums">
                     {stats.live}
                   </span>
-                  <span className="text-[10px] text-muted-foreground">
+                  <span className="text-[9px] sm:text-[10px] text-muted-foreground">
                     rooms
                   </span>
                 </div>
               </div>
-              <div className="rounded-xl border border-border/60 bg-card/60 px-3 py-2.5 flex flex-col justify-between">
-                <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+              <div className="rounded-xl border border-border/60 bg-card/60 px-2.5 sm:px-3 py-2 sm:py-2.5 flex flex-col justify-between">
+                <span className="text-[9px] sm:text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
                   วันนี้
                 </span>
-                <div className="flex items-baseline gap-1 mt-1.5">
-                  <span className="text-lg sm:text-xl font-semibold tabular-nums">
+                <div className="flex items-baseline gap-0.5 sm:gap-1 mt-1">
+                  <span className="text-base sm:text-lg md:text-xl font-semibold tabular-nums">
                     {stats.today}
                   </span>
-                  <span className="text-[10px] text-muted-foreground">
+                  <span className="text-[9px] sm:text-[10px] text-muted-foreground">
                     meetings
                   </span>
                 </div>
               </div>
-              <div className="rounded-xl border border-border/60 bg-card/60 px-3 py-2.5 flex flex-col justify-between">
-                <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+              <div className="rounded-xl border border-border/60 bg-card/60 px-2.5 sm:px-3 py-2 sm:py-2.5 flex flex-col justify-between">
+                <span className="text-[9px] sm:text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
                   กำลังจะถึง
                 </span>
-                <div className="flex items-baseline gap-1 mt-1.5">
-                  <span className="text-lg sm:text-xl font-semibold tabular-nums">
+                <div className="flex items-baseline gap-0.5 sm:gap-1 mt-1">
+                  <span className="text-base sm:text-lg md:text-xl font-semibold tabular-nums">
                     {stats.upcoming}
                   </span>
-                  <span className="text-[10px] text-muted-foreground">
+                  <span className="text-[9px] sm:text-[10px] text-muted-foreground">
                     upcoming
                   </span>
                 </div>
               </div>
-              <div className="hidden lg:flex rounded-xl border border-border/60 bg-card/60 px-3 py-2.5 flex-col justify-between">
-                <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
-                  ที่ผ่านมาแล้ว
+              <div className="rounded-xl border border-border/60 bg-card/60 px-2.5 sm:px-3 py-2 sm:py-2.5 flex flex-col justify-between col-span-2 sm:col-span-1">
+                <span className="text-[9px] sm:text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+                  ที่ผ่านมา
                 </span>
-                <div className="flex items-baseline gap-1 mt-1.5">
-                  <span className="text-lg sm:text-xl font-semibold tabular-nums">
+                <div className="flex items-baseline gap-0.5 sm:gap-1 mt-1">
+                  <span className="text-base sm:text-lg md:text-xl font-semibold tabular-nums">
                     {stats.past}
                   </span>
-                  <span className="text-[10px] text-muted-foreground">
+                  <span className="text-[9px] sm:text-[10px] text-muted-foreground">
                     ended
                   </span>
                 </div>
@@ -978,7 +978,7 @@ export default function Meetings() {
             {/* Toolbar */}
             <div className="py-3 sm:py-4 md:py-6 space-y-3 sm:space-y-4">
               {/* Tab Pills */}
-              <div className="flex items-center gap-0.5 sm:gap-1 p-0.5 sm:p-1 bg-muted/40 rounded-lg border border-border/50 backdrop-blur-sm w-fit overflow-x-auto">
+              <div className="flex items-center gap-0.5 sm:gap-1 p-0.5 sm:p-1 bg-muted/40 rounded-lg border border-border/50 backdrop-blur-sm w-full sm:w-fit overflow-x-auto flex-nowrap">
                 {[
                   {
                     id: "all" as TabFilter,
@@ -1030,7 +1030,7 @@ export default function Meetings() {
 
               {/* Search & Actions */}
               <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
-                <div className="relative flex-1 min-w-0 sm:min-w-[280px]">
+                <div className="relative flex-1 min-w-0">
                   <Search className="absolute left-2.5 sm:left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 sm:w-4 sm:h-4 text-muted-foreground" />
                   <Input
                     placeholder="ค้นหาการประชุม..."

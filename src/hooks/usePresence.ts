@@ -2,10 +2,11 @@ import {
   usePresenceContext,
   setCurrentMeeting,
   clearCurrentMeeting,
+  getCurrentMeeting,
 } from "@/contexts/PresenceContext";
 
 // Re-export for backward compatibility
-export { setCurrentMeeting, clearCurrentMeeting };
+export { setCurrentMeeting, clearCurrentMeeting, getCurrentMeeting };
 
 export function usePresence() {
   const context = usePresenceContext();

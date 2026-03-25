@@ -74,7 +74,11 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { auth } from "@/lib/auth";
 import { getSocket } from "@/lib/websocket";
 import { toast } from "sonner";
-import { setCurrentMeeting, clearCurrentMeeting } from "@/hooks/usePresence";
+import {
+  setCurrentMeeting,
+  clearCurrentMeeting,
+  getCurrentMeeting,
+} from "@/hooks/usePresence";
 import {
   meetingPiPJoin,
   meetingPiPLeave,
@@ -381,9 +385,8 @@ function MeetingRoomUI({
   const [copied, setCopied] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
-  const [activeRecorder, setActiveRecorder] = useState<MeetingRecordingStatus | null>(
-    null,
-  );
+  const [activeRecorder, setActiveRecorder] =
+    useState<MeetingRecordingStatus | null>(null);
   const [endingMeeting, setEndingMeeting] = useState(false);
   const [isHandRaised, setIsHandRaised] = useState(false);
 
@@ -414,7 +417,9 @@ function MeetingRoomUI({
   );
   const [isMutingAll, setIsMutingAll] = useState(false);
   const [isAdmittingAll, setIsAdmittingAll] = useState(false);
-  const [quickHuddleHostUserId, setQuickHuddleHostUserId] = useState<string | null>(null);
+  const [quickHuddleHostUserId, setQuickHuddleHostUserId] = useState<
+    string | null
+  >(null);
 
   // LiveKit hooks
   const room = useRoomContext();
@@ -473,7 +478,8 @@ function MeetingRoomUI({
   const effectiveHostUserId = isQuickHuddle
     ? quickHuddleHostUserId
     : (meetingData?.hostId as string | undefined);
-  const effectiveIsHost = !!currentUser?.id && effectiveHostUserId === currentUser.id;
+  const effectiveIsHost =
+    !!currentUser?.id && effectiveHostUserId === currentUser.id;
 
   const formatTime = (s: number) => {
     const m = Math.floor(s / 60);
@@ -545,6 +551,26 @@ function MeetingRoomUI({
     const init = async () => {
       if (!currentUser) {
         navigate("/login");
+        return;
+      }
+
+      // Check if user is already in this meeting from another tab/window
+      const existingMeeting = getCurrentMeeting();
+      if (
+        existingMeeting &&
+        existingMeeting.meetingId === meetingCode &&
+        existingMeeting.userId === currentUser.id
+      ) {
+        // User is already in this meeting in another tab - redirect back to meetings
+        console.log(
+          "[MeetingRoom] User already in this meeting from another tab, redirecting",
+        );
+        toast.warning("You're already in this meeting", {
+          description: "Redirecting to meetings page...",
+        });
+        setTimeout(() => {
+          navigate("/meetings", { replace: true });
+        }, 1500);
         return;
       }
 
@@ -812,14 +838,17 @@ function MeetingRoomUI({
     socket.on("meeting:participant:left", handleLeft);
     socket.on("meeting:participant:force_mute", handleForceMute);
     socket.on("meeting:recording:status", handleRecordingStatus);
-    socket.on("meeting:host:set", (data: { meetingId: string; hostUserId: string }) => {
-      if (data?.meetingId === meetingCode) {
-        setQuickHuddleHostUserId(data.hostUserId);
-        if (isQuickHuddle) {
-          setIsHost(data.hostUserId === currentUser?.id);
+    socket.on(
+      "meeting:host:set",
+      (data: { meetingId: string; hostUserId: string }) => {
+        if (data?.meetingId === meetingCode) {
+          setQuickHuddleHostUserId(data.hostUserId);
+          if (isQuickHuddle) {
+            setIsHost(data.hostUserId === currentUser?.id);
+          }
         }
-      }
-    });
+      },
+    );
 
     return () => {
       // DON'T emit meeting:leave on unmount - user might just be navigating
@@ -1065,7 +1094,8 @@ function MeetingRoomUI({
       let mixedAudioTrack: MediaStreamTrack | null = null;
       const disposableAudioTracks: MediaStreamTrack[] = [];
       try {
-        const audioSources: Array<{ track: MediaStreamTrack; gain: number }> = [];
+        const audioSources: Array<{ track: MediaStreamTrack; gain: number }> =
+          [];
 
         displayStream.getAudioTracks().forEach((t) => {
           audioSources.push({ track: t.clone(), gain: 1 });
@@ -1084,7 +1114,8 @@ function MeetingRoomUI({
           audioSources.forEach(({ track, gain }) => {
             disposableAudioTracks.push(track);
             const sourceStream = new MediaStream([track]);
-            const sourceNode = mixContext!.createMediaStreamSource(sourceStream);
+            const sourceNode =
+              mixContext!.createMediaStreamSource(sourceStream);
             const gainNode = mixContext!.createGain();
             gainNode.gain.value = gain;
             sourceNode.connect(gainNode);
@@ -1097,7 +1128,10 @@ function MeetingRoomUI({
           }
         }
       } catch (e) {
-        console.warn("Audio mixer initialization failed, fallback to direct tracks:", e);
+        console.warn(
+          "Audio mixer initialization failed, fallback to direct tracks:",
+          e,
+        );
       }
 
       let fallbackTracks = [
@@ -1109,14 +1143,17 @@ function MeetingRoomUI({
       // Ensure we really have at least one audio track; if not, try a permissive mic capture.
       if (fallbackTracks.length === 0) {
         try {
-          const micFallback = await navigator.mediaDevices.getUserMedia({ audio: true });
+          const micFallback = await navigator.mediaDevices.getUserMedia({
+            audio: true,
+          });
           const micTracks = micFallback.getAudioTracks();
           micTracks.forEach((t) => (t.enabled = true));
           fallbackTracks = [...fallbackTracks, ...micTracks];
         } catch (e) {
           console.warn("Fallback microphone capture failed:", e);
           toast.error("ไม่สามารถเข้าถึงไมโครโฟน", {
-            description: "โปรดตรวจสอบสิทธิ์ไมค์ของเบราว์เซอร์/ระบบ แล้วลองอีกครั้ง",
+            description:
+              "โปรดตรวจสอบสิทธิ์ไมค์ของเบราว์เซอร์/ระบบ แล้วลองอีกครั้ง",
           });
         }
       }
@@ -1153,9 +1190,10 @@ function MeetingRoomUI({
       };
 
       mediaRecorder.onstop = async () => {
-        // Create blob
+        // Create blob - note: backend will convert to MP4 via FFmpeg
         const blob = new Blob(recordedChunksRef.current, { type: mimeType });
         const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+        // Use .webm extension for upload, backend will convert and rename to .mp4
         const fileName = `meeting-recording-${timestamp}.webm`;
 
         // Cleanup streams
@@ -1169,11 +1207,17 @@ function MeetingRoomUI({
           mixContext.close().catch(() => undefined);
         }
 
-        // Upload to server - backend handles team/folder creation
+        // Upload to server - backend handles conversion and folder creation
+        const isQuick = !meetingId || meetingId.startsWith("quick-huddle");
         try {
-          toast.loading("Uploading recording to Shared Drive...", {
-            id: "recording-upload",
-          });
+          toast.loading(
+            isQuick
+              ? "Uploading recording to Personal Drive..."
+              : "Uploading recording to Shared Drive...",
+            {
+              id: "recording-upload",
+            },
+          );
 
           const formData = new FormData();
           formData.append("file", blob, fileName);
@@ -1198,25 +1242,32 @@ function MeetingRoomUI({
 
           if (response.ok) {
             const result = await response.json();
-            toast.success("Recording saved to Shared Drive!", {
-              id: "recording-upload",
-              description: `Folder: ${result.drive?.folder || "Meeting Recordings"} | Format: ${String(result.outputFormat || "webm").toUpperCase()}`,
-              action: {
-                label: "View",
-                onClick: () => {
-                  window.open(
-                    `/drive?teamId=${result.drive?.teamId || ""}`,
-                    "_blank",
-                  );
+            const isPersonal = isQuick || result.drive?.folder === "Personal";
+            toast.success(
+              isPersonal
+                ? "Recording saved to Personal Drive!"
+                : "Recording saved to Shared Drive!",
+              {
+                id: "recording-upload",
+                description: `Format: ${String(result.outputFormat || "mp4").toUpperCase()} | Duration: ${Math.floor(recordingTimeRef.current / 60)}:${String(recordingTimeRef.current % 60).padStart(2, "0")}`,
+                action: {
+                  label: "View",
+                  onClick: () => {
+                    window.open(
+                      `/drive?teamId=${result.drive?.teamId || ""}`,
+                      "_blank",
+                    );
+                  },
                 },
               },
-            });
+            );
           } else {
             const errorText = await response.text();
             console.error("Upload failed:", errorText);
             toast.error("Upload failed", {
               id: "recording-upload",
-              description: errorText || "Server returned an error while uploading.",
+              description:
+                errorText || "Server returned an error while uploading.",
             });
             // Fallback to local download
             const url = URL.createObjectURL(blob);
@@ -1304,7 +1355,15 @@ function MeetingRoomUI({
         });
       }
     }
-  }, [room, meetingId, meetingData, currentUser, meetingCode, userName, selectedMic]);
+  }, [
+    room,
+    meetingId,
+    meetingData,
+    currentUser,
+    meetingCode,
+    userName,
+    selectedMic,
+  ]);
 
   const stopRecording = useCallback(() => {
     if (
@@ -1429,7 +1488,7 @@ function MeetingRoomUI({
 
   const admitParticipant = useCallback(
     async (userId: string) => {
-    if (!meetingId || !effectiveIsHost) return;
+      if (!meetingId || !effectiveIsHost) return;
       try {
         const authHeaders = await auth.getAuthHeaders();
         const res = await fetch(
@@ -1472,7 +1531,12 @@ function MeetingRoomUI({
   );
 
   const admitAllParticipants = useCallback(async () => {
-    if (!meetingId || !effectiveIsHost || isAdmittingAll || waitingRoomParticipants.length === 0) {
+    if (
+      !meetingId ||
+      !effectiveIsHost ||
+      isAdmittingAll ||
+      waitingRoomParticipants.length === 0
+    ) {
       return;
     }
     setIsAdmittingAll(true);
@@ -1480,10 +1544,13 @@ function MeetingRoomUI({
       const authHeaders = await auth.getAuthHeaders();
       await Promise.allSettled(
         waitingRoomParticipants.map((p: any) =>
-          fetch(`${API_BASE}/meetings/${meetingId}/participants/${p.userId}/admit`, {
-            method: "POST",
-            headers: authHeaders,
-          }),
+          fetch(
+            `${API_BASE}/meetings/${meetingId}/participants/${p.userId}/admit`,
+            {
+              method: "POST",
+              headers: authHeaders,
+            },
+          ),
         ),
       );
       await loadWaitingRoom();
@@ -1494,7 +1561,13 @@ function MeetingRoomUI({
     } finally {
       setIsAdmittingAll(false);
     }
-  }, [meetingId, effectiveIsHost, isAdmittingAll, waitingRoomParticipants, loadWaitingRoom]);
+  }, [
+    meetingId,
+    effectiveIsHost,
+    isAdmittingAll,
+    waitingRoomParticipants,
+    loadWaitingRoom,
+  ]);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -1876,18 +1949,15 @@ function MeetingRoomUI({
     [tracks],
   );
 
-  const canRenderCameraTrack = useCallback(
-    (trackRef: any) => {
-      if (!trackRef?.publication?.track) return false;
-      if (trackRef.publication?.isMuted) return false;
-      const mediaTrack = trackRef.publication.track.mediaStreamTrack as
-        | MediaStreamTrack
-        | undefined;
-      if (!mediaTrack) return false;
-      return mediaTrack.readyState === "live" && mediaTrack.enabled;
-    },
-    [],
-  );
+  const canRenderCameraTrack = useCallback((trackRef: any) => {
+    if (!trackRef?.publication?.track) return false;
+    if (trackRef.publication?.isMuted) return false;
+    const mediaTrack = trackRef.publication.track.mediaStreamTrack as
+      | MediaStreamTrack
+      | undefined;
+    if (!mediaTrack) return false;
+    return mediaTrack.readyState === "live" && mediaTrack.enabled;
+  }, []);
 
   // Calculate grid layout - always show all participants like Zoom/Google Meet
   const getGridLayout = () => {
@@ -3563,7 +3633,9 @@ export default function MeetingRoom() {
   };
 
   const derivedServerUrl = (() => {
-    const fromApi = deriveWsFromApiUrl(import.meta.env.VITE_API_URL as string | undefined);
+    const fromApi = deriveWsFromApiUrl(
+      import.meta.env.VITE_API_URL as string | undefined,
+    );
     if (fromApi && !looksLikeLocalhost(fromApi)) return fromApi;
 
     return typeof window !== "undefined"

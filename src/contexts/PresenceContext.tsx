@@ -61,6 +61,11 @@ export function clearCurrentMeeting() {
   currentMeetingInfo = null;
 }
 
+/** Get current meeting info - useful for detecting if user is already in a meeting */
+export function getCurrentMeeting() {
+  return currentMeetingInfo;
+}
+
 export function PresenceProvider({ children }: { children: ReactNode }) {
   const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([]);
   const [activeRooms, setActiveRooms] = useState<ActiveRoom[]>([]);
