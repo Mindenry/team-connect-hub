@@ -52,12 +52,23 @@ import { usePresence } from "@/hooks/usePresence";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { motion } from "framer-motion";
 import { useAuth } from "@/lib/auth";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface TeamMember {
   name: string;
@@ -141,12 +152,16 @@ export default function Teams() {
   });
 
   const canSeeEmployees =
-    !!user && ["org_owner", "admin", "manager"].includes((user.role || "").toLowerCase());
+    !!user &&
+    ["org_owner", "admin", "manager"].includes((user.role || "").toLowerCase());
 
   // สิทธิ์ระดับองค์กรสำหรับจัดการทีม
   // - เปลี่ยน role สมาชิกทีม: org_owner, admin (ให้ตรงกับ backend @Roles)
   // - ลบสมาชิกออกจากทีม: org_owner, admin, manager
-  const canManageTeamRoles = useMemo(() => canPromoteToLead(user?.role), [user?.role]);
+  const canManageTeamRoles = useMemo(
+    () => canPromoteToLead(user?.role),
+    [user?.role],
+  );
   const orgRole = String(user?.role || "").toLowerCase();
 
   const persistFavorites = (ids: string[]) => {
@@ -164,7 +179,7 @@ export default function Teams() {
     persistFavorites(
       favoriteTeamIds.includes(teamId)
         ? favoriteTeamIds.filter((id) => id !== teamId)
-        : [...favoriteTeamIds, teamId]
+        : [...favoriteTeamIds, teamId],
     );
   };
 
@@ -196,10 +211,12 @@ export default function Teams() {
         const team = teamsRes[i];
 
         if (i > 0) {
-          await new Promise(resolve => setTimeout(resolve, 150));
+          await new Promise((resolve) => setTimeout(resolve, 150));
         }
 
-        const membersRes = await apiGet<any[]>(`/teams/${team.id}/members`).catch(() => []);
+        const membersRes = await apiGet<any[]>(
+          `/teams/${team.id}/members`,
+        ).catch(() => []);
         const members = Array.isArray(membersRes)
           ? membersRes
               .map((m: any) => {
@@ -207,34 +224,49 @@ export default function Teams() {
                 const role = String(m.role || "member").toLowerCase();
                 return {
                   name: m.user?.name || "Unknown",
-                  initials: (m.user?.name || "U").split(" ").map((n: string) => n[0]).join(""),
+                  initials: (m.user?.name || "U")
+                    .split(" ")
+                    .map((n: string) => n[0])
+                    .join(""),
                   email: m.user?.email || "",
                   role,
                   avatar: m.user?.avatar || undefined,
-                  status: (isUserOnline(userId) ? "online" : "offline"),
-                  joinedDate: new Date(m.createdAt).toLocaleDateString("en-US", {
-                    month: "short",
-                    year: "numeric",
-                  }),
+                  status: isUserOnline(userId) ? "online" : "offline",
+                  joinedDate: new Date(m.createdAt).toLocaleDateString(
+                    "en-US",
+                    {
+                      month: "short",
+                      year: "numeric",
+                    },
+                  ),
                   userId,
                   department: m.user?.department,
                   position: m.user?.position,
                 } as any;
               })
-              .sort((a: TeamMember, b: TeamMember) => rolePriority(a.role) - rolePriority(b.role))
+              .sort(
+                (a: TeamMember, b: TeamMember) =>
+                  rolePriority(a.role) - rolePriority(b.role),
+              )
           : [];
 
         const teamChannels = Array.isArray(channelsRes)
-          ? channelsRes.filter((c: any) => c.teamId === team.id).map((c: any) => ({
-              id: c.id,
-              name: c.name,
-              type: c.type || "general",
-              messages: c._count?.messages || 0,
-            }))
+          ? channelsRes
+              .filter((c: any) => c.teamId === team.id)
+              .map((c: any) => ({
+                id: c.id,
+                name: c.name,
+                type: c.type || "general",
+                messages: c._count?.messages || 0,
+              }))
           : [];
 
-        const teamTasks = Array.isArray(tasksRes) ? tasksRes.filter((t: any) => t.teamId === team.id) : [];
-        const activeTasks = teamTasks.filter((t: any) => t.status !== "done").length;
+        const teamTasks = Array.isArray(tasksRes)
+          ? tasksRes.filter((t: any) => t.teamId === team.id)
+          : [];
+        const activeTasks = teamTasks.filter(
+          (t: any) => t.status !== "done",
+        ).length;
 
         teamsWithData.push({
           id: team.id,
@@ -243,7 +275,11 @@ export default function Teams() {
           members,
           channels: teamChannels,
           activeTasks,
-          createdDate: new Date(team.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+          createdDate: new Date(team.createdAt).toLocaleDateString("en-US", {
+            month: "short",
+            day: "numeric",
+            year: "numeric",
+          }),
         });
       }
 
@@ -269,7 +305,7 @@ export default function Teams() {
 
     if (activeFilter === "mine" && user?.id) {
       result = result.filter((team) =>
-        team.members.some((m) => m.userId === user.id)
+        team.members.some((m) => m.userId === user.id),
       );
     } else if (activeFilter === "favorites") {
       result = result.filter((team) => favoriteTeamIds.includes(team.id));
@@ -282,7 +318,7 @@ export default function Teams() {
     return result.filter(
       (team) =>
         team.name.toLowerCase().includes(query) ||
-        team.description.toLowerCase().includes(query)
+        team.description.toLowerCase().includes(query),
     );
   }, [teams, searchQuery, activeFilter, favoriteTeamIds, user?.id]);
 
@@ -310,7 +346,10 @@ export default function Teams() {
 
   const handleCreateTeam = async () => {
     try {
-      const newTeam = await apiPost("/teams", { name: teamName, description: teamDescription });
+      const newTeam = await apiPost("/teams", {
+        name: teamName,
+        description: teamDescription,
+      });
       setShowCreateTeam(false);
       setTeamName("");
       setTeamDescription("");
@@ -322,9 +361,13 @@ export default function Teams() {
         members: [],
         channels: [],
         activeTasks: 0,
-        createdDate: new Date(newTeam.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+        createdDate: new Date(newTeam.createdAt).toLocaleDateString("en-US", {
+          month: "short",
+          day: "numeric",
+          year: "numeric",
+        }),
       };
-      setTeams(prev => [...prev, teamData]);
+      setTeams((prev) => [...prev, teamData]);
       setSelectedTeam(newTeam.id);
       loadTeams();
     } catch (err: any) {
@@ -334,13 +377,22 @@ export default function Teams() {
   };
 
   const handleDeleteTeam = async (teamId: string) => {
-    if (!confirm("Are you sure you want to delete this team? This action cannot be undone.")) return;
+    if (
+      !confirm(
+        "Are you sure you want to delete this team? This action cannot be undone.",
+      )
+    )
+      return;
     try {
       await apiDelete(`/teams/${teamId}`);
       toast.success("Team deleted successfully");
-      setTeams(prev => prev.filter(t => t.id !== teamId));
+      setTeams((prev) => prev.filter((t) => t.id !== teamId));
       if (selectedTeam === teamId) {
-        setSelectedTeam(teams.length > 1 ? teams.find(t => t.id !== teamId)?.id || null : null);
+        setSelectedTeam(
+          teams.length > 1
+            ? teams.find((t) => t.id !== teamId)?.id || null
+            : null,
+        );
       }
       loadTeams();
     } catch (err: any) {
@@ -350,9 +402,12 @@ export default function Teams() {
   };
 
   const handleRemoveMember = async (teamId: string, userId: string) => {
-    if (!confirm("Are you sure you want to remove this member from the team?")) return;
+    if (!confirm("Are you sure you want to remove this member from the team?"))
+      return;
     try {
-      await apiDelete(`/teams/${teamId}/members?userId=${encodeURIComponent(userId)}`);
+      await apiDelete(
+        `/teams/${teamId}/members?userId=${encodeURIComponent(userId)}`,
+      );
       toast.success("Member removed successfully");
       loadTeams();
     } catch (err: any) {
@@ -361,7 +416,11 @@ export default function Teams() {
     }
   };
 
-  const handleChangeMemberRole = async (teamId: string, userId: string, role: "lead" | "member") => {
+  const handleChangeMemberRole = async (
+    teamId: string,
+    userId: string,
+    role: "lead" | "member",
+  ) => {
     try {
       await apiPatch(`/teams/${teamId}/members/${userId}/role?role=${role}`);
       toast.success("อัปเดตบทบาทเรียบร้อย");
@@ -377,12 +436,17 @@ export default function Teams() {
   };
 
   const activeTeam = teams.find((t) => t.id === selectedTeam);
-  const activeTeamManagerRole = activeTeam?.members.find((m) => m.userId === user?.id)?.role?.toLowerCase();
-  
-  const canChangeTeamMemberRoles = orgRole === "org_owner" || activeTeamManagerRole === "lead";
-  const canRemoveTeamMembers = orgRole === "org_owner" || activeTeamManagerRole === "lead";
-  
-  const onlineMembers = activeTeam?.members.filter(m => isUserOnline(m.userId || "")) || [];
+  const activeTeamManagerRole = activeTeam?.members
+    .find((m) => m.userId === user?.id)
+    ?.role?.toLowerCase();
+
+  const canChangeTeamMemberRoles =
+    orgRole === "org_owner" || activeTeamManagerRole === "lead";
+  const canRemoveTeamMembers =
+    orgRole === "org_owner" || activeTeamManagerRole === "lead";
+
+  const onlineMembers =
+    activeTeam?.members.filter((m) => isUserOnline(m.userId || "")) || [];
   const totalMembers = activeTeam?.members.length || 0;
 
   return (
@@ -434,7 +498,9 @@ export default function Teams() {
                       className="h-9 w-9 border-border/60 bg-background/60 hover:bg-accent hover:text-accent-foreground"
                       onClick={() => loadTeams(true)}
                     >
-                      <RefreshCw className={cn("w-4 h-4", refreshing && "animate-spin")} />
+                      <RefreshCw
+                        className={cn("w-4 h-4", refreshing && "animate-spin")}
+                      />
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>รีเฟรชข้อมูลทีม</TooltipContent>
@@ -496,7 +562,7 @@ export default function Teams() {
                         "px-2 sm:px-2.5 py-1 rounded-md sm:rounded-lg text-[10px] sm:text-[11px] font-medium transition-all whitespace-nowrap",
                         activeFilter === item.key
                           ? "bg-background shadow-sm ring-1 ring-border/60 text-foreground"
-                          : "text-muted-foreground hover:text-foreground hover:bg-background/50"
+                          : "text-muted-foreground hover:text-foreground hover:bg-background/50",
                       )}
                     >
                       {item.label}
@@ -511,7 +577,7 @@ export default function Teams() {
                       "px-2 sm:px-2.5 py-1 rounded-md sm:rounded-lg text-[10px] sm:text-[11px] font-medium",
                       viewMode === "gallery"
                         ? "bg-primary/10 text-primary"
-                        : "text-muted-foreground hover:text-foreground"
+                        : "text-muted-foreground hover:text-foreground",
                     )}
                   >
                     Gallery
@@ -522,7 +588,7 @@ export default function Teams() {
                       "px-2 sm:px-2.5 py-1 rounded-md sm:rounded-lg text-[10px] sm:text-[11px] font-medium",
                       viewMode === "compact"
                         ? "bg-primary/10 text-primary"
-                        : "text-muted-foreground hover:text-foreground"
+                        : "text-muted-foreground hover:text-foreground",
                     )}
                   >
                     Compact
@@ -534,10 +600,12 @@ export default function Teams() {
             <div className="flex-1 flex flex-col md:flex-row gap-3 sm:gap-4 md:gap-5 pb-4 sm:pb-6 overflow-hidden min-h-0">
               {/* Teams sidebar - hidden on mobile, shown as drawer or bottom sheet on mobile */}
               {(!isMobile || selectedTeam === null) && (
-                <div className={cn(
-                  "shrink-0 flex flex-col rounded-xl sm:rounded-2xl border border-border/60 bg-card/70 backdrop-blur-sm overflow-hidden",
-                  isMobile ? "w-full" : "w-[260px]"
-                )}>
+                <div
+                  className={cn(
+                    "shrink-0 flex flex-col rounded-xl sm:rounded-2xl border border-border/60 bg-card/70 backdrop-blur-sm overflow-hidden",
+                    isMobile ? "w-full" : "w-[260px]",
+                  )}
+                >
                   <div className="px-3 sm:px-4 py-2 sm:py-3 border-b border-border/60 flex items-center justify-between">
                     <div>
                       <p className="text-[10px] sm:text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
@@ -548,431 +616,539 @@ export default function Teams() {
                       </p>
                     </div>
                     {favoriteTeamIds.length > 0 && (
-                      <Badge variant="outline" className="h-5 sm:h-6 px-1.5 sm:px-2 text-[9px] sm:text-[10px]">
+                      <Badge
+                        variant="outline"
+                        className="h-5 sm:h-6 px-1.5 sm:px-2 text-[9px] sm:text-[10px]"
+                      >
                         <Star className="w-2.5 h-2.5 sm:w-3 sm:h-3 mr-0.5 sm:mr-1 text-amber-500" />
                         {favoriteTeamIds.length}
                       </Badge>
                     )}
                   </div>
-                <ScrollArea className="flex-1">
-                  {loading ? (
-                    <div className="p-2 sm:p-3 space-y-1.5 sm:space-y-2">
-                      {[...Array(6)].map((_, i) => (
-                        <div
-                          key={i}
-                          className="rounded-lg sm:rounded-xl border border-border/40 bg-muted/40 px-2.5 sm:px-3 py-2 sm:py-2.5 flex items-center gap-2 sm:gap-3"
-                        >
-                          <Skeleton className="h-7 w-7 sm:h-8 sm:w-8 rounded-md sm:rounded-lg" />
-                          <div className="flex-1 space-y-1">
-                            <Skeleton className="h-2.5 sm:h-3 w-4/5" />
-                            <Skeleton className="h-2 sm:h-2.5 w-1/2" />
+                  <ScrollArea className="flex-1">
+                    {loading ? (
+                      <div className="p-2 sm:p-3 space-y-1.5 sm:space-y-2">
+                        {[...Array(6)].map((_, i) => (
+                          <div
+                            key={i}
+                            className="rounded-lg sm:rounded-xl border border-border/40 bg-muted/40 px-2.5 sm:px-3 py-2 sm:py-2.5 flex items-center gap-2 sm:gap-3"
+                          >
+                            <Skeleton className="h-7 w-7 sm:h-8 sm:w-8 rounded-md sm:rounded-lg" />
+                            <div className="flex-1 space-y-1">
+                              <Skeleton className="h-2.5 sm:h-3 w-4/5" />
+                              <Skeleton className="h-2 sm:h-2.5 w-1/2" />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : filteredTeams.length === 0 ? (
+                      <div className="px-3 sm:px-4 py-6 sm:py-8 text-center text-[10px] sm:text-xs text-muted-foreground space-y-2 sm:space-y-3">
+                        <div className="flex justify-center">
+                          <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-muted/50 flex items-center justify-center">
+                            <Users className="w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground" />
                           </div>
                         </div>
-                      ))}
-                    </div>
-                  ) : filteredTeams.length === 0 ? (
-                    <div className="px-3 sm:px-4 py-6 sm:py-8 text-center text-[10px] sm:text-xs text-muted-foreground space-y-2 sm:space-y-3">
-                      <div className="flex justify-center">
-                        <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-muted/50 flex items-center justify-center">
-                          <Users className="w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground" />
-                        </div>
-                      </div>
-                      <p className="font-medium">
-                        {searchQuery ? "ไม่พบทีมที่ตรงกับคำค้นหา" : "ยังไม่มีทีมในมุมมองนี้"}
-                      </p>
-                      {!searchQuery && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setShowCreateTeam(true)}
-                          className="h-7 sm:h-8 text-[10px] sm:text-xs"
-                        >
-                          สร้างทีมแรกของคุณ
-                        </Button>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="p-2 sm:p-3 space-y-1 sm:space-y-1.5">
-                      {filteredTeams.map((team) => {
-                        const isSelected = team.id === selectedTeam;
-                        const isFavorite = favoriteTeamIds.includes(team.id);
-                        const isMyTeam = !!user?.id && team.members.some((m) => m.userId === user.id);
-                        return (
-                          <motion.div
-                            key={team.id}
-                            initial={{ opacity: 0, x: -8 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            transition={{ duration: 0.18 }}
-                            onClick={() => {
-                              setSelectedTeam(team.id);
-                              // On mobile, show team details after selection
-                            }}
-                            role="button"
-                            tabIndex={0}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter" || e.key === " ") {
-                                e.preventDefault();
-                                setSelectedTeam(team.id);
-                              }
-                            }}
-                            className={cn(
-                              "w-full text-left rounded-lg sm:rounded-xl border transition-all flex items-center cursor-pointer select-none",
-                              "hover:border-primary/40 hover:bg-primary/5",
-                              isSelected
-                                ? "border-primary/60 bg-primary/10 shadow-sm"
-                                : "border-border/40 bg-background/40",
-                              viewMode === "gallery"
-                                ? "px-2.5 sm:px-3 py-2 sm:py-2.5 gap-2 sm:gap-3"
-                                : "px-2 sm:px-2.5 py-1.5 gap-2 text-[10px] sm:text-[11px]"
-                            )}
+                        <p className="font-medium">
+                          {searchQuery
+                            ? "ไม่พบทีมที่ตรงกับคำค้นหา"
+                            : "ยังไม่มีทีมในมุมมองนี้"}
+                        </p>
+                        {!searchQuery && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setShowCreateTeam(true)}
+                            className="h-7 sm:h-8 text-[10px] sm:text-xs"
                           >
-                            <div className="relative">
-                              <div
-                                className={cn(
-                                  "rounded-md sm:rounded-lg bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center",
-                                  viewMode === "gallery" ? "w-8 h-8 sm:w-9 sm:h-9" : "w-6 h-6 sm:w-7 sm:h-7"
-                                )}
-                              >
-                                <Users className={cn("text-primary", viewMode === "gallery" ? "w-3.5 h-3.5 sm:w-4 sm:h-4" : "w-3 h-3.5 sm:w-3.5 sm:h-3.5")} />
-                              </div>
-                              {isFavorite && (
-                                <Star className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-amber-500 absolute -top-0.5 -right-0.5 drop-shadow-sm" />
+                            สร้างทีมแรกของคุณ
+                          </Button>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="p-2 sm:p-3 space-y-1 sm:space-y-1.5">
+                        {filteredTeams.map((team) => {
+                          const isSelected = team.id === selectedTeam;
+                          const isFavorite = favoriteTeamIds.includes(team.id);
+                          const isMyTeam =
+                            !!user?.id &&
+                            team.members.some((m) => m.userId === user.id);
+                          return (
+                            <motion.div
+                              key={team.id}
+                              initial={{ opacity: 0, x: -8 }}
+                              animate={{ opacity: 1, x: 0 }}
+                              transition={{ duration: 0.18 }}
+                              onClick={() => {
+                                setSelectedTeam(team.id);
+                                // On mobile, show team details after selection
+                              }}
+                              role="button"
+                              tabIndex={0}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter" || e.key === " ") {
+                                  e.preventDefault();
+                                  setSelectedTeam(team.id);
+                                }
+                              }}
+                              className={cn(
+                                "w-full text-left rounded-lg sm:rounded-xl border transition-all flex items-center cursor-pointer select-none",
+                                "hover:border-primary/40 hover:bg-primary/5",
+                                isSelected
+                                  ? "border-primary/60 bg-primary/10 shadow-sm"
+                                  : "border-border/40 bg-background/40",
+                                viewMode === "gallery"
+                                  ? "px-2.5 sm:px-3 py-2 sm:py-2.5 gap-2 sm:gap-3"
+                                  : "px-2 sm:px-2.5 py-1.5 gap-2 text-[10px] sm:text-[11px]",
                               )}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p
-                                className={cn(
-                                  "font-medium text-foreground truncate",
-                                  viewMode === "gallery" ? "text-[11px] sm:text-xs" : "text-[10px] sm:text-[11px]"
-                                )}
-                              >
-                                {team.name}
-                              </p>
-                              <div className="mt-0.5 flex items-center gap-1.5 sm:gap-2 text-[9px] sm:text-[10px] text-muted-foreground">
-                                <span className="inline-flex items-center gap-0.5">
-                                  <Users className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
-                                  {team.members.length}
-                                </span>
-                                <span className="inline-flex items-center gap-0.5">
-                                  <Hash className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
-                                  {team.channels.length}
-                                </span>
-                                {team.activeTasks > 0 && (
-                                  <span className="inline-flex items-center gap-0.5 text-amber-600 dark:text-amber-400">
-                                    <CheckSquare className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
-                                    {team.activeTasks}
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                            <div className="flex flex-col items-end gap-0.5 sm:gap-1">
-                              {isMyTeam && (
-                                <Badge
-                                  variant="outline"
-                                  className="h-3.5 sm:h-4 px-1 sm:px-1.5 text-[8px] sm:text-[9px] border-primary/40 text-primary"
+                            >
+                              <div className="relative">
+                                <div
+                                  className={cn(
+                                    "rounded-md sm:rounded-lg bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center",
+                                    viewMode === "gallery"
+                                      ? "w-8 h-8 sm:w-9 sm:h-9"
+                                      : "w-6 h-6 sm:w-7 sm:h-7",
+                                  )}
                                 >
-                                  My
-                                </Badge>
-                              )}
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      toggleFavorite(team.id);
-                                    }}
-                                    className="inline-flex items-center justify-center rounded-full h-5 w-5 sm:h-6 sm:w-6 hover:bg-background/80"
-                                  >
-                                    {isFavorite ? (
-                                      <Star className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-amber-500 fill-amber-500" />
-                                    ) : (
-                                      <StarOff className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-muted-foreground" />
+                                  <Users
+                                    className={cn(
+                                      "text-primary",
+                                      viewMode === "gallery"
+                                        ? "w-3.5 h-3.5 sm:w-4 sm:h-4"
+                                        : "w-3 h-3.5 sm:w-3.5 sm:h-3.5",
                                     )}
-                                  </button>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  {isFavorite ? "เอาออกจากที่ปักหมุด" : "ปักหมุดทีมนี้"}
-                                </TooltipContent>
-                              </Tooltip>
-                            </div>
-                          </motion.div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </ScrollArea>
-              </div>
+                                  />
+                                </div>
+                                {isFavorite && (
+                                  <Star className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-amber-500 absolute -top-0.5 -right-0.5 drop-shadow-sm" />
+                                )}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p
+                                  className={cn(
+                                    "font-medium text-foreground truncate",
+                                    viewMode === "gallery"
+                                      ? "text-[11px] sm:text-xs"
+                                      : "text-[10px] sm:text-[11px]",
+                                  )}
+                                >
+                                  {team.name}
+                                </p>
+                                <div className="mt-0.5 flex items-center gap-1.5 sm:gap-2 text-[9px] sm:text-[10px] text-muted-foreground">
+                                  <span className="inline-flex items-center gap-0.5">
+                                    <Users className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
+                                    {team.members.length}
+                                  </span>
+                                  <span className="inline-flex items-center gap-0.5">
+                                    <Hash className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
+                                    {team.channels.length}
+                                  </span>
+                                  {team.activeTasks > 0 && (
+                                    <span className="inline-flex items-center gap-0.5 text-amber-600 dark:text-amber-400">
+                                      <CheckSquare className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
+                                      {team.activeTasks}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="flex flex-col items-end gap-0.5 sm:gap-1">
+                                {isMyTeam && (
+                                  <Badge
+                                    variant="outline"
+                                    className="h-3.5 sm:h-4 px-1 sm:px-1.5 text-[8px] sm:text-[9px] border-primary/40 text-primary"
+                                  >
+                                    My
+                                  </Badge>
+                                )}
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        toggleFavorite(team.id);
+                                      }}
+                                      className="inline-flex items-center justify-center rounded-full h-5 w-5 sm:h-6 sm:w-6 hover:bg-background/80"
+                                    >
+                                      {isFavorite ? (
+                                        <Star className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-amber-500 fill-amber-500" />
+                                      ) : (
+                                        <StarOff className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-muted-foreground" />
+                                      )}
+                                    </button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    {isFavorite
+                                      ? "เอาออกจากที่ปักหมุด"
+                                      : "ปักหมุดทีมนี้"}
+                                  </TooltipContent>
+                                </Tooltip>
+                              </div>
+                            </motion.div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </ScrollArea>
+                </div>
+              )}
 
               {/* Team details panel */}
               {(!isMobile || selectedTeam !== null) && (
                 <div className="flex-1 min-w-0 min-h-0 flex flex-col gap-3 sm:gap-4">
-                {loading ? (
-                  <div className="space-y-4">
-                    <Card className="border-border/60 bg-card/70">
-                      <CardContent className="p-6 space-y-4">
-                        <Skeleton className="h-5 w-40" />
-                        <Skeleton className="h-4 w-64" />
-                        <div className="grid grid-cols-3 gap-4">
-                          <Skeleton className="h-16 w-full rounded-xl" />
-                          <Skeleton className="h-16 w-full rounded-xl" />
-                          <Skeleton className="h-16 w-full rounded-xl" />
+                  {loading ? (
+                    <div className="space-y-4">
+                      <Card className="border-border/60 bg-card/70">
+                        <CardContent className="p-6 space-y-4">
+                          <Skeleton className="h-5 w-40" />
+                          <Skeleton className="h-4 w-64" />
+                          <div className="grid grid-cols-3 gap-4">
+                            <Skeleton className="h-16 w-full rounded-xl" />
+                            <Skeleton className="h-16 w-full rounded-xl" />
+                            <Skeleton className="h-16 w-full rounded-xl" />
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </div>
+                  ) : !activeTeam ? (
+                    <Card className="border-dashed border-border/60 bg-card/60 flex-1 flex flex-col">
+                      <CardContent className="flex-1 flex flex-col items-center justify-center py-16 text-center space-y-4">
+                        <div className="w-16 h-16 rounded-2xl bg-muted/60 flex items-center justify-center">
+                          <Users className="w-8 h-8 text-muted-foreground" />
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-sm font-semibold text-foreground">
+                            เลือกทีมจากด้านซ้ายเพื่อดูรายละเอียด
+                          </p>
+                          <p className="text-xs text-muted-foreground max-w-sm">
+                            หรือสร้างทีมใหม่เพื่อเริ่มต้น workspace
+                            สำหรับทีมของคุณ
+                          </p>
                         </div>
                       </CardContent>
                     </Card>
-                  </div>
-                ) : !activeTeam ? (
-                  <Card className="border-dashed border-border/60 bg-card/60 flex-1 flex flex-col">
-                    <CardContent className="flex-1 flex flex-col items-center justify-center py-16 text-center space-y-4">
-                      <div className="w-16 h-16 rounded-2xl bg-muted/60 flex items-center justify-center">
-                        <Users className="w-8 h-8 text-muted-foreground" />
-                      </div>
-                      <div className="space-y-1">
-                        <p className="text-sm font-semibold text-foreground">
-                          เลือกทีมจากด้านซ้ายเพื่อดูรายละเอียด
-                        </p>
-                        <p className="text-xs text-muted-foreground max-w-sm">
-                          หรือสร้างทีมใหม่เพื่อเริ่มต้น workspace สำหรับทีมของคุณ
-                        </p>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ) : (
-                  <>
-                    <Card className="border-border/70 bg-gradient-to-r from-primary/8 via-primary/5 to-transparent">
-                      <CardContent className="p-6 flex flex-col gap-4">
-                        <div className="flex flex-wrap items-start gap-4 justify-between">
-                          <div className="flex items-start gap-4 min-w-0">
-                            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary/25 via-primary/15 to-primary/5 flex items-center justify-center shadow-md ring-1 ring-primary/20">
-                              <Users className="w-6 h-6 text-primary" />
-                            </div>
-                            <div className="min-w-0 space-y-1">
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <h2 className="text-lg font-semibold text-foreground truncate">
-                                  {activeTeam.name}
-                                </h2>
+                  ) : (
+                    <>
+                      <Card className="border-border/70 bg-gradient-to-r from-primary/8 via-primary/5 to-transparent">
+                        <CardContent className="p-6 flex flex-col gap-4">
+                          <div className="flex flex-wrap items-start gap-4 justify-between">
+                            <div className="flex items-start gap-4 min-w-0">
+                              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary/25 via-primary/15 to-primary/5 flex items-center justify-center shadow-md ring-1 ring-primary/20">
+                                <Users className="w-6 h-6 text-primary" />
                               </div>
-                              <p className="text-xs text-muted-foreground">
-                                สร้างเมื่อ {activeTeam.createdDate}
-                              </p>
-                              {activeTeam.description && (
-                                <p className="text-xs text-muted-foreground/90 mt-1 line-clamp-2">
-                                  {activeTeam.description}
+                              <div className="min-w-0 space-y-1">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <h2 className="text-lg font-semibold text-foreground truncate">
+                                    {activeTeam.name}
+                                  </h2>
+                                </div>
+                                <p className="text-xs text-muted-foreground">
+                                  สร้างเมื่อ {activeTeam.createdDate}
                                 </p>
-                              )}
+                                {activeTeam.description && (
+                                  <p className="text-xs text-muted-foreground/90 mt-1 line-clamp-2">
+                                    {activeTeam.description}
+                                  </p>
+                                )}
+                              </div>
                             </div>
-                          </div>
-                          
-                          {canChangeTeamMemberRoles && (
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground">
-                                  <Settings className="w-4 h-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuItem 
-                                  onClick={() => {
-                                    setEditTeamName(activeTeam.name);
-                                    setEditTeamDescription(activeTeam.description || "");
-                                    setShowEditTeam(true);
-                                  }}
-                                >
-                                  <Edit className="w-4 h-4 mr-2" />
-                                  แก้ไขทีม
-                                </DropdownMenuItem>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem 
-                                  className="text-destructive focus:text-destructive focus:bg-destructive/10"
-                                  onClick={() => handleDeleteTeam(activeTeam.id)}
-                                >
-                                  <Trash2 className="w-4 h-4 mr-2" />
-                                  ลบทีม
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          )}
-                        </div>
 
-                        <div className="grid grid-cols-3 gap-3 text-xs">
-                          <div className="rounded-xl border border-border/60 bg-background/70 px-3 py-2.5">
-                            <div className="flex items-center justify-between mb-1">
-                              <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
-                                <Users className="w-3 h-3" />
-                                สมาชิก
-                              </span>
-                              {onlineMembers.length > 0 && (
-                                <span className="text-[10px] text-emerald-500">
-                                  {onlineMembers.length} ออนไลน์
-                                </span>
-                              )}
-                            </div>
-                            <p className="text-base font-semibold text-foreground">
-                              {totalMembers}
-                            </p>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-
-                    <Card className="border-border/70 bg-card/80 flex-1 min-h-0">
-                      <CardContent className="p-4 flex flex-col min-h-0 h-full">
-                        <Tabs defaultValue="people" className="flex flex-col min-h-0 h-full">
-                          <div className="flex items-center justify-between gap-3 flex-wrap">
-                            <TabsList className="bg-muted/40 border border-border/60">
-                              <TabsTrigger value="people" className="text-xs">
-                                People
-                                <span className="ml-1 text-[10px] text-muted-foreground">
-                                  ({activeTeam.members.length})
-                                </span>
-                              </TabsTrigger>
-                            </TabsList>
-
-                            {canChangeTeamMemberRoles && selectedTeam && (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="h-8 gap-2 px-3 text-xs bg-background/60 hover:bg-primary/5 border-border/60"
-                                onClick={() => setShowAddMember(true)}
-                              >
-                                <UserPlus className="w-3.5 h-3.5" />
-                                เพิ่มสมาชิก
-                              </Button>
+                            {canChangeTeamMemberRoles && (
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                                  >
+                                    <Settings className="w-4 h-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      setEditTeamName(activeTeam.name);
+                                      setEditTeamDescription(
+                                        activeTeam.description || "",
+                                      );
+                                      setShowEditTeam(true);
+                                    }}
+                                  >
+                                    <Edit className="w-4 h-4 mr-2" />
+                                    แก้ไขทีม
+                                  </DropdownMenuItem>
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem
+                                    className="text-destructive focus:text-destructive focus:bg-destructive/10"
+                                    onClick={() =>
+                                      handleDeleteTeam(activeTeam.id)
+                                    }
+                                  >
+                                    <Trash2 className="w-4 h-4 mr-2" />
+                                    ลบทีม
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
                             )}
                           </div>
 
-                          <TabsContent value="people" className="flex-1 min-h-0 mt-3">
-                            <ScrollArea className="h-full">
-                              <div className={cn("pr-2", viewMode === "gallery" ? "space-y-2" : "space-y-1.5")}>
-                                {activeTeam.members.map((member) => {
-                                  const online = member.userId ? isUserOnline(member.userId) : false;
-                                  const status = online ? "online" : "offline";
-                                  const roleLabel = getRoleLabel(member.role);
-                                  const isSelf = member.userId && user?.id && member.userId === user.id;
+                          <div className="grid grid-cols-3 gap-3 text-xs">
+                            <div className="rounded-xl border border-border/60 bg-background/70 px-3 py-2.5">
+                              <div className="flex items-center justify-between mb-1">
+                                <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+                                  <Users className="w-3 h-3" />
+                                  สมาชิก
+                                </span>
+                                {onlineMembers.length > 0 && (
+                                  <span className="text-[10px] text-emerald-500">
+                                    {onlineMembers.length} ออนไลน์
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-base font-semibold text-foreground">
+                                {totalMembers}
+                              </p>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
 
-                                  return (
-                                    <div
-                                      key={member.userId ?? member.email}
-                                      className={cn(
-                                        "group rounded-xl border border-border/60 bg-background/80 flex items-center transition-all",
-                                        "hover:border-primary/40 hover:bg-primary/5",
-                                        viewMode === "gallery" ? "px-3 py-2.5 gap-3" : "px-2.5 py-2 gap-2"
-                                      )}
-                                    >
-                                      <div className="relative">
-                                        <Avatar className="h-9 w-9 ring-2 ring-background">
-                                          <AvatarImage src={(member as any).avatar} alt={member.name || "Avatar"} />
-                                          <AvatarFallback className="bg-gradient-to-br from-primary/25 to-primary/10 text-[11px] font-semibold text-primary">
-                                            {member.initials}
-                                          </AvatarFallback>
-                                          {member.userId && (
-                                            <StatusIndicator
-                                              status={status as "online" | "offline" | "busy" | "away"}
-                                              className="absolute -bottom-0.5 -right-0.5 border-2 border-background"
+                      <Card className="border-border/70 bg-card/80 flex-1 min-h-0">
+                        <CardContent className="p-4 flex flex-col min-h-0 h-full">
+                          <Tabs
+                            defaultValue="people"
+                            className="flex flex-col min-h-0 h-full"
+                          >
+                            <div className="flex items-center justify-between gap-3 flex-wrap">
+                              <TabsList className="bg-muted/40 border border-border/60">
+                                <TabsTrigger value="people" className="text-xs">
+                                  People
+                                  <span className="ml-1 text-[10px] text-muted-foreground">
+                                    ({activeTeam.members.length})
+                                  </span>
+                                </TabsTrigger>
+                              </TabsList>
+
+                              {canChangeTeamMemberRoles && selectedTeam && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-8 gap-2 px-3 text-xs bg-background/60 hover:bg-primary/5 border-border/60"
+                                  onClick={() => setShowAddMember(true)}
+                                >
+                                  <UserPlus className="w-3.5 h-3.5" />
+                                  เพิ่มสมาชิก
+                                </Button>
+                              )}
+                            </div>
+
+                            <TabsContent
+                              value="people"
+                              className="flex-1 min-h-0 mt-3"
+                            >
+                              <ScrollArea className="h-full">
+                                <div
+                                  className={cn(
+                                    "pr-2",
+                                    viewMode === "gallery"
+                                      ? "space-y-2"
+                                      : "space-y-1.5",
+                                  )}
+                                >
+                                  {activeTeam.members.map((member) => {
+                                    const online = member.userId
+                                      ? isUserOnline(member.userId)
+                                      : false;
+                                    const status = online
+                                      ? "online"
+                                      : "offline";
+                                    const roleLabel = getRoleLabel(member.role);
+                                    const isSelf =
+                                      member.userId &&
+                                      user?.id &&
+                                      member.userId === user.id;
+
+                                    return (
+                                      <div
+                                        key={member.userId ?? member.email}
+                                        className={cn(
+                                          "group rounded-xl border border-border/60 bg-background/80 flex items-center transition-all",
+                                          "hover:border-primary/40 hover:bg-primary/5",
+                                          viewMode === "gallery"
+                                            ? "px-3 py-2.5 gap-3"
+                                            : "px-2.5 py-2 gap-2",
+                                        )}
+                                      >
+                                        <div className="relative">
+                                          <Avatar className="h-9 w-9 ring-2 ring-background">
+                                            <AvatarImage
+                                              src={(member as any).avatar}
+                                              alt={member.name || "Avatar"}
                                             />
-                                          )}
-                                        </Avatar>
-                                      </div>
-                                      <div className="flex-1 min-w-0">
-                                        <div className="flex items-center gap-2 mb-0.5">
-                                          <p className="text-xs font-medium text-foreground truncate">{member.name}</p>
-                                          {member.role === "lead" ? (
-                                            <Badge
-                                              variant="secondary"
-                                              className="h-4 px-1.5 text-[9px] gap-0.5 bg-primary/10 text-primary border-primary/20"
-                                            >
-                                              <Crown className="w-3 h-3" />
-                                              Lead
-                                            </Badge>
-                                          ) : (
-                                            <Badge
-                                              variant="secondary"
-                                              className="h-4 px-1.5 text-[9px] gap-0.5"
-                                            >
-                                              <IdCard className="w-3 h-3" />
-                                              Member
-                                            </Badge>
-                                          )}
+                                            <AvatarFallback className="bg-gradient-to-br from-primary/25 to-primary/10 text-[11px] font-semibold text-primary">
+                                              {member.initials}
+                                            </AvatarFallback>
+                                            {member.userId && (
+                                              <StatusIndicator
+                                                status={
+                                                  status as
+                                                    | "online"
+                                                    | "offline"
+                                                    | "busy"
+                                                    | "away"
+                                                }
+                                                className="absolute -bottom-0.5 -right-0.5 border-2 border-background"
+                                              />
+                                            )}
+                                          </Avatar>
                                         </div>
-                                        <p className="text-[10px] text-muted-foreground truncate">{member.email}</p>
-                                        <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[9px] text-muted-foreground">
-                                          <span>
-                                            {member.position || roleLabel}
-                                            {member.department ? ` · ${member.department}` : ""}
-                                          </span>
-                                          <span className="text-[9px] text-muted-foreground/80">
-                                            เข้าร่วม {member.joinedDate}
-                                          </span>
+                                        <div className="flex-1 min-w-0">
+                                          <div className="flex items-center gap-2 mb-0.5">
+                                            <p className="text-xs font-medium text-foreground truncate">
+                                              {member.name}
+                                            </p>
+                                            {member.role === "lead" ? (
+                                              <Badge
+                                                variant="secondary"
+                                                className="h-4 px-1.5 text-[9px] gap-0.5 bg-primary/10 text-primary border-primary/20"
+                                              >
+                                                <Crown className="w-3 h-3" />
+                                                Lead
+                                              </Badge>
+                                            ) : (
+                                              <Badge
+                                                variant="secondary"
+                                                className="h-4 px-1.5 text-[9px] gap-0.5"
+                                              >
+                                                <IdCard className="w-3 h-3" />
+                                                Member
+                                              </Badge>
+                                            )}
+                                          </div>
+                                          <p className="text-[10px] text-muted-foreground truncate">
+                                            {member.email}
+                                          </p>
+                                          <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[9px] text-muted-foreground">
+                                            <span>
+                                              {member.position || roleLabel}
+                                              {member.department
+                                                ? ` · ${member.department}`
+                                                : ""}
+                                            </span>
+                                            <span className="text-[9px] text-muted-foreground/80">
+                                              เข้าร่วม {member.joinedDate}
+                                            </span>
+                                          </div>
                                         </div>
-                                      </div>
-                                      <DropdownMenu>
-                                        <DropdownMenuTrigger asChild>
-                                          <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
-                                          >
-                                            <MoreHorizontal className="w-3.5 h-3.5" />
-                                          </Button>
-                                        </DropdownMenuTrigger>
-                                        <DropdownMenuContent align="end">
-                                          {member.userId && (
-                                            <>
-                                              <DropdownMenuItem onClick={() => navigate(`/chat?dm=${member.userId}`)}>
-                                                <MessageSquare className="w-4 h-4 mr-2" />
-                                                ส่งข้อความ
-                                              </DropdownMenuItem>
-                                              <DropdownMenuItem onClick={() => navigate(`/tasks?assigneeId=${member.userId}`)}>
-                                                <CheckSquare className="w-4 h-4 mr-2" />
-                                                ดูงาน
-                                              </DropdownMenuItem>
+                                        <DropdownMenu>
+                                          <DropdownMenuTrigger asChild>
+                                            <Button
+                                              variant="ghost"
+                                              size="icon"
+                                              className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
+                                            >
+                                              <MoreHorizontal className="w-3.5 h-3.5" />
+                                            </Button>
+                                          </DropdownMenuTrigger>
+                                          <DropdownMenuContent align="end">
+                                            {member.userId && (
+                                              <>
+                                                <DropdownMenuItem
+                                                  onClick={() =>
+                                                    navigate(
+                                                      `/chat?dm=${member.userId}`,
+                                                    )
+                                                  }
+                                                >
+                                                  <MessageSquare className="w-4 h-4 mr-2" />
+                                                  ส่งข้อความ
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem
+                                                  onClick={() =>
+                                                    navigate(
+                                                      `/tasks?assigneeId=${member.userId}`,
+                                                    )
+                                                  }
+                                                >
+                                                  <CheckSquare className="w-4 h-4 mr-2" />
+                                                  ดูงาน
+                                                </DropdownMenuItem>
 
-                                              {canChangeTeamMemberRoles && selectedTeam && !isSelf && (
+                                                {canChangeTeamMemberRoles &&
+                                                  selectedTeam &&
+                                                  !isSelf && (
+                                                    <>
+                                                      <DropdownMenuSeparator />
+                                                      {member.role !==
+                                                        "lead" && (
+                                                        <DropdownMenuItem
+                                                          onClick={() =>
+                                                            handleChangeMemberRole(
+                                                              selectedTeam,
+                                                              member.userId!,
+                                                              "lead",
+                                                            )
+                                                          }
+                                                        >
+                                                          <Crown className="w-4 h-4 mr-2" />
+                                                          ตั้งเป็น Team Lead
+                                                        </DropdownMenuItem>
+                                                      )}
+                                                      {member.role !==
+                                                        "member" && (
+                                                        <DropdownMenuItem
+                                                          onClick={() =>
+                                                            handleChangeMemberRole(
+                                                              selectedTeam,
+                                                              member.userId!,
+                                                              "member",
+                                                            )
+                                                          }
+                                                        >
+                                                          <IdCard className="w-4 h-4 mr-2" />
+                                                          ตั้งเป็น Member
+                                                        </DropdownMenuItem>
+                                                      )}
+                                                    </>
+                                                  )}
+                                              </>
+                                            )}
+
+                                            {member.userId &&
+                                              selectedTeam &&
+                                              canRemoveTeamMembers &&
+                                              !isSelf && (
                                                 <>
                                                   <DropdownMenuSeparator />
-                                                  {member.role !== "lead" && (
-                                                    <DropdownMenuItem onClick={() => handleChangeMemberRole(selectedTeam, member.userId!, "lead")}>
-                                                      <Crown className="w-4 h-4 mr-2" />
-                                                      ตั้งเป็น Team Lead
-                                                    </DropdownMenuItem>
-                                                  )}
-                                                  {member.role !== "member" && (
-                                                    <DropdownMenuItem onClick={() => handleChangeMemberRole(selectedTeam, member.userId!, "member")}>
-                                                      <IdCard className="w-4 h-4 mr-2" />
-                                                      ตั้งเป็น Member
-                                                    </DropdownMenuItem>
-                                                  )}
+                                                  <DropdownMenuItem
+                                                    className="text-destructive"
+                                                    onClick={() =>
+                                                      handleRemoveMember(
+                                                        selectedTeam,
+                                                        member.userId!,
+                                                      )
+                                                    }
+                                                  >
+                                                    <Trash2 className="w-4 h-4 mr-2" />
+                                                    ลบออกจากทีม
+                                                  </DropdownMenuItem>
                                                 </>
                                               )}
-                                            </>
-                                          )}
-
-                                          {member.userId && selectedTeam && canRemoveTeamMembers && !isSelf && (
-                                            <>
-                                              <DropdownMenuSeparator />
-                                              <DropdownMenuItem
-                                                className="text-destructive"
-                                                onClick={() => handleRemoveMember(selectedTeam, member.userId!)}
-                                              >
-                                                <Trash2 className="w-4 h-4 mr-2" />
-                                                ลบออกจากทีม
-                                              </DropdownMenuItem>
-                                            </>
-                                          )}
-                                        </DropdownMenuContent>
-                                      </DropdownMenu>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            </ScrollArea>
-                          </TabsContent>
-                        </Tabs>
-                      </CardContent>
-                    </Card>
-                  </>
-                )}
-              </div>
+                                          </DropdownMenuContent>
+                                        </DropdownMenu>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </ScrollArea>
+                            </TabsContent>
+                          </Tabs>
+                        </CardContent>
+                      </Card>
+                    </>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -983,7 +1159,10 @@ export default function Teams() {
           teamId={selectedTeam || ""}
           onSuccess={() => loadTeams(true)}
         />
-        <CreateChannelDialog open={showCreateChannel} onOpenChange={setShowCreateChannel} />
+        <CreateChannelDialog
+          open={showCreateChannel}
+          onOpenChange={setShowCreateChannel}
+        />
 
         <Dialog open={showEditTeam} onOpenChange={setShowEditTeam}>
           <DialogContent className="max-w-md">
@@ -1029,7 +1208,10 @@ export default function Teams() {
                 onClick={async () => {
                   if (!selectedTeam || !editTeamName.trim()) return;
                   try {
-                    await apiPatch(`/teams/${selectedTeam}`, { name: editTeamName, description: editTeamDescription });
+                    await apiPatch(`/teams/${selectedTeam}`, {
+                      name: editTeamName,
+                      description: editTeamDescription,
+                    });
                     setShowEditTeam(false);
                     setEditTeamName("");
                     setEditTeamDescription("");
@@ -1055,7 +1237,9 @@ export default function Teams() {
                 <Users className="w-5 h-5 text-primary" />
                 สร้างทีมใหม่
               </DialogTitle>
-              <DialogDescription>สร้างทีมใหม่สำหรับองค์กรของคุณ</DialogDescription>
+              <DialogDescription>
+                สร้างทีมใหม่สำหรับองค์กรของคุณ
+              </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
               <div>

@@ -469,7 +469,7 @@ function MeetingCardList({
               </div>
             </div>
             <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-              {/* Show participants if room is active */
+              {/* Show participants if room is active */}
               {roomParticipants.length > 0 ? (
                 <div className="flex items-center gap-1.5 sm:gap-2">
                   <div className="flex -space-x-1 sm:-space-x-1.5">
