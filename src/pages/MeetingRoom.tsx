@@ -60,6 +60,8 @@ import {
   Pin,
   PinOff,
   ScreenShare,
+  Video,
+  Square,
 } from "lucide-react";
 import { ImagePreview } from "@/components/chat/ImagePreview";
 import { PDFViewer } from "@/components/chat/PDFViewer";
@@ -115,13 +117,26 @@ const isImageMime = (m?: string) => !!m && m.startsWith("image/");
 const getMimeFromExtension = (filename: string): string => {
   const ext = filename.split(".").pop()?.toLowerCase() || "";
   const mimeMap: Record<string, string> = {
-    jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png",
-    gif: "image/gif", webp: "image/webp", bmp: "image/bmp", svg: "image/svg+xml",
-    mp4: "video/mp4", webm: "video/webm", ogg: "video/ogg", mov: "video/quicktime",
-    mp3: "audio/mpeg", wav: "audio/wav", m4a: "audio/mp4", flac: "audio/flac",
+    jpg: "image/jpeg",
+    jpeg: "image/jpeg",
+    png: "image/png",
+    gif: "image/gif",
+    webp: "image/webp",
+    bmp: "image/bmp",
+    svg: "image/svg+xml",
+    mp4: "video/mp4",
+    webm: "video/webm",
+    ogg: "video/ogg",
+    mov: "video/quicktime",
+    mp3: "audio/mpeg",
+    wav: "audio/wav",
+    m4a: "audio/mp4",
+    flac: "audio/flac",
     pdf: "application/pdf",
-    doc: "application/msword", docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    xls: "application/vnd.ms-excel", xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    doc: "application/msword",
+    docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    xls: "application/vnd.ms-excel",
+    xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     txt: "text/plain",
   };
   return mimeMap[ext] || "application/octet-stream";
@@ -168,6 +183,14 @@ interface ChatMessage {
   attachments?: Array<{ url: string; name: string; type: string }>;
   fileUrl?: string;
   fileName?: string;
+}
+
+interface MeetingRecordingStatus {
+  peerId: string;
+  userId?: string;
+  userName: string;
+  isRecording: boolean;
+  startedAt?: string;
 }
 
 const COMMON_EMOJIS = [
@@ -235,7 +258,13 @@ function useAudioLevel(track: LocalAudioTrack | null) {
 
 // Real-time Mic Level Visualizer for the Settings Dialog
 // Uses Web Audio API directly on the local mic track for responsive visualization
-function MicLevelVisualizer({ tracks, isMuted }: { tracks: any[]; isMuted: boolean }) {
+function MicLevelVisualizer({
+  tracks,
+  isMuted,
+}: {
+  tracks: any[];
+  isMuted: boolean;
+}) {
   const [level, setLevel] = useState(0);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
@@ -243,14 +272,16 @@ function MicLevelVisualizer({ tracks, isMuted }: { tracks: any[]; isMuted: boole
 
   useEffect(() => {
     const localAudio = tracks.find(
-      (t: any) => t.participant?.isLocal && t.source === Track.Source.Microphone
+      (t: any) =>
+        t.participant?.isLocal && t.source === Track.Source.Microphone,
     );
     if (!localAudio?.publication?.track?.mediaStreamTrack) {
       setLevel(0);
       return;
     }
 
-    const mediaTrack = localAudio.publication.track.mediaStreamTrack as MediaStreamTrack;
+    const mediaTrack = localAudio.publication.track
+      .mediaStreamTrack as MediaStreamTrack;
     const stream = new MediaStream([mediaTrack]);
     const ctx = new AudioContext();
     const analyser = ctx.createAnalyser();
@@ -280,7 +311,10 @@ function MicLevelVisualizer({ tracks, isMuted }: { tracks: any[]; isMuted: boole
   }, [tracks, isMuted]);
 
   // Normalize level to 0-20 segments
-  const activeSegments = Math.min(20, Math.max(0, Math.floor((level / 60) * 20)));
+  const activeSegments = Math.min(
+    20,
+    Math.max(0, Math.floor((level / 60) * 20)),
+  );
 
   return (
     <div className="mt-4 bg-[#2a2a2a] p-4 rounded-xl border border-white/5">
@@ -292,15 +326,20 @@ function MicLevelVisualizer({ tracks, isMuted }: { tracks: any[]; isMuted: boole
             className={cn(
               "flex-1 h-full rounded-[1px] transition-all duration-75",
               i < activeSegments
-                ? i > 15 ? "bg-red-500" : i > 10 ? "bg-yellow-500" : "bg-green-500"
-                : "bg-white/10"
+                ? i > 15
+                  ? "bg-red-500"
+                  : i > 10
+                    ? "bg-yellow-500"
+                    : "bg-green-500"
+                : "bg-white/10",
             )}
           />
         ))}
       </div>
       {isMuted && (
         <p className="text-xs text-red-400/80 mt-2 flex items-center gap-1.5">
-          <MicOff className="w-3 h-3" /> Microphone is muted — unmute to test input level
+          <MicOff className="w-3 h-3" /> Microphone is muted — unmute to test
+          input level
         </p>
       )}
     </div>
@@ -341,11 +380,23 @@ function MeetingRoomUI({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
+  const [recordingTime, setRecordingTime] = useState(0);
+  const [activeRecorder, setActiveRecorder] = useState<MeetingRecordingStatus | null>(
+    null,
+  );
   const [endingMeeting, setEndingMeeting] = useState(false);
   const [isHandRaised, setIsHandRaised] = useState(false);
 
+  // Recording refs
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordedChunksRef = useRef<Blob[]>([]);
+  const recordingTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const recordingTimeRef = useRef(0);
+
   // Focus and layout states
-  const [pinnedParticipantId, setPinnedParticipantId] = useState<string | null>(null);
+  const [pinnedParticipantId, setPinnedParticipantId] = useState<string | null>(
+    null,
+  );
   const [settingsTab, setSettingsTab] = useState<"audio" | "video">("audio");
 
   const [participants, setParticipants] = useState<SocketParticipant[]>([]);
@@ -400,7 +451,9 @@ function MeetingRoomUI({
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showMentionList, setShowMentionList] = useState(false);
   const [mentionQuery, setMentionQuery] = useState("");
-  const [pendingAttachments, setPendingAttachments] = useState<Array<{ file: File; url: string; name: string; type: string }>>([]);
+  const [pendingAttachments, setPendingAttachments] = useState<
+    Array<{ file: File; url: string; name: string; type: string }>
+  >([]);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -608,17 +661,21 @@ function MeetingRoomUI({
       state: ParticipantState;
     }) => {
       setParticipants((prev) => {
-        const participant = prev.find(p => p.peerId === data.peerId);
-        
+        const participant = prev.find((p) => p.peerId === data.peerId);
+
         // If the hand was just raised, show a toast notification
-        if (participant && !participant.state.isHandRaised && data.state.isHandRaised) {
+        if (
+          participant &&
+          !participant.state.isHandRaised &&
+          data.state.isHandRaised
+        ) {
           toast(`${data.name} raised their hand`, {
             icon: "✋",
             duration: 4000,
-            position: "top-center"
+            position: "top-center",
           });
         }
-        
+
         return prev.map((p) =>
           p.peerId === data.peerId ? { ...p, state: data.state } : p,
         );
@@ -700,6 +757,25 @@ function MeetingRoomUI({
       }
     };
 
+    const handleRecordingStatus = (data: MeetingRecordingStatus) => {
+      if (!data || data.peerId === peerId.current) {
+        return;
+      }
+
+      setActiveRecorder(data.isRecording ? data : null);
+
+      if (data.isRecording) {
+        toast.info(`${data.userName} started recording`, {
+          description: "This meeting is being recorded.",
+          duration: 3500,
+        });
+      } else {
+        toast.info(`${data.userName} stopped recording`, {
+          duration: 2500,
+        });
+      }
+    };
+
     socket.on("meeting:participant:update", handleUpdate);
     socket.on("meeting:participant:speaking", handleSpeaking);
     socket.on("meeting:chat:message", handleChat);
@@ -707,6 +783,7 @@ function MeetingRoomUI({
     socket.on("meeting:participant:joined", handleJoined);
     socket.on("meeting:participant:left", handleLeft);
     socket.on("meeting:participant:force_mute", handleForceMute);
+    socket.on("meeting:recording:status", handleRecordingStatus);
 
     return () => {
       // DON'T emit meeting:leave on unmount - user might just be navigating
@@ -721,18 +798,9 @@ function MeetingRoomUI({
       socket.off("meeting:participant:joined", handleJoined);
       socket.off("meeting:participant:left", handleLeft);
       socket.off("meeting:participant:force_mute", handleForceMute);
+      socket.off("meeting:recording:status", handleRecordingStatus);
     };
   }, [loading, meetingCode]);
-
-  // Sync fullscreen state with browser (handles ESC key)
-  useEffect(() => {
-    const handleFullscreenChange = () => {
-      setIsFullscreen(!!document.fullscreenElement);
-    };
-    
-    document.addEventListener("fullscreenchange", handleFullscreenChange);
-    return () => document.removeEventListener("fullscreenchange", handleFullscreenChange);
-  }, []);
 
   // Sync state to socket
   useEffect(() => {
@@ -743,7 +811,15 @@ function MeetingRoomUI({
       name: userName,
       state: { isMuted, isCameraOn, isScreenSharing, isHandRaised },
     });
-  }, [isMuted, isCameraOn, isScreenSharing, isHandRaised, loading]);
+  }, [
+    isMuted,
+    isCameraOn,
+    isScreenSharing,
+    isHandRaised,
+    loading,
+    meetingCode,
+    userName,
+  ]);
 
   // Timer
   useEffect(() => {
@@ -867,17 +943,352 @@ function MeetingRoomUI({
       }
       return newState;
     });
-  }, [meetingCode, userName, currentUser, isMuted, isCameraOn, isScreenSharing]);
+  }, [
+    meetingCode,
+    userName,
+    currentUser,
+    isMuted,
+    isCameraOn,
+    isScreenSharing,
+  ]);
+
+  // Recording functions
+  const formatRecordingTime = (seconds: number) => {
+    const hrs = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    return `${hrs.toString().padStart(2, "0")}:${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+  };
+
+  const startRecording = useCallback(async () => {
+    try {
+      // Get display media for screen recording
+      const displayStream = await navigator.mediaDevices.getDisplayMedia({
+        video: {
+          displaySurface: "monitor",
+        },
+        audio: true,
+      });
+
+      // Capture raw microphone for recording so spoken voice is always present.
+      let audioStream: MediaStream | null = null;
+      try {
+        audioStream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            deviceId: selectedMic ? { ideal: selectedMic } : undefined,
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+          },
+        });
+      } catch (e) {
+        console.warn("Could not get microphone for recording:", e);
+      }
+
+      // Collect remote meeting audio tracks from LiveKit participants.
+      const remoteMeetingAudioTracks: MediaStreamTrack[] = [];
+      for (const participant of Array.from(room.remoteParticipants.values())) {
+        participant.audioTrackPublications.forEach((pub) => {
+          const mediaTrack = (pub as any)?.track?.mediaStreamTrack as
+            | MediaStreamTrack
+            | undefined;
+          if (mediaTrack && mediaTrack.readyState === "live") {
+            remoteMeetingAudioTracks.push(mediaTrack.clone());
+          }
+        });
+      }
+
+      // Mix all audio sources into one track to improve browser compatibility.
+      let mixContext: AudioContext | null = null;
+      let mixedAudioTrack: MediaStreamTrack | null = null;
+      const disposableAudioTracks: MediaStreamTrack[] = [];
+      try {
+        const audioSources: Array<{ track: MediaStreamTrack; gain: number }> = [];
+
+        displayStream.getAudioTracks().forEach((t) => {
+          audioSources.push({ track: t.clone(), gain: 1 });
+        });
+        remoteMeetingAudioTracks.forEach((t) => {
+          audioSources.push({ track: t, gain: 1 });
+        });
+        audioStream?.getAudioTracks().forEach((t) => {
+          audioSources.push({ track: t.clone(), gain: 1.15 });
+        });
+
+        if (audioSources.length > 0) {
+          mixContext = new AudioContext();
+          const destination = mixContext.createMediaStreamDestination();
+
+          audioSources.forEach(({ track, gain }) => {
+            disposableAudioTracks.push(track);
+            const sourceStream = new MediaStream([track]);
+            const sourceNode = mixContext!.createMediaStreamSource(sourceStream);
+            const gainNode = mixContext!.createGain();
+            gainNode.gain.value = gain;
+            sourceNode.connect(gainNode);
+            gainNode.connect(destination);
+          });
+
+          const mixedTrack = destination.stream.getAudioTracks()[0];
+          if (mixedTrack) {
+            mixedAudioTrack = mixedTrack;
+          }
+        }
+      } catch (e) {
+        console.warn("Audio mixer initialization failed, fallback to direct tracks:", e);
+      }
+
+      let fallbackTracks = [
+        ...displayStream.getAudioTracks(),
+        ...remoteMeetingAudioTracks,
+        ...(audioStream ? audioStream.getAudioTracks() : []),
+      ];
+
+      // Ensure we really have at least one audio track; if not, try a permissive mic capture.
+      if (fallbackTracks.length === 0) {
+        try {
+          const micFallback = await navigator.mediaDevices.getUserMedia({ audio: true });
+          const micTracks = micFallback.getAudioTracks();
+          micTracks.forEach((t) => (t.enabled = true));
+          fallbackTracks = [...fallbackTracks, ...micTracks];
+        } catch (e) {
+          console.warn("Fallback microphone capture failed:", e);
+          toast.error("ไม่สามารถเข้าถึงไมโครโฟน", {
+            description: "โปรดตรวจสอบสิทธิ์ไมค์ของเบราว์เซอร์/ระบบ แล้วลองอีกครั้ง",
+          });
+        }
+      }
+
+      // Force-enable audio tracks defensively
+      fallbackTracks.forEach((t) => (t.enabled = true));
+
+      const combinedStream = new MediaStream([
+        ...displayStream.getVideoTracks(),
+        ...(mixedAudioTrack ? [mixedAudioTrack] : fallbackTracks),
+      ]);
+
+      // Create MediaRecorder
+      const mimeType = MediaRecorder.isTypeSupported(
+        "video/webm;codecs=vp9,opus",
+      )
+        ? "video/webm;codecs=vp9,opus"
+        : MediaRecorder.isTypeSupported("video/webm;codecs=vp8,opus")
+          ? "video/webm;codecs=vp8,opus"
+          : "video/webm";
+
+      const mediaRecorder = new MediaRecorder(combinedStream, {
+        mimeType,
+        videoBitsPerSecond: 2500000,
+        audioBitsPerSecond: 128000,
+      });
+
+      recordedChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          recordedChunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = async () => {
+        // Create blob
+        const blob = new Blob(recordedChunksRef.current, { type: mimeType });
+        const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+        const fileName = `meeting-recording-${timestamp}.webm`;
+
+        // Cleanup streams
+        displayStream.getTracks().forEach((track) => track.stop());
+        if (audioStream) {
+          audioStream.getTracks().forEach((track) => track.stop());
+        }
+        remoteMeetingAudioTracks.forEach((track) => track.stop());
+        disposableAudioTracks.forEach((track) => track.stop());
+        if (mixContext) {
+          mixContext.close().catch(() => undefined);
+        }
+
+        // Upload to server - backend handles team/folder creation
+        try {
+          toast.loading("Uploading recording to Shared Drive...", {
+            id: "recording-upload",
+          });
+
+          const formData = new FormData();
+          formData.append("file", blob, fileName);
+          formData.append("duration", String(recordingTimeRef.current));
+          formData.append("createdBy", currentUser?.id || "");
+
+          const authHeaders = await auth.getAuthHeaders();
+          // Remove Content-Type for FormData - browser sets it automatically with boundary
+          const { "Content-Type": _, ...uploadHeaders } = authHeaders as Record<
+            string,
+            string
+          >;
+
+          const response = await fetch(
+            `${API_BASE}/api/recordings/upload/${meetingId || "quick-huddle"}`,
+            {
+              method: "POST",
+              headers: uploadHeaders,
+              body: formData,
+            },
+          );
+
+          if (response.ok) {
+            const result = await response.json();
+            toast.success("Recording saved to Shared Drive!", {
+              id: "recording-upload",
+              description: `Folder: ${result.drive?.folder || "Meeting Recordings"} | Format: ${String(result.outputFormat || "webm").toUpperCase()}`,
+              action: {
+                label: "View",
+                onClick: () => {
+                  window.open(
+                    `/drive?teamId=${result.drive?.teamId || ""}`,
+                    "_blank",
+                  );
+                },
+              },
+            });
+          } else {
+            const errorText = await response.text();
+            console.error("Upload failed:", errorText);
+            toast.error("Upload failed", {
+              id: "recording-upload",
+              description: errorText || "Server returned an error while uploading.",
+            });
+            // Fallback to local download
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = fileName;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            toast.warning("Recording saved locally", {
+              id: "recording-upload",
+              description:
+                "Could not upload to server. File downloaded instead.",
+            });
+          }
+        } catch (uploadError) {
+          console.error("Upload error:", uploadError);
+          // Fallback to local download
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = fileName;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+          toast.warning("Recording saved locally", {
+            id: "recording-upload",
+            description: "Upload failed. File downloaded instead.",
+          });
+        }
+      };
+
+      // Handle when user stops sharing screen
+      displayStream.getVideoTracks()[0].onended = () => {
+        if (
+          mediaRecorderRef.current &&
+          mediaRecorderRef.current.state === "recording"
+        ) {
+          stopRecording();
+        }
+      };
+
+      mediaRecorder.start(1000); // Collect data every second
+      mediaRecorderRef.current = mediaRecorder;
+      setIsRecording(true);
+      setRecordingTime(0);
+      recordingTimeRef.current = 0;
+      setActiveRecorder({
+        peerId: peerId.current,
+        userId: currentUser?.id,
+        userName,
+        isRecording: true,
+        startedAt: new Date().toISOString(),
+      });
+      socketRef.current.emit("meeting:recording:status", {
+        meetingId: meetingCode,
+        peerId: peerId.current,
+        userId: currentUser?.id,
+        userName,
+        isRecording: true,
+        startedAt: new Date().toISOString(),
+      });
+
+      // Start timer
+      recordingTimerRef.current = setInterval(() => {
+        recordingTimeRef.current += 1;
+        setRecordingTime(recordingTimeRef.current);
+      }, 1000);
+
+      toast.success("Recording started", {
+        description:
+          "Your screen is being recorded. Share your screen or a window to record.",
+      });
+    } catch (error: any) {
+      console.error("Error starting recording:", error);
+      if (error.name === "NotAllowedError") {
+        toast.error("Recording cancelled", {
+          description: "Screen sharing permission was denied.",
+        });
+      } else {
+        toast.error("Recording failed", {
+          description: "Could not start recording. Please try again.",
+        });
+      }
+    }
+  }, [room, meetingId, meetingData, currentUser, meetingCode, userName, selectedMic]);
+
+  const stopRecording = useCallback(() => {
+    if (
+      mediaRecorderRef.current &&
+      mediaRecorderRef.current.state === "recording"
+    ) {
+      mediaRecorderRef.current.stop();
+      mediaRecorderRef.current = null;
+    }
+
+    if (recordingTimerRef.current) {
+      clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = null;
+    }
+
+    setIsRecording(false);
+    setActiveRecorder(null);
+    socketRef.current.emit("meeting:recording:status", {
+      meetingId: meetingCode,
+      peerId: peerId.current,
+      userId: currentUser?.id,
+      userName,
+      isRecording: false,
+    });
+  }, [currentUser?.id, meetingCode, userName]);
+
+  const toggleRecording = useCallback(async () => {
+    if (isRecording) {
+      stopRecording();
+    } else {
+      await startRecording();
+    }
+  }, [isRecording, startRecording, stopRecording]);
 
   const switchMic = useCallback(
     async (deviceId: string) => {
       setSelectedMic(deviceId);
-      
+
       // Save device preference to match Lobby behavior
       try {
         const currentPrefs = localStorage.getItem("device_preferences");
         const prefs = currentPrefs ? JSON.parse(currentPrefs) : {};
-        localStorage.setItem("device_preferences", JSON.stringify({ ...prefs, mic: deviceId }));
+        localStorage.setItem(
+          "device_preferences",
+          JSON.stringify({ ...prefs, mic: deviceId }),
+        );
       } catch (e) {
         // Ignore
       }
@@ -898,12 +1309,15 @@ function MeetingRoomUI({
   const switchCamera = useCallback(
     async (deviceId: string) => {
       setSelectedCamera(deviceId);
-      
+
       // Save device preference to match Lobby behavior
       try {
         const currentPrefs = localStorage.getItem("device_preferences");
         const prefs = currentPrefs ? JSON.parse(currentPrefs) : {};
-        localStorage.setItem("device_preferences", JSON.stringify({ ...prefs, camera: deviceId }));
+        localStorage.setItem(
+          "device_preferences",
+          JSON.stringify({ ...prefs, camera: deviceId }),
+        );
       } catch (e) {
         // Ignore
       }
@@ -1093,6 +1507,11 @@ function MeetingRoomUI({
   };
 
   const leaveMeeting = useCallback(async () => {
+    // Stop recording if active
+    if (isRecording && mediaRecorderRef.current) {
+      stopRecording();
+    }
+
     if (meetingId && meetingId !== "quick-huddle" && currentUser?.id) {
       try {
         const authHeaders = await auth.getAuthHeaders();
@@ -1115,7 +1534,14 @@ function MeetingRoomUI({
     clearCurrentMeeting();
     meetingPiPLeave();
     navigate("/");
-  }, [navigate, meetingCode, meetingId, currentUser]);
+  }, [
+    navigate,
+    meetingCode,
+    meetingId,
+    currentUser,
+    isRecording,
+    stopRecording,
+  ]);
 
   const endAndSummarizeMeeting = useCallback(async () => {
     if (!isHost || !meetingId || meetingId === "quick-huddle") {
@@ -1163,7 +1589,10 @@ function MeetingRoomUI({
       gainNode.connect(ctx.destination);
       oscillator.type = "sine";
       oscillator.frequency.setValueAtTime(800, ctx.currentTime);
-      gainNode.gain.setValueAtTime((speakerVolume[0] / 100) * 0.3, ctx.currentTime);
+      gainNode.gain.setValueAtTime(
+        (speakerVolume[0] / 100) * 0.3,
+        ctx.currentTime,
+      );
       gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.8);
       oscillator.start(ctx.currentTime);
       oscillator.stop(ctx.currentTime + 0.8);
@@ -1174,7 +1603,10 @@ function MeetingRoomUI({
       gain2.connect(ctx.destination);
       osc2.type = "sine";
       osc2.frequency.setValueAtTime(1000, ctx.currentTime + 0.3);
-      gain2.gain.setValueAtTime((speakerVolume[0] / 100) * 0.3, ctx.currentTime + 0.3);
+      gain2.gain.setValueAtTime(
+        (speakerVolume[0] / 100) * 0.3,
+        ctx.currentTime + 0.3,
+      );
       gain2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.1);
       osc2.start(ctx.currentTime + 0.3);
       osc2.stop(ctx.currentTime + 1.1);
@@ -1204,20 +1636,25 @@ function MeetingRoomUI({
 
   // Build participant list from LiveKit + screen share tiles
   const allParticipants = useMemo(() => {
-    const mappedParticipants: Array<UIMappedParticipant> = livekitParticipants.map((p) => {
-      const socketParticipant = (participants.find(sp => sp.peerId === p.identity) || { state: {} as ParticipantState }).state;
-      return {
-        identity: p.identity,
-        name: p.name || p.identity,
-        isLocal: p.isLocal,
-        cameraEnabled: p.isCameraEnabled,
-        microphoneEnabled: p.isMicrophoneEnabled,
-        screenShareEnabled: p.isScreenShareEnabled,
-        metadata: p.metadata,
-        isSpeaking: p.isSpeaking,
-        isHandRaised: socketParticipant.isHandRaised || false, // Get from socket state
-      };
-    });
+    const mappedParticipants: Array<UIMappedParticipant> =
+      livekitParticipants.map((p) => {
+        const socketParticipant = (
+          participants.find((sp) => sp.peerId === p.identity) || {
+            state: {} as ParticipantState,
+          }
+        ).state;
+        return {
+          identity: p.identity,
+          name: p.name || p.identity,
+          isLocal: p.isLocal,
+          cameraEnabled: p.isCameraEnabled,
+          microphoneEnabled: p.isMicrophoneEnabled,
+          screenShareEnabled: p.isScreenShareEnabled,
+          metadata: p.metadata,
+          isSpeaking: p.isSpeaking,
+          isHandRaised: socketParticipant.isHandRaised || false, // Get from socket state
+        };
+      });
 
     // Add screen share tiles as separate entries (Zoom/Google Meet style)
     tracks
@@ -1254,8 +1691,8 @@ function MeetingRoomUI({
   // Sync PiP state with local meeting state
   useEffect(() => {
     // Determine if ANY participant (local or remote) has their hand raised
-    const hasHandRaised = allParticipants.some(p => p.isHandRaised);
-    
+    const hasHandRaised = allParticipants.some((p) => p.isHandRaised);
+
     meetingPiPUpdateState({
       isMuted,
       isCameraOn,
@@ -1263,24 +1700,38 @@ function MeetingRoomUI({
       participantCount: livekitParticipants.length,
       hasHandRaised,
     });
-  }, [isMuted, isCameraOn, elapsedSeconds, livekitParticipants.length, allParticipants]);
+  }, [
+    isMuted,
+    isCameraOn,
+    elapsedSeconds,
+    livekitParticipants.length,
+    allParticipants,
+  ]);
 
   // Validate pinned participant still exists
-  const validPinned = pinnedParticipantId && allParticipants.some(p => p.identity === pinnedParticipantId);
+  const validPinned =
+    pinnedParticipantId &&
+    allParticipants.some((p) => p.identity === pinnedParticipantId);
   const effectivePinnedId = validPinned ? pinnedParticipantId : null;
 
   // Determine if we're in spotlight mode (pinned or screen share)
   const isSpotlightMode = !!effectivePinnedId || hasScreenShare;
 
   // The main/focused content identity — pinned overrides screen share
-  const mainViewId = effectivePinnedId || allParticipants.find(p => p.isScreenShareTile)?.identity || null;
+  const mainViewId =
+    effectivePinnedId ||
+    allParticipants.find((p) => p.isScreenShareTile)?.identity ||
+    null;
 
   // Handle clicking a participant tile
   // Don't allow pinning when you're the only participant
-  const handleTileClick = useCallback((identity: string) => {
-    if (totalParticipants <= 1) return; // No point pinning when alone
-    setPinnedParticipantId(prev => prev === identity ? null : identity);
-  }, [totalParticipants]);
+  const handleTileClick = useCallback(
+    (identity: string) => {
+      if (totalParticipants <= 1) return; // No point pinning when alone
+      setPinnedParticipantId((prev) => (prev === identity ? null : identity));
+    },
+    [totalParticipants],
+  );
 
   // Calculate grid layout - always show all participants like Zoom/Google Meet
   const getGridLayout = () => {
@@ -1352,10 +1803,19 @@ function MeetingRoomUI({
               {meetingTitle}
             </span>
           </div>
-          {isRecording && (
-            <div className="flex items-center gap-1.5 bg-red-500/20 px-2.5 py-1 rounded-md border border-red-500/30">
-              <Circle className="w-2 h-2 fill-red-500 animate-pulse" />
-              <span className="text-red-400 text-xs font-medium">REC</span>
+          {activeRecorder?.isRecording && (
+            <div className="flex items-center gap-2 bg-red-500/20 px-3 py-1.5 rounded-md border border-red-500/30">
+              <Circle className="w-2.5 h-2.5 fill-red-500 animate-pulse" />
+              <span className="text-red-400 text-xs font-semibold">
+                {activeRecorder.peerId === peerId.current
+                  ? "REC"
+                  : `${activeRecorder.userName} is recording`}
+              </span>
+              {activeRecorder.peerId === peerId.current && (
+                <span className="text-red-300 text-xs font-mono">
+                  {formatRecordingTime(recordingTime)}
+                </span>
+              )}
             </div>
           )}
         </div>
@@ -1416,14 +1876,17 @@ function MeetingRoomUI({
               {/* ── Main View (large area) ── */}
               <div className="flex-1 p-2 relative">
                 {(() => {
-                  const mainParticipant = allParticipants.find(p => p.identity === mainViewId);
+                  const mainParticipant = allParticipants.find(
+                    (p) => p.identity === mainViewId,
+                  );
                   if (!mainParticipant) return null;
 
                   // Screen share tile
                   if (mainParticipant.isScreenShareTile) {
                     const screenTrack = tracks.find(
                       (t) =>
-                        t.participant.identity === mainParticipant.screenShareIdentity &&
+                        t.participant.identity ===
+                          mainParticipant.screenShareIdentity &&
                         t.source === Track.Source.ScreenShare,
                     );
                     if (!screenTrack) return null;
@@ -1431,7 +1894,9 @@ function MeetingRoomUI({
                     return (
                       <div
                         className="relative rounded-xl overflow-hidden bg-[#1a1a1a] border-2 border-[#2d2d2d] h-full cursor-pointer"
-                        onClick={() => handleTileClick(mainParticipant.identity)}
+                        onClick={() =>
+                          handleTileClick(mainParticipant.identity)
+                        }
                       >
                         <div className="absolute inset-0 w-full h-full flex items-center justify-center bg-[#0a0a0a]">
                           <VideoTrack
@@ -1446,7 +1911,10 @@ function MeetingRoomUI({
                         {/* Unpin button */}
                         {effectivePinnedId && (
                           <button
-                            onClick={(e) => { e.stopPropagation(); setPinnedParticipantId(null); }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setPinnedParticipantId(null);
+                            }}
                             className="absolute top-3 right-3 bg-black/60 hover:bg-black/80 backdrop-blur-sm text-white px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 shadow-lg z-20 transition-all duration-200 hover:scale-105"
                           >
                             <PinOff className="w-3.5 h-3.5" />
@@ -1486,7 +1954,9 @@ function MeetingRoomUI({
                             trackRef={videoTrack}
                             className={cn(
                               "w-full h-full object-contain",
-                              mainParticipant.isLocal && mirrorVideo && "scale-x-[-1]",
+                              mainParticipant.isLocal &&
+                                mirrorVideo &&
+                                "scale-x-[-1]",
                             )}
                           />
                         ) : (
@@ -1498,7 +1968,7 @@ function MeetingRoomUI({
                             </Avatar>
                           </div>
                         )}
-                        
+
                         {/* Hand Raise Badge (Spotlight) */}
                         {mainParticipant.isHandRaised && (
                           <div className="absolute top-4 right-4 bg-[#fbbc04] text-black p-2.5 rounded-full shadow-[0_0_20px_rgba(251,188,4,0.4)] animate-pulse z-20">
@@ -1515,7 +1985,7 @@ function MeetingRoomUI({
                             {mainParticipant.isLocal && " (You)"}
                           </span>
                         </div>
-                        
+
                         {/* Status Badges */}
                         <div className="flex items-center gap-1.5">
                           {!mainParticipant.microphoneEnabled && (
@@ -1538,7 +2008,10 @@ function MeetingRoomUI({
               {/* ── Sidebar strip (all other tiles) ── */}
               <div className="w-52 p-2 flex flex-col gap-2 overflow-y-auto">
                 {/* Show screen share tile in sidebar if it's not the main view */}
-                {hasScreenShare && mainViewId && !allParticipants.find(p => p.identity === mainViewId)?.isScreenShareTile && (
+                {hasScreenShare &&
+                  mainViewId &&
+                  !allParticipants.find((p) => p.identity === mainViewId)
+                    ?.isScreenShareTile &&
                   allParticipants
                     .filter((p) => p.isScreenShareTile)
                     .map((p) => {
@@ -1578,12 +2051,13 @@ function MeetingRoomUI({
                           </div>
                         </div>
                       );
-                    })
-                )}
+                    })}
 
                 {/* Participant tiles (excluding the one in main view) */}
                 {allParticipants
-                  .filter((p) => !p.isScreenShareTile && p.identity !== mainViewId)
+                  .filter(
+                    (p) => !p.isScreenShareTile && p.identity !== mainViewId,
+                  )
                   .map((p) => {
                     const videoTrack = tracks.find(
                       (t) =>
@@ -1639,7 +2113,7 @@ function MeetingRoomUI({
 
                         {/* Hover overlay */}
                         <div className="absolute inset-0 bg-white/0 group-hover:bg-white/5 transition-colors duration-200 z-10" />
-                        
+
                         {/* Name and Indicators Pill */}
                         <div className="absolute bottom-2 left-2 flex items-center gap-1.5 z-20">
                           <div className="bg-black/60 backdrop-blur-md px-2.5 py-1.5 rounded-lg flex items-center shadow-md border border-white/10 max-w-[120px]">
@@ -1699,84 +2173,90 @@ function MeetingRoomUI({
 
                   return (
                     <div
-                        key={p.identity}
-                        className={cn(
-                          "relative rounded-2xl overflow-hidden bg-[#202124] transition-all duration-300 group m-1",
-                          totalParticipants > 1 && "cursor-pointer",
-                          p.isSpeaking
-                            ? "ring-4 ring-green-500 shadow-[0_0_20px_rgba(34,197,94,0.3)]"
-                            : totalParticipants > 1 ? "ring-1 ring-white/10 hover:ring-white/30" : "ring-1 ring-white/10",
-                        )}
-                        style={{
-                          aspectRatio: "16 / 9",
-                          width: "calc(100% - 8px)",
-                          height: "calc(100% - 8px)",
-                        }}
-                        onClick={() => handleTileClick(p.identity)}
-                        title={totalParticipants > 1 ? `Click to focus ${p.name}` : undefined}
-                      >
-                        <div className="absolute inset-0 w-full h-full flex items-center justify-center bg-[#202124]">
-                          {videoTrack && p.cameraEnabled ? (
-                            <VideoTrack
-                              trackRef={videoTrack}
-                              className={cn(
-                                "w-full h-full object-contain",
-                                p.isLocal && mirrorVideo && "scale-x-[-1]",
-                              )}
-                            />
-                          ) : (
-                            <div className="flex flex-col items-center justify-center">
-                              <Avatar className="w-24 h-24 bg-[#3c4043] ring-1 ring-white/10 shadow-lg">
-                                <AvatarImage src={p.metadata} />
-                                <AvatarFallback className="text-3xl font-medium text-[#e8eaed] bg-[#3c4043]">
-                                  {initials}
-                                </AvatarFallback>
-                              </Avatar>
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Hover overlay */}
-                        <div className="absolute inset-0 bg-white/0 group-hover:bg-white/5 transition-colors duration-200 z-10" />
-
-                        {/* Name and Indicators Pill */}
-                        <div className="absolute bottom-3 left-3 flex items-center gap-2 z-20">
-                          <div className="bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-xl flex items-center shadow-md border border-white/10 max-w-[200px]">
-                            <span className="text-white text-sm font-medium truncate">
-                              {p.name}
-                              {p.isLocal && " (You)"}
-                            </span>
-                          </div>
-                          
-                          {/* Status Badges */}
-                          <div className="flex items-center gap-1.5">
-                            {!p.microphoneEnabled && (
-                              <div className="bg-[#ea4335]/90 backdrop-blur-md rounded-full p-2 shadow-md border border-red-500/30">
-                                <MicOff className="w-3.5 h-3.5 text-white" />
-                              </div>
+                      key={p.identity}
+                      className={cn(
+                        "relative rounded-2xl overflow-hidden bg-[#202124] transition-all duration-300 group m-1",
+                        totalParticipants > 1 && "cursor-pointer",
+                        p.isSpeaking
+                          ? "ring-4 ring-green-500 shadow-[0_0_20px_rgba(34,197,94,0.3)]"
+                          : totalParticipants > 1
+                            ? "ring-1 ring-white/10 hover:ring-white/30"
+                            : "ring-1 ring-white/10",
+                      )}
+                      style={{
+                        aspectRatio: "16 / 9",
+                        width: "calc(100% - 8px)",
+                        height: "calc(100% - 8px)",
+                      }}
+                      onClick={() => handleTileClick(p.identity)}
+                      title={
+                        totalParticipants > 1
+                          ? `Click to focus ${p.name}`
+                          : undefined
+                      }
+                    >
+                      <div className="absolute inset-0 w-full h-full flex items-center justify-center bg-[#202124]">
+                        {videoTrack && p.cameraEnabled ? (
+                          <VideoTrack
+                            trackRef={videoTrack}
+                            className={cn(
+                              "w-full h-full object-contain",
+                              p.isLocal && mirrorVideo && "scale-x-[-1]",
                             )}
-                            {!p.cameraEnabled && (
-                              <div className="bg-[#ea4335]/90 backdrop-blur-md rounded-full p-2 shadow-md border border-red-500/30">
-                                <VideoOff className="w-3.5 h-3.5 text-white" />
-                              </div>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Focus hint on hover (only when multiple participants) */}
-                        {totalParticipants > 1 && (
-                          <div className="absolute top-3 left-3 bg-black/60 backdrop-blur-sm rounded-lg p-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-20 border border-white/10">
-                            <Pin className="w-4 h-4 text-white" />
-                          </div>
-                        )}
-
-                        {/* Hand Raise Badge (Grid) */}
-                        {p.isHandRaised && (
-                          <div className="absolute top-3 right-3 bg-[#fbbc04] text-black p-2 rounded-full shadow-[0_0_15px_rgba(251,188,4,0.4)] animate-pulse z-20">
-                            <Hand className="w-4 h-4" />
+                          />
+                        ) : (
+                          <div className="flex flex-col items-center justify-center">
+                            <Avatar className="w-24 h-24 bg-[#3c4043] ring-1 ring-white/10 shadow-lg">
+                              <AvatarImage src={p.metadata} />
+                              <AvatarFallback className="text-3xl font-medium text-[#e8eaed] bg-[#3c4043]">
+                                {initials}
+                              </AvatarFallback>
+                            </Avatar>
                           </div>
                         )}
                       </div>
+
+                      {/* Hover overlay */}
+                      <div className="absolute inset-0 bg-white/0 group-hover:bg-white/5 transition-colors duration-200 z-10" />
+
+                      {/* Name and Indicators Pill */}
+                      <div className="absolute bottom-3 left-3 flex items-center gap-2 z-20">
+                        <div className="bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-xl flex items-center shadow-md border border-white/10 max-w-[200px]">
+                          <span className="text-white text-sm font-medium truncate">
+                            {p.name}
+                            {p.isLocal && " (You)"}
+                          </span>
+                        </div>
+
+                        {/* Status Badges */}
+                        <div className="flex items-center gap-1.5">
+                          {!p.microphoneEnabled && (
+                            <div className="bg-[#ea4335]/90 backdrop-blur-md rounded-full p-2 shadow-md border border-red-500/30">
+                              <MicOff className="w-3.5 h-3.5 text-white" />
+                            </div>
+                          )}
+                          {!p.cameraEnabled && (
+                            <div className="bg-[#ea4335]/90 backdrop-blur-md rounded-full p-2 shadow-md border border-red-500/30">
+                              <VideoOff className="w-3.5 h-3.5 text-white" />
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Focus hint on hover (only when multiple participants) */}
+                      {totalParticipants > 1 && (
+                        <div className="absolute top-3 left-3 bg-black/60 backdrop-blur-sm rounded-lg p-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-20 border border-white/10">
+                          <Pin className="w-4 h-4 text-white" />
+                        </div>
+                      )}
+
+                      {/* Hand Raise Badge (Grid) */}
+                      {p.isHandRaised && (
+                        <div className="absolute top-3 right-3 bg-[#fbbc04] text-black p-2 rounded-full shadow-[0_0_15px_rgba(251,188,4,0.4)] animate-pulse z-20">
+                          <Hand className="w-4 h-4" />
+                        </div>
+                      )}
+                    </div>
                   );
                 })}
             </div>
@@ -1978,9 +2458,12 @@ function MeetingRoomUI({
                             .join("")
                             .slice(0, 2)
                             .toUpperCase();
-                          
-                          const hasText = msg.text && !msg.attachments?.some(a => a.name === msg.text);
-                          const hasAttachments = msg.attachments && msg.attachments.length > 0;
+
+                          const hasText =
+                            msg.text &&
+                            !msg.attachments?.some((a) => a.name === msg.text);
+                          const hasAttachments =
+                            msg.attachments && msg.attachments.length > 0;
 
                           return (
                             <div
@@ -2035,29 +2518,72 @@ function MeetingRoomUI({
 
                                 {/* File Attachments — smoothly spaced and wrapped */}
                                 {hasAttachments && (
-                                  <div className={`flex flex-col gap-2 w-full ${isMe ? "items-end" : "items-start"}`}>
+                                  <div
+                                    className={`flex flex-col gap-2 w-full ${isMe ? "items-end" : "items-start"}`}
+                                  >
                                     {msg.attachments!.map((file, i) => {
-                                      const fileType = file.type || getMimeFromExtension(file.name || "");
-                                      const isImage = fileType.startsWith("image/") || /\.(jpe?g|png|gif|webp|bmp|svg)$/i.test(file.name || "");
-                                      const isVideo = fileType.startsWith("video/") || /\.(mp4|webm|ogg|mov|avi)$/i.test(file.name || "");
-                                      const isAudio = fileType.startsWith("audio/") || /\.(mp3|wav|ogg|m4a|flac)$/i.test(file.name || "");
-                                      const isPDF = fileType === "application/pdf" || /\.pdf$/i.test(file.name || "");
-                                      const fileUrl = normalizeAttachmentUrl(file.url || "");
+                                      const fileType =
+                                        file.type ||
+                                        getMimeFromExtension(file.name || "");
+                                      const isImage =
+                                        fileType.startsWith("image/") ||
+                                        /\.(jpe?g|png|gif|webp|bmp|svg)$/i.test(
+                                          file.name || "",
+                                        );
+                                      const isVideo =
+                                        fileType.startsWith("video/") ||
+                                        /\.(mp4|webm|ogg|mov|avi)$/i.test(
+                                          file.name || "",
+                                        );
+                                      const isAudio =
+                                        fileType.startsWith("audio/") ||
+                                        /\.(mp3|wav|ogg|m4a|flac)$/i.test(
+                                          file.name || "",
+                                        );
+                                      const isPDF =
+                                        fileType === "application/pdf" ||
+                                        /\.pdf$/i.test(file.name || "");
+                                      const fileUrl = normalizeAttachmentUrl(
+                                        file.url || "",
+                                      );
 
-                                      {/* ── Image ── */}
+                                      {
+                                        /* ── Image ── */
+                                      }
                                       if (isImage) {
-                                        return <ImagePreview key={i} url={fileUrl} name={file.name} variant="meeting" />;
+                                        return (
+                                          <ImagePreview
+                                            key={i}
+                                            url={fileUrl}
+                                            name={file.name}
+                                            variant="meeting"
+                                          />
+                                        );
                                       }
 
-                                      {/* ── PDF ── */}
+                                      {
+                                        /* ── PDF ── */
+                                      }
                                       if (isPDF) {
-                                        return <PDFViewer key={i} url={fileUrl} name={file.name} variant="meeting" />;
+                                        return (
+                                          <PDFViewer
+                                            key={i}
+                                            url={fileUrl}
+                                            name={file.name}
+                                            variant="meeting"
+                                          />
+                                        );
                                       }
 
-                                      {/* ── Video ── */}
+                                      {
+                                        /* ── Video ── */
+                                      }
                                       if (isVideo) {
                                         return (
-                                          <div key={i} className="rounded-2xl overflow-hidden border border-white/10 bg-[#1a1a1a] shadow-sm max-w-[280px] sm:max-w-[320px] transition-all hover:border-white/20">
+                                          <div
+                                            key={i}
+                                            className="rounded-2xl overflow-hidden border border-white/10 bg-[#1a1a1a] shadow-sm max-w-[280px] sm:max-w-[320px] transition-all hover:border-white/20"
+                                          >
                                             <video
                                               src={fileUrl}
                                               className="w-full h-auto max-h-[250px] bg-black/50"
@@ -2066,27 +2592,50 @@ function MeetingRoomUI({
                                             />
                                             <div className="px-3 py-2 flex items-center gap-2 bg-gradient-to-r from-black/80 to-black/60 backdrop-blur-md">
                                               <VideoIcon className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-                                              <span className="text-white/80 font-medium text-[11px] truncate flex-1 tracking-wide">{file.name}</span>
+                                              <span className="text-white/80 font-medium text-[11px] truncate flex-1 tracking-wide">
+                                                {file.name}
+                                              </span>
                                             </div>
                                           </div>
                                         );
                                       }
 
-                                      {/* ── Audio ── */}
+                                      {
+                                        /* ── Audio ── */
+                                      }
                                       if (isAudio) {
                                         return (
-                                          <div key={i} className="rounded-xl border border-white/10 bg-[#1a1a1a] p-3 max-w-[280px]">
+                                          <div
+                                            key={i}
+                                            className="rounded-xl border border-white/10 bg-[#1a1a1a] p-3 max-w-[280px]"
+                                          >
                                             <div className="flex items-center gap-2 mb-2">
                                               <Volume2 className="w-3.5 h-3.5 text-purple-400 flex-shrink-0" />
-                                              <span className="text-white/60 text-[10px] truncate">{file.name}</span>
+                                              <span className="text-white/60 text-[10px] truncate">
+                                                {file.name}
+                                              </span>
                                             </div>
-                                            <audio src={fileUrl} className="w-full h-8" controls preload="metadata" />
+                                            <audio
+                                              src={fileUrl}
+                                              className="w-full h-8"
+                                              controls
+                                              preload="metadata"
+                                            />
                                           </div>
                                         );
                                       }
 
-                                      {/* ── Other files ── */}
-                                      return <FilePreview key={i} url={fileUrl} name={file.name} variant="meeting" />;
+                                      {
+                                        /* ── Other files ── */
+                                      }
+                                      return (
+                                        <FilePreview
+                                          key={i}
+                                          url={fileUrl}
+                                          name={file.name}
+                                          variant="meeting"
+                                        />
+                                      );
                                     })}
                                   </div>
                                 )}
@@ -2111,7 +2660,11 @@ function MeetingRoomUI({
                                 className="relative group w-20 h-20 rounded-xl overflow-hidden shadow-sm border border-white/10 transition-all duration-300 hover:shadow-md hover:border-white/20"
                               >
                                 {isImg ? (
-                                  <img src={pa.url} alt={pa.name} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110" />
+                                  <img
+                                    src={pa.url}
+                                    alt={pa.name}
+                                    className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110"
+                                  />
                                 ) : (
                                   <div className="w-full h-full flex flex-col items-center justify-center gap-1.5 px-2 bg-gradient-to-br from-blue-500/20 to-purple-500/20 backdrop-blur-md">
                                     <FileText className="w-6 h-6 text-white/70" />
@@ -2130,7 +2683,9 @@ function MeetingRoomUI({
                                 </button>
                                 {/* Bottom Info Bar */}
                                 <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent px-1.5 pt-4 pb-1">
-                                  <span className="text-[9px] font-medium text-white/90 truncate block tracking-wide drop-shadow-md">{pa.name}</span>
+                                  <span className="text-[9px] font-medium text-white/90 truncate block tracking-wide drop-shadow-md">
+                                    {pa.name}
+                                  </span>
                                 </div>
                               </div>
                             );
@@ -2141,7 +2696,9 @@ function MeetingRoomUI({
                       {uploading && (
                         <div className="flex items-center gap-2 mb-2 px-1">
                           <Loader2 className="w-3.5 h-3.5 text-blue-400 animate-spin" />
-                          <span className="text-white/50 text-[11px]">Uploading file...</span>
+                          <span className="text-white/50 text-[11px]">
+                            Uploading file...
+                          </span>
                         </div>
                       )}
                       <div className="flex gap-2 items-end">
@@ -2166,8 +2723,14 @@ function MeetingRoomUI({
                           <Input
                             value={chatInput}
                             onChange={(e) => setChatInput(e.target.value)}
-                            onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && sendChat()}
-                            placeholder={pendingAttachments.length > 0 ? "Add a message (optional)..." : "Type a message..."}
+                            onKeyDown={(e) =>
+                              e.key === "Enter" && !e.shiftKey && sendChat()
+                            }
+                            placeholder={
+                              pendingAttachments.length > 0
+                                ? "Add a message (optional)..."
+                                : "Type a message..."
+                            }
                             className="bg-[#2a2a2a] border border-white/10 text-white placeholder:text-white/30 h-9 sm:h-10 rounded-xl text-sm focus:border-blue-500/50 focus:ring-blue-500/20"
                           />
                         </div>
@@ -2175,7 +2738,9 @@ function MeetingRoomUI({
                           size="icon"
                           className="h-9 w-9 sm:h-10 sm:w-10 bg-gradient-to-br from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 rounded-xl flex-shrink-0 shadow-lg shadow-blue-500/20"
                           onClick={sendChat}
-                          disabled={!chatInput.trim() && pendingAttachments.length === 0}
+                          disabled={
+                            !chatInput.trim() && pendingAttachments.length === 0
+                          }
                         >
                           <Send className="w-4 h-4" />
                         </Button>
@@ -2367,6 +2932,33 @@ function MeetingRoomUI({
             </span>
           </Button>
 
+          {/* Recording Toggle */}
+          <Button
+            className={cn(
+              "h-12 px-4 gap-2 transition-all duration-200",
+              isRecording
+                ? "bg-red-600 hover:bg-red-700 shadow-lg shadow-red-500/30 ring-2 ring-red-400/60"
+                : "bg-[#3d3d3d] hover:bg-[#4d4d4d]",
+            )}
+            onClick={toggleRecording}
+          >
+            {isRecording ? (
+              <>
+                <Square className="w-5 h-5" />
+                <span className="text-sm font-medium">
+                  {formatRecordingTime(recordingTime)}
+                </span>
+              </>
+            ) : (
+              <>
+                <Video className="w-5 h-5" />
+                <span className="text-sm font-medium hidden md:inline">
+                  Record
+                </span>
+              </>
+            )}
+          </Button>
+
           {/* Participants Toggle */}
           <Button
             className={cn(
@@ -2443,14 +3035,16 @@ function MeetingRoomUI({
           <div className="flex h-[450px]">
             {/* Sidebar */}
             <div className="w-48 bg-[#151515] border-r border-[#333] p-4 flex flex-col gap-2">
-              <h3 className="text-xl font-bold mb-4 px-2 text-white/90">Settings</h3>
+              <h3 className="text-xl font-bold mb-4 px-2 text-white/90">
+                Settings
+              </h3>
               <button
                 onClick={() => setSettingsTab("audio")}
                 className={cn(
                   "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200",
                   settingsTab === "audio"
                     ? "bg-blue-500/20 text-blue-400"
-                    : "text-white/60 hover:bg-white/5 hover:text-white/90"
+                    : "text-white/60 hover:bg-white/5 hover:text-white/90",
                 )}
               >
                 <Mic className="w-4 h-4" />
@@ -2462,7 +3056,7 @@ function MeetingRoomUI({
                   "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200",
                   settingsTab === "video"
                     ? "bg-blue-500/20 text-blue-400"
-                    : "text-white/60 hover:bg-white/5 hover:text-white/90"
+                    : "text-white/60 hover:bg-white/5 hover:text-white/90",
                 )}
               >
                 <VideoIcon className="w-4 h-4" />
@@ -2474,28 +3068,45 @@ function MeetingRoomUI({
             <div className="flex-1 p-8 overflow-y-auto w-full">
               {settingsTab === "audio" && (
                 <div className="space-y-8 animate-in fade-in duration-300">
-                  <h4 className="text-lg font-semibold text-white/90 border-b border-white/10 pb-2">Audio Settings</h4>
-                  
+                  <h4 className="text-lg font-semibold text-white/90 border-b border-white/10 pb-2">
+                    Audio Settings
+                  </h4>
+
                   {/* Speaker Section */}
                   <div className="space-y-4">
-                    <Label className="text-sm font-semibold text-white/70">Speaker</Label>
+                    <Label className="text-sm font-semibold text-white/70">
+                      Speaker
+                    </Label>
                     <div className="flex items-center gap-4">
-                      <Select value={selectedSpeaker} onValueChange={(deviceId) => {
-                        setSelectedSpeaker(deviceId);
-                        try {
-                          const currentPrefs = localStorage.getItem("device_preferences");
-                          const prefs = currentPrefs ? JSON.parse(currentPrefs) : {};
-                          localStorage.setItem("device_preferences", JSON.stringify({ ...prefs, speaker: deviceId }));
-                        } catch (e) {
-                          // Ignore
-                        }
-                      }}>
+                      <Select
+                        value={selectedSpeaker}
+                        onValueChange={(deviceId) => {
+                          setSelectedSpeaker(deviceId);
+                          try {
+                            const currentPrefs =
+                              localStorage.getItem("device_preferences");
+                            const prefs = currentPrefs
+                              ? JSON.parse(currentPrefs)
+                              : {};
+                            localStorage.setItem(
+                              "device_preferences",
+                              JSON.stringify({ ...prefs, speaker: deviceId }),
+                            );
+                          } catch (e) {
+                            // Ignore
+                          }
+                        }}
+                      >
                         <SelectTrigger className="flex-1 bg-[#2a2a2a] border-white/10 text-white hover:border-white/20 transition-colors h-10 rounded-lg">
                           <SelectValue placeholder="Select speaker" />
                         </SelectTrigger>
                         <SelectContent className="bg-[#2a2a2a] border-[#3dd] text-white">
                           {audioOutputs.map((d) => (
-                            <SelectItem key={d.deviceId} value={d.deviceId} className="hover:bg-white/10">
+                            <SelectItem
+                              key={d.deviceId}
+                              value={d.deviceId}
+                              className="hover:bg-white/10"
+                            >
                               {d.label || "Default Speaker"}
                             </SelectItem>
                           ))}
@@ -2509,11 +3120,15 @@ function MeetingRoomUI({
                         <Volume2 className="w-4 h-4 mr-2" /> Test Speaker
                       </Button>
                     </div>
-                    
+
                     <div className="space-y-2 mt-4 bg-[#2a2a2a] p-4 rounded-xl border border-white/5">
                       <div className="flex items-center justify-between">
-                        <Label className="text-xs text-white/50">Output Volume</Label>
-                        <span className="text-xs text-white/50 tabular-nums">{speakerVolume[0]}%</span>
+                        <Label className="text-xs text-white/50">
+                          Output Volume
+                        </Label>
+                        <span className="text-xs text-white/50 tabular-nums">
+                          {speakerVolume[0]}%
+                        </span>
                       </div>
                       <Slider
                         value={speakerVolume}
@@ -2527,7 +3142,9 @@ function MeetingRoomUI({
 
                   {/* Microphone Section */}
                   <div className="space-y-4">
-                    <Label className="text-sm font-semibold text-white/70 mt-4">Microphone</Label>
+                    <Label className="text-sm font-semibold text-white/70 mt-4">
+                      Microphone
+                    </Label>
                     <div className="flex items-center gap-4">
                       <Select value={selectedMic} onValueChange={switchMic}>
                         <SelectTrigger className="flex-1 bg-[#2a2a2a] border-white/10 text-white hover:border-white/20 transition-colors h-10 rounded-lg">
@@ -2535,14 +3152,18 @@ function MeetingRoomUI({
                         </SelectTrigger>
                         <SelectContent className="bg-[#2a2a2a] border-[#3dd] text-white">
                           {audioInputs.map((d) => (
-                            <SelectItem key={d.deviceId} value={d.deviceId} className="hover:bg-white/10">
+                            <SelectItem
+                              key={d.deviceId}
+                              value={d.deviceId}
+                              className="hover:bg-white/10"
+                            >
                               {d.label || "Default Microphone"}
                             </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
                     </div>
-                    
+
                     {/* Input Level visualizer - uses useAudioLevel hook for real-time data */}
                     <MicLevelVisualizer tracks={tracks} isMuted={isMuted} />
                   </div>
@@ -2551,17 +3172,25 @@ function MeetingRoomUI({
 
               {settingsTab === "video" && (
                 <div className="space-y-6 animate-in fade-in duration-300">
-                  <h4 className="text-lg font-semibold text-white/90 border-b border-white/10 pb-2">Video Settings</h4>
-                  
+                  <h4 className="text-lg font-semibold text-white/90 border-b border-white/10 pb-2">
+                    Video Settings
+                  </h4>
+
                   <div className="space-y-4">
-                    <Label className="text-sm font-semibold text-white/70">Camera</Label>
+                    <Label className="text-sm font-semibold text-white/70">
+                      Camera
+                    </Label>
                     <Select value={selectedCamera} onValueChange={switchCamera}>
                       <SelectTrigger className="w-full bg-[#2a2a2a] border-white/10 text-white hover:border-white/20 transition-colors h-10 rounded-lg">
                         <SelectValue placeholder="Select camera" />
                       </SelectTrigger>
                       <SelectContent className="bg-[#2a2a2a] border-[#3dd] text-white">
                         {videoInputs.map((d) => (
-                          <SelectItem key={d.deviceId} value={d.deviceId} className="hover:bg-white/10">
+                          <SelectItem
+                            key={d.deviceId}
+                            value={d.deviceId}
+                            className="hover:bg-white/10"
+                          >
                             {d.label || "Default Camera"}
                           </SelectItem>
                         ))}
@@ -2573,7 +3202,9 @@ function MeetingRoomUI({
                   <div className="aspect-video w-full rounded-xl overflow-hidden bg-black/60 border-2 border-white/10 shadow-inner flex items-center justify-center relative">
                     {(() => {
                       const localVideoTrack = tracks.find(
-                        (t) => t.participant.isLocal && t.source === Track.Source.Camera
+                        (t) =>
+                          t.participant.isLocal &&
+                          t.source === Track.Source.Camera,
                       );
                       if (localVideoTrack && isCameraOn) {
                         return (
@@ -2581,7 +3212,7 @@ function MeetingRoomUI({
                             trackRef={localVideoTrack}
                             className={cn(
                               "w-full h-full object-contain",
-                              mirrorVideo && "scale-x-[-1]"
+                              mirrorVideo && "scale-x-[-1]",
                             )}
                           />
                         );
@@ -2589,7 +3220,9 @@ function MeetingRoomUI({
                       return (
                         <div className="flex flex-col items-center justify-center text-white/30 gap-3">
                           <VideoOff className="w-10 h-10" />
-                          <span className="text-sm font-medium">Camera is off</span>
+                          <span className="text-sm font-medium">
+                            Camera is off
+                          </span>
                         </div>
                       );
                     })()}
@@ -2597,8 +3230,12 @@ function MeetingRoomUI({
 
                   <div className="bg-[#2a2a2a] border border-white/5 rounded-xl p-4 flex items-center justify-between">
                     <div>
-                      <Label className="text-sm font-medium text-white/90">Mirror my video</Label>
-                      <p className="text-xs text-white/40 mt-1">Useful for seeing yourself naturally</p>
+                      <Label className="text-sm font-medium text-white/90">
+                        Mirror my video
+                      </Label>
+                      <p className="text-xs text-white/40 mt-1">
+                        Useful for seeing yourself naturally
+                      </p>
                     </div>
                     <Switch
                       checked={mirrorVideo}
@@ -2651,8 +3288,6 @@ function MeetingRoomUI({
           </div>
         </div>
       )}
-
-
     </div>
   );
 }

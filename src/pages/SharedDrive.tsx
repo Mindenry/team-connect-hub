@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   Folder,
   FileText,
@@ -144,6 +145,7 @@ const getFileColor = (mime?: string) => {
 export default function SharedDrive() {
   const currentUser = auth.getUser();
   const { toast } = useToast();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [teams, setTeams] = useState<Team[]>([]);
   const [selectedTeamId, setSelectedTeamId] = useState<string>("");
@@ -168,13 +170,18 @@ export default function SharedDrive() {
   const [imageLoading, setImageLoading] = useState(true);
   const [entryToDelete, setEntryToDelete] = useState<DriveEntry | null>(null);
   const [manageAccessEntry, setManageAccessEntry] = useState<DriveEntry | null>(null);
+  const teamIdFromQuery = searchParams.get("teamId") || "";
 
   const loadTeams = async () => {
     try {
       const data = await apiGet<Team[]>("/teams").catch(() => []);
       const safe = Array.isArray(data) ? data : [];
       setTeams(safe);
-      if (safe.length && !selectedTeamId) {
+      if (!safe.length) return;
+      const hasTeamInQuery = !!teamIdFromQuery && safe.some((t) => t.id === teamIdFromQuery);
+      if (hasTeamInQuery) {
+        setSelectedTeamId(teamIdFromQuery);
+      } else if (!selectedTeamId) {
         setSelectedTeamId(safe[0].id);
       }
     } catch (e) {
@@ -185,7 +192,15 @@ export default function SharedDrive() {
   useEffect(() => {
     loadTeams();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [teamIdFromQuery]);
+
+  useEffect(() => {
+    if (!selectedTeamId) return;
+    if (searchParams.get("teamId") === selectedTeamId) return;
+    const next = new URLSearchParams(searchParams);
+    next.set("teamId", selectedTeamId);
+    setSearchParams(next, { replace: true });
+  }, [selectedTeamId, searchParams, setSearchParams]);
 
   const loadEntries = async () => {
     if (!selectedTeamId) return;
@@ -990,6 +1005,20 @@ export default function SharedDrive() {
                           variant="outline"
                           size="sm"
                           className="h-9 gap-2 border-border/60 hover:bg-muted/50"
+                          onClick={() => setManageAccessEntry(previewEntry)}
+                        >
+                          <Share2 className="w-4 h-4" />
+                          <span>แชร์</span>
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>แชร์ให้ผู้ใช้ในทีม</TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-9 gap-2 border-border/60 hover:bg-muted/50"
                           onClick={() => handleCopyLink(previewEntry?.latestVersion?.url)}
                         >
                           {copiedLink === previewEntry.latestVersion.url ? (
@@ -1111,6 +1140,29 @@ export default function SharedDrive() {
                               style={{ maxHeight: "calc(85vh - 200px)" }}
                             />
                           )}
+                        </div>
+                      );
+                    }
+                    if (v.mimeType.startsWith("video/")) {
+                      return (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <video
+                            src={src}
+                            controls
+                            preload="metadata"
+                            className="max-h-full max-w-full rounded-xl shadow-2xl bg-black"
+                            style={{ maxHeight: "calc(85vh - 200px)" }}
+                          />
+                        </div>
+                      );
+                    }
+                    if (v.mimeType.startsWith("audio/")) {
+                      return (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <div className="w-full max-w-xl p-8 rounded-xl border border-border/60 bg-background shadow-lg">
+                            <p className="text-sm font-medium mb-4 text-foreground">Audio Preview</p>
+                            <audio src={src} controls preload="metadata" className="w-full" />
+                          </div>
                         </div>
                       );
                     }

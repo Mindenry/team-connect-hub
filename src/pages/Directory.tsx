@@ -12,9 +12,7 @@ import {
   Ban,
   CheckCircle,
   XCircle,
-  Eye,
   Download,
-  Edit,
   Trash2,
   Save,
   RefreshCw,
@@ -22,7 +20,6 @@ import {
   Mail,
   Settings,
   Activity,
-  UserCheck,
   Crown,
   Filter,
   X,
@@ -33,7 +30,6 @@ import {
   Calendar,
   UserCircle,
   Zap,
-  CreditCard,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import InviteUserDialog from "@/components/dialogs/InviteUserDialog";
@@ -141,7 +137,6 @@ export default function Directory() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [users, setUsers] = useState<UserRecord[]>([]);
   const [teams, setTeams] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
   const [orgSettings, setOrgSettings] = useState({
     name: "",
     allowedDomains: "",
@@ -164,7 +159,6 @@ export default function Directory() {
 
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
   const [invites, setInvites] = useState<any[]>([]);
-  const [invitesLoading, setInvitesLoading] = useState(false);
 
   // Audit Logs State
   const canAccess = useMemo(() => {
@@ -341,7 +335,6 @@ export default function Directory() {
 
   const loadData = async () => {
     try {
-      setLoading(true);
       const [usersRes, teamsRes] = await Promise.all([
         apiGet<any[]>("/users").catch(() => []),
         apiGet<any[]>("/teams").catch(() => []),
@@ -411,7 +404,6 @@ export default function Directory() {
       console.error("Failed to load admin data:", err);
       toast.error("Failed to load admin data");
     } finally {
-      setLoading(false);
     }
   };
 
@@ -419,7 +411,14 @@ export default function Directory() {
     const matchesSearch =
       u.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       u.email.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesRole = roleFilter === "all" || u.role === roleFilter;
+
+    const normalizedRole = (u.role || "").toLowerCase();
+    const matchesRole =
+      roleFilter === "all" ||
+      (roleFilter === "admin"
+        ? normalizedRole === "admin" || normalizedRole === "org_owner"
+        : normalizedRole === roleFilter);
+
     const matchesStatus = statusFilter === "all" || u.status === statusFilter;
     return matchesSearch && matchesRole && matchesStatus;
   });
@@ -592,8 +591,6 @@ export default function Directory() {
     };
   }, [users]);
 
-  const canAccessValueFromAbove = canAccess; // Using the hoisted one
-
   // If user cannot access admin, force them to the directory view only
   useEffect(() => {
     if (user && !canAccess && activeSection !== "directory") {
@@ -701,7 +698,7 @@ export default function Directory() {
                 </div>
                 {activeSection === "users" && (
                   <div className="flex items-center gap-2">
-                    <Select value={roleFilter} onValueChange={setRoleFilter}><SelectTrigger className="h-10 w-28 sm:w-32 bg-background/50 border-border/60"><SelectValue placeholder="Role" /></SelectTrigger><SelectContent><SelectItem value="all">All Roles</SelectItem><SelectItem value="Admin">Admin</SelectItem><SelectItem value="Manager">Manager</SelectItem><SelectItem value="Member">Member</SelectItem></SelectContent></Select>
+                    <Select value={roleFilter} onValueChange={setRoleFilter}><SelectTrigger className="h-10 w-28 sm:w-32 bg-background/50 border-border/60"><SelectValue placeholder="Role" /></SelectTrigger><SelectContent><SelectItem value="all">All Roles</SelectItem><SelectItem value="admin">Admin</SelectItem><SelectItem value="manager">Manager</SelectItem><SelectItem value="employee">Member</SelectItem></SelectContent></Select>
                     <Select value={statusFilter} onValueChange={setStatusFilter}><SelectTrigger className="h-10 w-28 sm:w-32 bg-background/50 border-border/60"><SelectValue placeholder="Status" /></SelectTrigger><SelectContent><SelectItem value="all">All Status</SelectItem><SelectItem value="online">Online</SelectItem><SelectItem value="offline">Offline</SelectItem><SelectItem value="busy">Busy</SelectItem><SelectItem value="away">Away</SelectItem></SelectContent></Select>
                   </div>
                 )}
@@ -1258,9 +1255,9 @@ export default function Directory() {
                 <div>
                   <Label>Default Team for New Members</Label>
                   <Select
-                    value={orgSettings.defaultTeam}
+                    value={orgSettings.defaultTeam || "none"}
                     onValueChange={(value) =>
-                      setOrgSettings({ ...orgSettings, defaultTeam: value })
+                      setOrgSettings({ ...orgSettings, defaultTeam: value === "none" ? "" : value })
                     }
                   >
                     <SelectTrigger className="mt-1.5 bg-background/60 border-border/60">
