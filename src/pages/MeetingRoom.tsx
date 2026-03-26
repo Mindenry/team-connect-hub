@@ -1224,24 +1224,58 @@ function MeetingRoomUI({
           if (response.ok) {
             const result = await response.json();
             const isPersonal = isQuick || result.drive?.folder === "Personal";
-            toast.success(
-              isPersonal
-                ? "Recording saved to Personal Drive!"
-                : "Recording saved to Shared Drive!",
-              {
-                id: "recording-upload",
-                description: `Format: ${String(result.outputFormat || "mp4").toUpperCase()} | Duration: ${Math.floor(recordingTimeRef.current / 60)}:${String(recordingTimeRef.current % 60).padStart(2, "0")}`,
-                action: {
-                  label: "View",
-                  onClick: () => {
-                    window.open(
-                      `/drive?teamId=${result.drive?.teamId || ""}`,
-                      "_blank",
-                    );
+            
+            // Show appropriate message based on conversion result
+            const formatText = result.outputFormat === 'mp4' 
+              ? 'MP4 (converted)' 
+              : result.outputFormat === 'webm' 
+                ? 'WebM (original)' 
+                : String(result.outputFormat || 'mp4').toUpperCase();
+            
+            const description = result.message 
+              ? `${formatText} | Duration: ${Math.floor(recordingTimeRef.current / 60)}:${String(recordingTimeRef.current % 60).padStart(2, "0")} | ${result.message}`
+              : `${formatText} | Duration: ${Math.floor(recordingTimeRef.current / 60)}:${String(recordingTimeRef.current % 60).padStart(2, "0")}`;
+            
+            if (result.outputFormat === 'mp4') {
+              toast.success(
+                isPersonal
+                  ? "Recording saved to Personal Drive!"
+                  : "Recording saved to Shared Drive!",
+                {
+                  id: "recording-upload",
+                  description,
+                  action: {
+                    label: "View",
+                    onClick: () => {
+                      window.open(
+                        `/drive?teamId=${result.drive?.teamId || ""}`,
+                        "_blank",
+                      );
+                    },
                   },
                 },
-              },
-            );
+              );
+            } else {
+              // Conversion failed - show warning but still successful upload
+              toast.warning(
+                isPersonal
+                  ? "Recording saved (WebM format)"
+                  : "Recording saved to Shared Drive (WebM)",
+                {
+                  id: "recording-upload",
+                  description: result.message || "FFmpeg conversion failed, saved as WebM format",
+                  action: {
+                    label: "View",
+                    onClick: () => {
+                      window.open(
+                        `/drive?teamId=${result.drive?.teamId || ""}`,
+                        "_blank",
+                      );
+                    },
+                  },
+                },
+              );
+            }
           } else {
             const errorText = await response.text();
             console.error("Upload failed:", errorText);
