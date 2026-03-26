@@ -1147,6 +1147,31 @@ function MeetingRoomUI({
         ...(mixedAudioTrack ? [mixedAudioTrack] : fallbackTracks),
       ]);
 
+      const videoTracks = combinedStream.getVideoTracks();
+      if (videoTracks.length === 0) {
+        toast.error("ไม่พบวิดีโอสำหรับการอัดหน้าจอ", {
+          description: "กรุณาเลือกแชร์หน้าจอ/หน้าต่างใหม่ แล้วเริ่มบันทึกอีกครั้ง",
+        });
+        displayStream.getTracks().forEach((track) => track.stop());
+        if (audioStream) {
+          audioStream.getTracks().forEach((track) => track.stop());
+        }
+        remoteMeetingAudioTracks.forEach((track) => track.stop());
+        disposableAudioTracks.forEach((track) => track.stop());
+        if (mixContext) {
+          mixContext.close().catch(() => undefined);
+        }
+        return;
+      }
+
+      // Ensure captured video track is enabled/live
+      videoTracks.forEach((track) => {
+        track.enabled = true;
+        track.onended = () => {
+          console.warn("Screen video track ended during recording");
+        };
+      });
+
       // Create MediaRecorder
       const mimeType = MediaRecorder.isTypeSupported(
         "video/webm;codecs=vp9,opus",
