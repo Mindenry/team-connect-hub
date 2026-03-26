@@ -110,7 +110,12 @@ function normalizeActiveRooms(rooms: ActiveRoom[]): ActiveRoom[] {
     });
   }
 
-  return Array.from(roomMap.values());
+  const normalized = Array.from(roomMap.values());
+  normalized.sort((a, b) => a.roomId.localeCompare(b.roomId));
+  normalized.forEach((r) => {
+    r.participants.sort((p1, p2) => p1.peerId.localeCompare(p2.peerId));
+  });
+  return normalized;
 }
 
 export function PresenceProvider({ children }: { children: ReactNode }) {
@@ -121,6 +126,11 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
   const refreshFnRef = useRef<() => void>(() => {});
   const lastRefreshAtRef = useRef(0);
   const isRefreshingRef = useRef(false);
+  // Hysteresis: backend may return [] briefly during reconnect/disconnect (event/race).
+  // We keep previous non-empty rooms for a short window to avoid "blink"/flicker.
+  const lastNonEmptyRoomsRef = useRef<ActiveRoom[]>([]);
+  const emptySinceRef = useRef<number | null>(null);
+  const CLEAR_EMPTY_AFTER_MS = 2500;
 
   const refreshPresence = useCallback(() => {
     refreshFnRef.current();
@@ -195,6 +205,26 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
 
     const handleActiveRooms = (rooms: ActiveRoom[]) => {
       const normalized = normalizeActiveRooms(Array.isArray(rooms) ? rooms : []);
+
+      if (normalized.length === 0) {
+        if (lastNonEmptyRoomsRef.current.length > 0) {
+          if (emptySinceRef.current === null) {
+            emptySinceRef.current = Date.now();
+          }
+          if (Date.now() - emptySinceRef.current < CLEAR_EMPTY_AFTER_MS) {
+            // Keep current active rooms until empty persists long enough.
+            return;
+          }
+        }
+
+        emptySinceRef.current = null;
+        lastNonEmptyRoomsRef.current = [];
+        setActiveRooms([]);
+        return;
+      }
+
+      emptySinceRef.current = null;
+      lastNonEmptyRoomsRef.current = normalized;
       setActiveRooms(normalized);
     };
 
