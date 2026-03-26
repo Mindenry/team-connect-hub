@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   Folder,
@@ -10,6 +10,10 @@ import {
   MoreHorizontal,
   Image as ImageIcon,
   FileArchive,
+  FileSpreadsheet,
+  FileCode,
+  FileAudio,
+  FileVideo,
   File as FileIcon,
   Download,
   Eye,
@@ -126,10 +130,43 @@ const formatDate = (dateString: string) => {
   return date.toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "numeric" });
 };
 
-const iconForMime = (mime?: string) => {
+const iconForMime = (mime?: string, fileName?: string) => {
+  const lowerName = (fileName || "").toLowerCase();
   if (!mime) return FileIcon;
   if (mime.startsWith("image/")) return ImageIcon;
+  if (mime.startsWith("video/")) return FileVideo;
+  if (mime.startsWith("audio/")) return FileAudio;
   if (mime === "application/pdf") return FileText;
+  if (
+    mime.includes("sheet") ||
+    mime.includes("excel") ||
+    [".csv", ".xls", ".xlsx"].some((ext) => lowerName.endsWith(ext))
+  ) {
+    return FileSpreadsheet;
+  }
+  if (
+    mime.includes("json") ||
+    mime.includes("xml") ||
+    mime.includes("javascript") ||
+    mime.includes("typescript") ||
+    mime.includes("text/") ||
+    [
+      ".json",
+      ".xml",
+      ".js",
+      ".ts",
+      ".tsx",
+      ".jsx",
+      ".md",
+      ".txt",
+      ".yml",
+      ".yaml",
+      ".html",
+      ".css",
+    ].some((ext) => lowerName.endsWith(ext))
+  ) {
+    return FileCode;
+  }
   if (mime.includes("zip") || mime.includes("rar") || mime.includes("7z")) return FileArchive;
   return FileIcon;
 };
@@ -137,9 +174,58 @@ const iconForMime = (mime?: string) => {
 const getFileColor = (mime?: string) => {
   if (!mime) return "text-muted-foreground";
   if (mime.startsWith("image/")) return "text-blue-500";
+  if (mime.startsWith("video/")) return "text-violet-500";
+  if (mime.startsWith("audio/")) return "text-green-500";
   if (mime === "application/pdf") return "text-red-500";
+  if (mime.includes("sheet") || mime.includes("excel")) return "text-emerald-600";
+  if (mime.includes("json") || mime.includes("text/") || mime.includes("javascript") || mime.includes("typescript")) return "text-cyan-500";
   if (mime.includes("zip") || mime.includes("rar") || mime.includes("7z")) return "text-yellow-500";
   return "text-muted-foreground";
+};
+
+const isTextLike = (mime?: string, name?: string) => {
+  const lowerName = (name || "").toLowerCase();
+  if (!mime) return false;
+  if (mime.startsWith("text/")) return true;
+  if (
+    mime.includes("json") ||
+    mime.includes("xml") ||
+    mime.includes("javascript") ||
+    mime.includes("typescript")
+  ) {
+    return true;
+  }
+  return [
+    ".txt",
+    ".md",
+    ".json",
+    ".xml",
+    ".js",
+    ".jsx",
+    ".ts",
+    ".tsx",
+    ".css",
+    ".html",
+    ".yml",
+    ".yaml",
+    ".csv",
+  ].some((ext) => lowerName.endsWith(ext));
+};
+
+const isOfficeLike = (mime?: string, name?: string) => {
+  const lowerName = (name || "").toLowerCase();
+  if (!mime) return false;
+  if (
+    mime.includes("officedocument") ||
+    mime.includes("msword") ||
+    mime.includes("excel") ||
+    mime.includes("powerpoint")
+  ) {
+    return true;
+  }
+  return [".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx"].some((ext) =>
+    lowerName.endsWith(ext),
+  );
 };
 
 export default function SharedDrive() {
@@ -170,6 +256,9 @@ export default function SharedDrive() {
   const [imageLoading, setImageLoading] = useState(true);
   const [entryToDelete, setEntryToDelete] = useState<DriveEntry | null>(null);
   const [manageAccessEntry, setManageAccessEntry] = useState<DriveEntry | null>(null);
+  const [textPreview, setTextPreview] = useState<string>("");
+  const [textPreviewLoading, setTextPreviewLoading] = useState(false);
+  const [textPreviewError, setTextPreviewError] = useState<string | null>(null);
   const teamIdFromQuery = searchParams.get("teamId") || "";
 
   const loadTeams = async () => {
@@ -315,6 +404,41 @@ export default function SharedDrive() {
     }
   };
 
+  const loadTextPreview = useCallback(async (entry: DriveEntry) => {
+    if (!entry.latestVersion) return;
+
+    const mime = entry.latestVersion.mimeType;
+    if (!isTextLike(mime, entry.name)) {
+      setTextPreview("");
+      setTextPreviewError(null);
+      setTextPreviewLoading(false);
+      return;
+    }
+
+    try {
+      setTextPreviewLoading(true);
+      setTextPreviewError(null);
+      const src = entry.latestVersion.url.startsWith("http")
+        ? entry.latestVersion.url
+        : `${API_BASE}${entry.latestVersion.url}`;
+      const res = await fetch(src, {
+        headers: {
+          ...(auth.getToken() ? { Authorization: `Bearer ${auth.getToken()}` } : {}),
+        },
+      });
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+      const txt = await res.text();
+      setTextPreview(txt.slice(0, 200000));
+    } catch (err: any) {
+      setTextPreview("");
+      setTextPreviewError(err?.message || "Unable to preview this file");
+    } finally {
+      setTextPreviewLoading(false);
+    }
+  }, []);
+
   const handleOpenEntry = (entry: DriveEntry) => {
     if (entry.isFolder) {
       setCurrentPath(entry.path === "/" ? `/${entry.name}` : `${entry.path}/${entry.name}`);
@@ -323,7 +447,11 @@ export default function SharedDrive() {
       setVersionsData(null);
       setImageError(false);
       setImageLoading(true);
+      setTextPreview("");
+      setTextPreviewError(null);
+      setTextPreviewLoading(false);
       void loadVersions(entry.id);
+      void loadTextPreview(entry);
     }
   };
 
@@ -380,6 +508,12 @@ export default function SharedDrive() {
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
+  };
+
+  const handleOpenExternal = (url?: string) => {
+    if (!url) return;
+    const full = url.startsWith("http") ? url : `${API_BASE}${url}`;
+    window.open(full, "_blank", "noopener,noreferrer");
   };
 
   const handleDeleteEntry = async (entryId: string) => {
@@ -671,7 +805,7 @@ export default function SharedDrive() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 pb-4">
                     {filteredEntries.map((entry) => {
                       const version = entry.latestVersion;
-                      const Icon = entry.isFolder ? Folder : iconForMime(version?.mimeType);
+                      const Icon = entry.isFolder ? Folder : iconForMime(version?.mimeType, entry.name);
                       const fileColor = entry.isFolder ? "text-primary" : getFileColor(version?.mimeType);
 
                       return (
@@ -754,7 +888,7 @@ export default function SharedDrive() {
                   <div className="space-y-1 pb-4">
                     {filteredEntries.map((entry) => {
                       const version = entry.latestVersion;
-                      const Icon = entry.isFolder ? Folder : iconForMime(version?.mimeType);
+                      const Icon = entry.isFolder ? Folder : iconForMime(version?.mimeType, entry.name);
                       const fileColor = entry.isFolder ? "text-primary" : getFileColor(version?.mimeType);
 
                       return (
@@ -860,6 +994,22 @@ export default function SharedDrive() {
                                       </Button>
                                     </TooltipTrigger>
                                     <TooltipContent>คัดลอกลิงก์</TooltipContent>
+                                  </Tooltip>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-8 w-8"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleOpenExternal(version.url);
+                                        }}
+                                      >
+                                        <Eye className="w-4 h-4" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>เปิดในแท็บใหม่</TooltipContent>
                                   </Tooltip>
                                 </div>
                               )}
@@ -980,7 +1130,7 @@ export default function SharedDrive() {
                     <>
                       <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center shadow-sm ring-1 ring-primary/10">
                         {(() => {
-                          const Icon = iconForMime(previewEntry.latestVersion?.mimeType);
+                          const Icon = iconForMime(previewEntry.latestVersion?.mimeType, previewEntry.name);
                           return <Icon className={cn("w-6 h-6", getFileColor(previewEntry.latestVersion?.mimeType))} />;
                         })()}
                       </div>
@@ -1205,23 +1355,140 @@ export default function SharedDrive() {
                         </div>
                       );
                     }
+
+                    if (isTextLike(v.mimeType, previewEntry.name)) {
+                      if (textPreviewLoading) {
+                        return (
+                          <div className="w-full h-full flex items-center justify-center">
+                            <div className="flex flex-col items-center gap-3 text-muted-foreground">
+                              <RefreshCw className="w-8 h-8 animate-spin" />
+                              <p className="text-sm">กำลังโหลดตัวอย่างไฟล์ข้อความ...</p>
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      if (textPreviewError) {
+                        return (
+                          <div className="flex flex-col items-center gap-4 text-center p-10">
+                            <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-muted/60 to-muted/40 flex items-center justify-center shadow-lg">
+                              <FileCode className="w-12 h-12 text-muted-foreground" />
+                            </div>
+                            <div>
+                              <p className="text-base font-semibold text-foreground mb-1.5">ไม่สามารถแสดง Text Preview ได้</p>
+                              <p className="text-sm text-muted-foreground">{textPreviewError}</p>
+                            </div>
+                            <Button
+                              size="sm"
+                              className="h-10 gap-2 px-6"
+                              onClick={() => handleDownload(v.url, previewEntry.name)}
+                            >
+                              <Download className="w-4 h-4" />
+                              ดาวน์โหลดไฟล์
+                            </Button>
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div className="w-full h-full flex flex-col rounded-xl border border-border/60 bg-background shadow-xl overflow-hidden">
+                          <div className="px-4 py-2.5 border-b border-border/50 flex items-center justify-between bg-muted/20">
+                            <span className="text-xs font-medium text-muted-foreground">Text Preview (สูงสุด 200,000 ตัวอักษร)</span>
+                            <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => handleDownload(v.url, previewEntry.name)}>
+                              <Download className="w-3.5 h-3.5 mr-1" />
+                              ดาวน์โหลดเต็มไฟล์
+                            </Button>
+                          </div>
+                          <pre className="flex-1 overflow-auto p-4 text-xs leading-relaxed font-mono whitespace-pre-wrap break-words text-foreground bg-background">
+{textPreview || "(ไฟล์ว่าง)"}
+                          </pre>
+                        </div>
+                      );
+                    }
+
+                    if (isOfficeLike(v.mimeType, previewEntry.name)) {
+                      const officeViewerSrc = `https://docs.google.com/gview?embedded=1&url=${encodeURIComponent(src)}`;
+                      return (
+                        <div className="w-full h-full flex flex-col rounded-xl border border-border/60 bg-background shadow-xl overflow-hidden">
+                          <div className="px-5 py-3.5 border-b border-border/60 bg-gradient-to-r from-muted/50 to-muted/20 flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+                              <span className="text-sm font-semibold text-foreground">Office Preview</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => handleOpenExternal(v.url)}>
+                                <Eye className="w-3.5 h-3.5 mr-1" />
+                                เปิดไฟล์ตรง
+                              </Button>
+                              <Button size="sm" className="h-8 text-xs" onClick={() => handleDownload(v.url, previewEntry.name)}>
+                                <Download className="w-3.5 h-3.5 mr-1" />
+                                ดาวน์โหลด
+                              </Button>
+                            </div>
+                          </div>
+                          <div className="flex-1 bg-muted/20">
+                            <iframe
+                              src={officeViewerSrc}
+                              title={`${previewEntry.name} office preview`}
+                              className="w-full h-full border-0"
+                              style={{ minHeight: "500px" }}
+                            />
+                          </div>
+                          <div className="px-4 py-2.5 border-t border-border/50 bg-muted/20 text-xs text-muted-foreground">
+                            ถ้า preview ไม่ขึ้น อาจเป็นเพราะสิทธิ์ไฟล์หรือเครือข่าย ให้ใช้ปุ่ม "เปิดไฟล์ตรง" หรือดาวน์โหลดแทน
+                          </div>
+                        </div>
+                      );
+                    }
+
                     return (
-                      <div className="flex flex-col items-center gap-5 text-center p-10">
+                      <div className="flex flex-col items-center gap-5 text-center p-10 w-full">
                         <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-muted/60 to-muted/40 flex items-center justify-center shadow-lg">
                           <FileIcon className="w-12 h-12 text-muted-foreground" />
                         </div>
                         <div>
-                          <p className="text-base font-semibold text-foreground mb-1.5">ไม่สามารถแสดงตัวอย่างได้</p>
-                          <p className="text-sm text-muted-foreground">ไฟล์ประเภทนี้ต้องดาวน์โหลดเพื่อเปิดดู</p>
+                          <p className="text-base font-semibold text-foreground mb-1.5">ยังไม่มี Preview สำหรับไฟล์ประเภทนี้</p>
+                          <p className="text-sm text-muted-foreground">รองรับการดูรายละเอียดไฟล์ + ดาวน์โหลดได้เหมือน Google Drive</p>
                         </div>
-                        <Button
-                          size="sm"
-                          className="h-10 gap-2 px-6"
-                          onClick={() => handleDownload(v.url, previewEntry.name)}
-                        >
-                          <Download className="w-4 h-4" />
-                          ดาวน์โหลดไฟล์
-                        </Button>
+
+                        <div className="w-full max-w-lg rounded-xl border border-border/60 bg-card/60 p-4 text-left space-y-2">
+                          <div className="flex justify-between text-xs">
+                            <span className="text-muted-foreground">ชื่อไฟล์</span>
+                            <span className="font-medium text-foreground truncate max-w-[65%]" title={previewEntry.name}>{previewEntry.name}</span>
+                          </div>
+                          <div className="flex justify-between text-xs">
+                            <span className="text-muted-foreground">ประเภท (MIME)</span>
+                            <span className="font-medium text-foreground truncate max-w-[65%]" title={v.mimeType}>{v.mimeType}</span>
+                          </div>
+                          <div className="flex justify-between text-xs">
+                            <span className="text-muted-foreground">ขนาด</span>
+                            <span className="font-medium text-foreground">{formatBytes(v.size)}</span>
+                          </div>
+                          <div className="flex justify-between text-xs">
+                            <span className="text-muted-foreground">อัปเดตล่าสุด</span>
+                            <span className="font-medium text-foreground">{formatDate(previewEntry.updatedAt)}</span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-10 gap-2 px-5"
+                            onClick={() => window.open(src, "_blank")}
+                          >
+                            <Eye className="w-4 h-4" />
+                            เปิดในแท็บใหม่
+                          </Button>
+                          <Button
+                            size="sm"
+                            className="h-10 gap-2 px-6"
+                            onClick={() => handleDownload(v.url, previewEntry.name)}
+                          >
+                            <Download className="w-4 h-4" />
+                            ดาวน์โหลดไฟล์
+                          </Button>
+                        </div>
                       </div>
                     );
                   })()
