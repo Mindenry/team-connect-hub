@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 import {
   Mic, MicOff, Video as VideoIcon, VideoOff, Monitor, MonitorOff,
   PhoneOff, Users, MessageSquare, Hand, SmilePlus, Settings,
-  Maximize, MoreVertical, LayoutGrid, Type, Shield, VolumeX, Lock, X, Send, ThumbsUp
+  Maximize, MoreVertical, LayoutGrid, Type, Shield, Lock, X, Send, ThumbsUp
 } from 'lucide-react';
 
 interface MeetingUIProps {
@@ -166,9 +166,6 @@ export default function MeetingUI({
             </div>
             {/* Host actions */}
             <div className="p-3 border-t border-sidebar-border space-y-2">
-              <Button variant="outline" size="sm" className="w-full text-xs justify-start gap-2 text-muted-foreground">
-                <VolumeX className="w-4 h-4" /> Mute All
-              </Button>
               <Button variant="outline" size="sm" className="w-full text-xs justify-start gap-2 text-muted-foreground">
                 <Lock className="w-4 h-4" /> Lock Meeting
               </Button>

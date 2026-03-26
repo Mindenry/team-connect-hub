@@ -53,7 +53,6 @@ interface MemberAvailability {
 export default function CreateMeetingDialog({ open, onOpenChange }: CreateMeetingDialogProps) {
   const navigate = useNavigate();
   const [meetingType, setMeetingType] = useState<"instant" | "scheduled">("scheduled");
-  const [waitingRoom, setWaitingRoom] = useState(true);
   const [allowScreenShare, setAllowScreenShare] = useState(true);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -212,7 +211,7 @@ export default function CreateMeetingDialog({ open, onOpenChange }: CreateMeetin
         startTime: startTime.toISOString(),
         endTime: endTime.toISOString(),
         password: password.trim() ? password.trim() : undefined,
-        waitingRoom,
+        waitingRoom: false,
         allowScreenShare,
         status: meetingType === "instant" ? "live" : "upcoming",
         isInstant: meetingType === "instant",

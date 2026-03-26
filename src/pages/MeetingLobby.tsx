@@ -711,7 +711,6 @@ export default function MeetingLobby() {
             body: JSON.stringify({
               userId: currentUser.id,
               password: password || undefined,
-              skipWaitingRoom: false, // Will be in waiting room if enabled
             }),
           },
         );
@@ -1416,27 +1415,6 @@ export default function MeetingLobby() {
               </Card>
             </motion.div>
           )}
-
-          {/* Waiting Room Notice */}
-          {meetingData?.waitingRoom &&
-            meetingData?.hostId !== currentUser?.id && (
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.65 }}
-                className="flex items-center gap-3 p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-xl backdrop-blur-sm"
-              >
-                <Shield className="w-5 h-5 text-yellow-400 flex-shrink-0" />
-                <div>
-                  <p className="text-sm font-medium text-yellow-300">
-                    Waiting Room Enabled
-                  </p>
-                  <p className="text-[11px] text-yellow-400/60">
-                    The host will let you in when they're ready
-                  </p>
-                </div>
-              </motion.div>
-            )}
 
           {/* Security Badge */}
           <motion.div

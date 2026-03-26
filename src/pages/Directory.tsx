@@ -152,9 +152,6 @@ export default function Directory() {
     requireLowercase: true,
     requireNumber: true,
     requireSpecial: true,
-    waitingRoomDefault: true,
-    onlyHostShareScreen: false,
-    lockMeetingsAuto: false,
   });
 
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
@@ -1334,51 +1331,6 @@ export default function Directory() {
                         <span className="text-sm text-foreground">{item.label}</span>
                         <Switch
                           checked={securitySettings[item.key as keyof typeof securitySettings] as boolean}
-                          onCheckedChange={(checked) =>
-                            setSecuritySettings({
-                              ...securitySettings,
-                              [item.key]: checked,
-                            })
-                          }
-                        />
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-              <Card className="border border-border/60 bg-card/80 backdrop-blur-sm shadow-sm h-full flex flex-col">
-                <CardHeader>
-                  <CardTitle className="text-base font-semibold">Meeting Security</CardTitle>
-                  <CardDescription className="text-xs">Control meeting security defaults for your organization.</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4 flex-1">
-                  <div className="space-y-1">
-                    {[
-                      {
-                        key: "waitingRoomDefault",
-                        label: "Enable Waiting Room by default",
-                        desc: "New meetings will have waiting room enabled",
-                      },
-                      {
-                        key: "onlyHostShareScreen",
-                        label: "Only host can share screen",
-                        desc: "Participants need host permission to share",
-                      },
-                      {
-                        key: "lockMeetingsAuto",
-                        label: "Lock meetings automatically after start",
-                        desc: "Prevent uninvited participants",
-                      },
-                    ].map((item) => (
-                      <div key={item.key} className="flex items-center justify-between py-3 group">
-                        <div>
-                          <p className="text-sm font-medium text-foreground">{item.label}</p>
-                          <p className="text-[11px] text-muted-foreground">{item.desc}</p>
-                        </div>
-                        <Switch
-                          checked={
-                            securitySettings[item.key as keyof typeof securitySettings] as boolean
-                          }
                           onCheckedChange={(checked) =>
                             setSecuritySettings({
                               ...securitySettings,

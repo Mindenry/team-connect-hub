@@ -70,7 +70,6 @@ interface Meeting {
   host: MeetingHost;
   participants: number;
   status: "upcoming" | "ended";
-  hasWaitingRoom: boolean;
   startTime: Date;
   endTime?: Date;
   meetingCode?: string;
@@ -136,7 +135,6 @@ function mapMeeting(m: any): Meeting {
     },
     participants: m.participants?.length ?? 0,
     status,
-    hasWaitingRoom: m.waitingRoom ?? false,
     startTime: start,
     endTime: end,
     meetingCode: m.meetingCode,

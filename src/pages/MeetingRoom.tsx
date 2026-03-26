@@ -404,20 +404,14 @@ function MeetingRoomUI({
   const [settingsTab, setSettingsTab] = useState<"audio" | "video">("audio");
 
   const [participants, setParticipants] = useState<SocketParticipant[]>([]);
-  const [waitingRoomParticipants, setWaitingRoomParticipants] = useState<any[]>(
-    [],
-  );
   const [meetingData, setMeetingData] = useState<any>(null);
   const [meetingChannelId, setMeetingChannelId] = useState<string | null>(null);
   const [isHost, setIsHost] = useState(false);
   const [isLocked, setIsLocked] = useState(false);
-  const [showWaitingRoom, setShowWaitingRoom] = useState(false);
   const [dbParticipants, setDbParticipants] = useState<any[]>([]);
   const [kickLoadingUserId, setKickLoadingUserId] = useState<string | null>(
     null,
   );
-  const [isMutingAll, setIsMutingAll] = useState(false);
-  const [isAdmittingAll, setIsAdmittingAll] = useState(false);
   const [quickHuddleHostUserId, setQuickHuddleHostUserId] = useState<
     string | null
   >(null);
@@ -469,7 +463,6 @@ function MeetingRoomUI({
   const chatEndRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const socketRef = useRef(getSocket());
-  const waitingRoomIntervalRef = useRef<number | null>(null);
   const hasInitializedMedia = useRef(false);
   const cameraRecoveryAttemptRef = useRef(0);
 
@@ -593,16 +586,6 @@ function MeetingRoomUI({
                 setMeetingData(meeting);
                 setIsLocked(!!meeting.isLocked);
 
-                if (meeting.hostId === currentUser?.id && meeting.waitingRoom) {
-                  loadWaitingRoom();
-                  if (waitingRoomIntervalRef.current) {
-                    clearInterval(waitingRoomIntervalRef.current);
-                  }
-                  waitingRoomIntervalRef.current = window.setInterval(
-                    loadWaitingRoom,
-                    5000,
-                  );
-                }
               } catch (e) {
                 console.error(
                   "Invalid JSON response from meeting details:",
@@ -669,12 +652,7 @@ function MeetingRoomUI({
       }, 500);
     }
 
-    return () => {
-      if (waitingRoomIntervalRef.current) {
-        clearInterval(waitingRoomIntervalRef.current);
-        waitingRoomIntervalRef.current = null;
-      }
-    };
+    return () => {};
   }, [
     meetingId,
     meetingCode,
@@ -1462,115 +1440,6 @@ function MeetingRoomUI({
     [lkLocal, isCameraOn],
   );
 
-  const loadWaitingRoom = useCallback(async () => {
-    if (!meetingId || isQuickHuddle) return;
-    try {
-      const authHeaders = await auth.getAuthHeaders();
-      const res = await fetch(
-        `${API_BASE}/meetings/${meetingId}/participants/waiting-room`,
-        { headers: authHeaders },
-      );
-      if (res.ok) {
-        const text = await res.text();
-        if (text) {
-          try {
-            const data = JSON.parse(text);
-            setWaitingRoomParticipants(data);
-          } catch (e) {
-            console.error(
-              "Invalid JSON response from waiting room:",
-              text.slice(0, 100),
-            );
-          }
-        }
-      }
-    } catch (err) {
-      console.error("Failed to load waiting room:", err);
-    }
-  }, [meetingId, isQuickHuddle]);
-
-  const admitParticipant = useCallback(
-    async (userId: string) => {
-      if (!meetingId || !effectiveIsHost) return;
-      try {
-        const authHeaders = await auth.getAuthHeaders();
-        const res = await fetch(
-          `${API_BASE}/meetings/${meetingId}/participants/${userId}/admit`,
-          {
-            method: "POST",
-            headers: authHeaders,
-          },
-        );
-        if (res.ok) {
-          await loadWaitingRoom();
-        }
-      } catch (err) {
-        console.error("Failed to admit participant:", err);
-      }
-    },
-    [meetingId, effectiveIsHost, loadWaitingRoom],
-  );
-
-  const denyParticipant = useCallback(
-    async (userId: string) => {
-      if (!meetingId || !effectiveIsHost) return;
-      try {
-        const authHeaders = await auth.getAuthHeaders();
-        const res = await fetch(
-          `${API_BASE}/meetings/${meetingId}/participants/${userId}/deny`,
-          {
-            method: "POST",
-            headers: authHeaders,
-          },
-        );
-        if (res.ok) {
-          await loadWaitingRoom();
-        }
-      } catch (err) {
-        console.error("Failed to deny participant:", err);
-      }
-    },
-    [meetingId, effectiveIsHost, loadWaitingRoom],
-  );
-
-  const admitAllParticipants = useCallback(async () => {
-    if (
-      !meetingId ||
-      !effectiveIsHost ||
-      isAdmittingAll ||
-      waitingRoomParticipants.length === 0
-    ) {
-      return;
-    }
-    setIsAdmittingAll(true);
-    try {
-      const authHeaders = await auth.getAuthHeaders();
-      await Promise.allSettled(
-        waitingRoomParticipants.map((p: any) =>
-          fetch(
-            `${API_BASE}/meetings/${meetingId}/participants/${p.userId}/admit`,
-            {
-              method: "POST",
-              headers: authHeaders,
-            },
-          ),
-        ),
-      );
-      await loadWaitingRoom();
-      toast.success("Admitted everyone from waiting room");
-    } catch (err) {
-      console.error("Failed to admit all participants:", err);
-      toast.error("Failed to admit all participants");
-    } finally {
-      setIsAdmittingAll(false);
-    }
-  }, [
-    meetingId,
-    effectiveIsHost,
-    isAdmittingAll,
-    waitingRoomParticipants,
-    loadWaitingRoom,
-  ]);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -1918,28 +1787,6 @@ function MeetingRoomUI({
     });
   }, [inMeetingParticipants, effectiveHostUserId]);
 
-  const handleMuteAll = useCallback(async () => {
-    if (!effectiveIsHost || isMutingAll) return;
-    const muteableCount = inMeetingParticipants.filter(
-      (p) => !p.isLocal && p.identity !== effectiveHostUserId,
-    ).length;
-    if (muteableCount === 0) return;
-    setIsMutingAll(true);
-    try {
-      socketRef.current.emit("meeting:participant:mute_all", {
-        meetingId: meetingCode,
-      });
-      toast.success(`Muted ${muteableCount} participant(s)`);
-    } finally {
-      setIsMutingAll(false);
-    }
-  }, [
-    effectiveIsHost,
-    isMutingAll,
-    inMeetingParticipants,
-    effectiveHostUserId,
-    meetingCode,
-  ]);
 
   const hasCameraTrack = useCallback(
     (identity: string) =>
@@ -2555,76 +2402,6 @@ function MeetingRoomUI({
               <div className="flex-1 overflow-y-auto">
                 {showParticipants && (
                   <div className="p-3 space-y-1">
-                    {/* Waiting Room Section */}
-                    {effectiveIsHost && waitingRoomParticipants.length > 0 && (
-                      <div className="mb-4 pb-4 border-b border-[#333]">
-                        <div className="flex items-center justify-between mb-2">
-                          <h3 className="text-xs font-semibold text-white/70 uppercase tracking-wider">
-                            Waiting Room
-                          </h3>
-                          <div className="flex items-center gap-2">
-                            <Badge className="bg-yellow-500/20 text-yellow-400 text-[10px]">
-                              {waitingRoomParticipants.length}
-                            </Badge>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="h-7 px-2 text-[10px] border-yellow-400/40 text-yellow-300 hover:bg-yellow-500/10"
-                              onClick={admitAllParticipants}
-                              disabled={isAdmittingAll}
-                            >
-                              {isAdmittingAll ? "Admitting..." : "Admit All"}
-                            </Button>
-                          </div>
-                        </div>
-                        <div className="space-y-1">
-                          {waitingRoomParticipants.map((p: any) => {
-                            const initials =
-                              p.user?.name
-                                ?.split(" ")
-                                .map((n: string) => n[0])
-                                .join("")
-                                .slice(0, 2)
-                                .toUpperCase() || "?";
-                            return (
-                              <div
-                                key={p.userId}
-                                className="flex items-center gap-3 p-2 rounded-lg bg-yellow-500/10 border border-yellow-500/20"
-                              >
-                                <div className="w-8 h-8 rounded-full bg-[#3d3d3d] flex items-center justify-center">
-                                  <span className="text-white text-xs">
-                                    {initials}
-                                  </span>
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <p className="text-white text-sm truncate">
-                                    {p.user?.name || "Unknown"}
-                                  </p>
-                                </div>
-                                <div className="flex items-center gap-1">
-                                  <Button
-                                    size="sm"
-                                    className="h-7 px-2 bg-green-500 hover:bg-green-600 text-xs"
-                                    onClick={() => admitParticipant(p.userId)}
-                                  >
-                                    Add / Admit
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    className="h-7 px-2 text-red-400 hover:text-red-300 hover:bg-red-500/10 text-xs"
-                                    onClick={() => denyParticipant(p.userId)}
-                                  >
-                                    Deny
-                                  </Button>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-
                     {/* Participants List */}
                     <div className="mb-2">
                       <h3 className="text-xs font-semibold text-white/70 uppercase tracking-wider mb-2">
@@ -2678,17 +2455,6 @@ function MeetingRoomUI({
                         </div>
                       );
                     })}
-                    {effectiveIsHost && (
-                      <div className="sticky bottom-0 pt-3 mt-3 border-t border-[#333] bg-[#232323]">
-                        <Button
-                          className="w-full bg-red-500 hover:bg-red-600 text-white"
-                          onClick={handleMuteAll}
-                          disabled={isMutingAll}
-                        >
-                          {isMutingAll ? "Muting..." : "Mute All"}
-                        </Button>
-                      </div>
-                    )}
                   </div>
                 )}
                 {showChat && (
