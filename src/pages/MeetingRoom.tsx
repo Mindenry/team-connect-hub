@@ -1250,18 +1250,22 @@ function MeetingRoomUI({
             const result = await response.json();
             const isPersonal = isQuick || result.drive?.folder === "Personal";
             
-            // Show appropriate message based on conversion result
-            const formatText = result.outputFormat === 'mp4' 
-              ? 'MP4 (converted)' 
-              : result.outputFormat === 'webm' 
-                ? 'WebM (original)' 
-                : String(result.outputFormat || 'mp4').toUpperCase();
-            
-            const description = result.message 
-              ? `${formatText} | Duration: ${Math.floor(recordingTimeRef.current / 60)}:${String(recordingTimeRef.current % 60).padStart(2, "0")} | ${result.message}`
-              : `${formatText} | Duration: ${Math.floor(recordingTimeRef.current / 60)}:${String(recordingTimeRef.current % 60).padStart(2, "0")}`;
-            
-            if (result.outputFormat === 'mp4') {
+            // Show appropriate message based on actual backend output
+            const outputFormat = String(result.outputFormat || "webm").toLowerCase();
+            const outputStatus = String(result.outputStatus || (outputFormat === "mp4" ? "converted" : "fallback"));
+            const formatText =
+              outputFormat === "mp4"
+                ? "MP4"
+                : outputFormat === "webm"
+                  ? "WebM"
+                  : outputFormat.toUpperCase();
+
+            const baseDescription = `${formatText} | Duration: ${Math.floor(recordingTimeRef.current / 60)}:${String(recordingTimeRef.current % 60).padStart(2, "0")}`;
+            const description = result.message
+              ? `${baseDescription} | ${result.message}`
+              : baseDescription;
+
+            if (outputFormat === "mp4" && outputStatus === "converted") {
               toast.success(
                 isPersonal
                   ? "Recording saved to Personal Drive!"
@@ -1281,28 +1285,34 @@ function MeetingRoomUI({
                 },
               );
             } else {
-              // Conversion failed - show warning but still successful upload
-              toast.warning(
-                isPersonal
-                  ? "Recording saved (WebM format)"
-                  : "Recording saved to Shared Drive (WebM)",
-                {
-                  id: "recording-upload",
-                  description:
-                    result.conversionDiagnostics?.length > 0
-                      ? `${result.message || "FFmpeg conversion failed, saved as WebM format"}\n${result.conversionDiagnostics[0]}`
-                      : result.message || "FFmpeg conversion failed, saved as WebM format",
-                  action: {
-                    label: "View",
-                    onClick: () => {
-                      window.open(
-                        `/drive?teamId=${result.drive?.teamId || ""}`,
-                        "_blank",
-                      );
-                    },
+              // Fallback (webm or invalid converted result)
+              const fallbackTitle =
+                outputFormat === "mp4"
+                  ? isPersonal
+                    ? "Recording saved (MP4 แต่ไม่มีวิดีโอ)"
+                    : "Recording saved to Shared Drive (MP4 ไม่มีวิดีโอ)"
+                  : isPersonal
+                    ? "Recording saved (WebM format)"
+                    : "Recording saved to Shared Drive (WebM)";
+
+              const fallbackDescription =
+                result.conversionDiagnostics?.length > 0
+                  ? `${description}\n${result.conversionDiagnostics[0]}`
+                  : description;
+
+              toast.warning(fallbackTitle, {
+                id: "recording-upload",
+                description: fallbackDescription,
+                action: {
+                  label: "View",
+                  onClick: () => {
+                    window.open(
+                      `/drive?teamId=${result.drive?.teamId || ""}`,
+                      "_blank",
+                    );
                   },
                 },
-              );
+              });
             }
           } else {
             const errorText = await response.text();
