@@ -122,7 +122,6 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
   const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([]);
   const [activeRooms, setActiveRooms] = useState<ActiveRoom[]>([]);
   const currentUserRef = useRef(auth.getUser());
-  const isInitializedRef = useRef(false);
   const refreshFnRef = useRef<() => void>(() => {});
   const lastRefreshAtRef = useRef(0);
   const isRefreshingRef = useRef(false);
@@ -184,11 +183,6 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
         });
       }
     };
-
-    if (isInitializedRef.current) {
-      return;
-    }
-    isInitializedRef.current = true;
 
     const initialUser = auth.getUser();
     currentUserRef.current = initialUser;
