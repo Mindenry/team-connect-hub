@@ -132,9 +132,9 @@ const formatDate = (dateString: string) => {
 
 const iconForMime = (mime?: string, fileName?: string) => {
   const lowerName = (fileName || "").toLowerCase();
+  if (isVideoLike(mime, lowerName)) return FileVideo;
   if (!mime) return FileIcon;
   if (mime.startsWith("image/")) return ImageIcon;
-  if (mime.startsWith("video/")) return FileVideo;
   if (mime.startsWith("audio/")) return FileAudio;
   if (mime === "application/pdf") return FileText;
   if (
@@ -171,10 +171,10 @@ const iconForMime = (mime?: string, fileName?: string) => {
   return FileIcon;
 };
 
-const getFileColor = (mime?: string) => {
+const getFileColor = (mime?: string, name?: string) => {
+  if (isVideoLike(mime, name)) return "text-violet-500";
   if (!mime) return "text-muted-foreground";
   if (mime.startsWith("image/")) return "text-blue-500";
-  if (mime.startsWith("video/")) return "text-violet-500";
   if (mime.startsWith("audio/")) return "text-green-500";
   if (mime === "application/pdf") return "text-red-500";
   if (mime.includes("sheet") || mime.includes("excel")) return "text-emerald-600";
@@ -183,15 +183,29 @@ const getFileColor = (mime?: string) => {
   return "text-muted-foreground";
 };
 
+const isVideoLike = (mime?: string, name?: string) => {
+  const lowerName = (name || "").toLowerCase();
+  if ((mime || "").startsWith("video/")) return true;
+  return [".webm", ".mp4", ".mov", ".mkv", ".avi", ".wmv", ".flv"].some((ext) =>
+    lowerName.endsWith(ext),
+  );
+};
+
 const isTextLike = (mime?: string, name?: string) => {
   const lowerName = (name || "").toLowerCase();
-  if (!mime) return false;
-  if (mime.startsWith("text/")) return true;
+
+  // Guard: some binary files may be mislabeled as text/plain by upstream.
+  if (isVideoLike(mime, lowerName)) return false;
+  if ([".mp3", ".wav", ".ogg", ".m4a", ".aac", ".flac", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".pdf"].some((ext) => lowerName.endsWith(ext))) {
+    return false;
+  }
+
+  if (mime?.startsWith("text/")) return true;
   if (
-    mime.includes("json") ||
-    mime.includes("xml") ||
-    mime.includes("javascript") ||
-    mime.includes("typescript")
+    (mime || "").includes("json") ||
+    (mime || "").includes("xml") ||
+    (mime || "").includes("javascript") ||
+    (mime || "").includes("typescript")
   ) {
     return true;
   }
@@ -806,7 +820,7 @@ export default function SharedDrive() {
                     {filteredEntries.map((entry) => {
                       const version = entry.latestVersion;
                       const Icon = entry.isFolder ? Folder : iconForMime(version?.mimeType, entry.name);
-                      const fileColor = entry.isFolder ? "text-primary" : getFileColor(version?.mimeType);
+                      const fileColor = entry.isFolder ? "text-primary" : getFileColor(version?.mimeType, entry.name);
 
                       return (
                         <Card
@@ -889,7 +903,7 @@ export default function SharedDrive() {
                     {filteredEntries.map((entry) => {
                       const version = entry.latestVersion;
                       const Icon = entry.isFolder ? Folder : iconForMime(version?.mimeType, entry.name);
-                      const fileColor = entry.isFolder ? "text-primary" : getFileColor(version?.mimeType);
+                      const fileColor = entry.isFolder ? "text-primary" : getFileColor(version?.mimeType, entry.name);
 
                       return (
                         <Card
@@ -1131,7 +1145,7 @@ export default function SharedDrive() {
                       <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center shadow-sm ring-1 ring-primary/10">
                         {(() => {
                           const Icon = iconForMime(previewEntry.latestVersion?.mimeType, previewEntry.name);
-                          return <Icon className={cn("w-6 h-6", getFileColor(previewEntry.latestVersion?.mimeType))} />;
+                          return <Icon className={cn("w-6 h-6", getFileColor(previewEntry.latestVersion?.mimeType, previewEntry.name))} />;
                         })()}
                       </div>
                       <div>
@@ -1293,7 +1307,7 @@ export default function SharedDrive() {
                         </div>
                       );
                     }
-                    if (v.mimeType.startsWith("video/")) {
+                    if (isVideoLike(v.mimeType, previewEntry.name)) {
                       return (
                         <div className="w-full h-full flex items-center justify-center">
                           <video

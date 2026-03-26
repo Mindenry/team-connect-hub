@@ -1263,7 +1263,10 @@ function MeetingRoomUI({
                   : "Recording saved to Shared Drive (WebM)",
                 {
                   id: "recording-upload",
-                  description: result.message || "FFmpeg conversion failed, saved as WebM format",
+                  description:
+                    result.conversionDiagnostics?.length > 0
+                      ? `${result.message || "FFmpeg conversion failed, saved as WebM format"}\n${result.conversionDiagnostics[0]}`
+                      : result.message || "FFmpeg conversion failed, saved as WebM format",
                   action: {
                     label: "View",
                     onClick: () => {
