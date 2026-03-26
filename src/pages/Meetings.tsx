@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useIsMobile } from "@/hooks/use-mobile";
 import {
@@ -651,7 +651,8 @@ export default function Meetings() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [teams, setTeams] = useState<any[]>([]);
-  const { activeRooms } = usePresence();
+  const lastPresenceRefreshRef = useRef(0);
+  const { activeRooms, refreshPresence } = usePresence();
   const createQuickHuddlePath = () =>
     `/meeting-lobby/quick-huddle-${crypto.randomUUID()}`;
 
@@ -662,6 +663,12 @@ export default function Meetings() {
   }, []);
 
   useEffect(() => {
+    const now = Date.now();
+    if (now - lastPresenceRefreshRef.current > 1000) {
+      refreshPresence();
+      lastPresenceRefreshRef.current = now;
+    }
+
     let cancelled = false;
     const load = async () => {
       setLoading(true);
@@ -706,12 +713,30 @@ export default function Meetings() {
       socket.off("meeting:updated");
       socket.off("meeting:deleted");
     };
-  }, []);
+  }, [refreshPresence]);
 
-  const activeRoomIds = useMemo(
-    () => new Set(activeRooms.map((r) => r.roomId)),
-    [activeRooms],
-  );
+  useEffect(() => {
+    const handleWindowFocus = () => {
+      const now = Date.now();
+      if (now - lastPresenceRefreshRef.current > 1000) {
+        refreshPresence();
+        lastPresenceRefreshRef.current = now;
+      }
+    };
+
+    window.addEventListener("focus", handleWindowFocus);
+    return () => {
+      window.removeEventListener("focus", handleWindowFocus);
+    };
+  }, [refreshPresence]);
+
+  const activeRoomIds = useMemo(() => {
+    const ids = new Set<string>();
+    activeRooms.forEach((r) => {
+      ids.add(r.roomId);
+    });
+    return ids;
+  }, [activeRooms]);
 
   const filteredMeetings = useMemo(() => {
     return items.filter((m) => {

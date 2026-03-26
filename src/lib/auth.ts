@@ -41,10 +41,16 @@ export const auth = {
     localStorage.setItem(AUTH_KEY, JSON.stringify(user));
     localStorage.setItem(TOKEN_KEY, accessToken);
     localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("authUpdated"));
+    }
   },
 
   setUser: (user: AuthUser) => {
     localStorage.setItem(AUTH_KEY, JSON.stringify(user));
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("authUpdated"));
+    }
   },
 
   clear: () => {

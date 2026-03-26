@@ -24,5 +24,6 @@ export function usePresence() {
     activeRooms: context.activeRooms,
     isUserOnline: context.isUserOnline,
     onlineCount: context.onlineCount,
+    refreshPresence: context.refreshPresence,
   };
 }

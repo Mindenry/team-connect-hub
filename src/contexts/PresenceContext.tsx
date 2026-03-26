@@ -7,7 +7,7 @@ import {
   useRef,
   ReactNode,
 } from "react";
-import { getSocket } from "@/lib/websocket";
+import { getSocket, updateSocketAuth } from "@/lib/websocket";
 import { auth } from "@/lib/auth";
 
 interface ActiveRoom {
@@ -34,6 +34,7 @@ interface PresenceContextType {
   activeRooms: ActiveRoom[];
   isUserOnline: (userId: string) => boolean;
   onlineCount: number;
+  refreshPresence: () => void;
   getRoomByMeetingId: (meetingId: string) => ActiveRoom | undefined;
   isRoomLive: (meetingId: string) => boolean;
   getRoomParticipantCount: (meetingId: string) => number;
@@ -41,6 +42,8 @@ interface PresenceContextType {
 }
 
 const PresenceContext = createContext<PresenceContextType | null>(null);
+const PRESENCE_REFRESH_MIN_GAP_MS = 1500;
+const PRESENCE_FALLBACK_REFRESH_MS = 10000;
 
 // Shared state for current meeting (set by MeetingRoom when user joins)
 // Includes sessionId to distinguish between different browser tabs/sessions
@@ -81,34 +84,68 @@ export function getCurrentSessionId() {
   return SESSION_ID;
 }
 
+function normalizeActiveRooms(rooms: ActiveRoom[]): ActiveRoom[] {
+  const roomMap = new Map<string, ActiveRoom>();
+
+  for (const room of rooms) {
+    if (!room?.roomId) continue;
+
+    const existing = roomMap.get(room.roomId);
+    const participantMap = new Map<string, ActiveRoom["participants"][number]>();
+
+    const sourceParticipants = [
+      ...(existing?.participants || []),
+      ...(room.participants || []),
+    ];
+
+    for (const p of sourceParticipants) {
+      if (!p?.peerId) continue;
+      participantMap.set(p.peerId, p);
+    }
+
+    roomMap.set(room.roomId, {
+      ...room,
+      participants: Array.from(participantMap.values()),
+      createdAt: room.createdAt ? new Date(room.createdAt) : new Date(),
+    });
+  }
+
+  return Array.from(roomMap.values());
+}
+
 export function PresenceProvider({ children }: { children: ReactNode }) {
   const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([]);
   const [activeRooms, setActiveRooms] = useState<ActiveRoom[]>([]);
   const currentUserRef = useRef(auth.getUser());
-  const activeRoomsRef = useRef<ActiveRoom[]>([]);
   const isInitializedRef = useRef(false);
+  const refreshFnRef = useRef<() => void>(() => {});
+  const lastRefreshAtRef = useRef(0);
+  const isRefreshingRef = useRef(false);
+
+  const refreshPresence = useCallback(() => {
+    refreshFnRef.current();
+  }, []);
 
   useEffect(() => {
     const socket = getSocket();
-    const currentUser = currentUserRef.current;
 
-    // Prevent re-initialization on re-renders
-    if (isInitializedRef.current) {
-      console.log("[PresenceContext] Already initialized, skipping");
-      return;
-    }
-    isInitializedRef.current = true;
+    const requestData = (force = false) => {
+      const now = Date.now();
+      if (!force && now - lastRefreshAtRef.current < PRESENCE_REFRESH_MIN_GAP_MS) {
+        return;
+      }
+      if (!socket.connected && !force) {
+        return;
+      }
+      if (isRefreshingRef.current && !force) {
+        return;
+      }
 
-    console.log("[PresenceContext] Initializing socket listeners");
-    console.log(
-      "[PresenceContext] Current user:",
-      currentUser?.id,
-      currentUser?.name,
-    );
+      isRefreshingRef.current = true;
 
-    const requestData = () => {
-      console.log("[PresenceContext] Requesting presence and active rooms...");
-      // Register this user as online
+      const currentUser = auth.getUser();
+      currentUserRef.current = currentUser;
+
       if (currentUser) {
         socket.emit("presence:online", {
           userId: currentUser.id,
@@ -117,96 +154,109 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
         });
       }
 
-      // Request current presence and active rooms
       socket.emit("presence:get");
       socket.emit("rooms:get-active");
+      lastRefreshAtRef.current = now;
+
+      setTimeout(() => {
+        isRefreshingRef.current = false;
+      }, 350);
     };
 
-    // Listen for presence updates
+    refreshFnRef.current = () => requestData(true);
+
+    const rejoinCurrentMeeting = () => {
+      const currentUser = auth.getUser();
+      if (currentMeetingInfo) {
+        socket.emit("meeting:rejoin", {
+          ...currentMeetingInfo,
+          userId: currentMeetingInfo.userId || currentUser?.id,
+        });
+      }
+    };
+
+    if (isInitializedRef.current) {
+      return;
+    }
+    isInitializedRef.current = true;
+
+    const initialUser = auth.getUser();
+    currentUserRef.current = initialUser;
+
     const handlePresenceUpdate = (users: OnlineUser[]) => {
-      console.log(
-        "[PresenceContext] Received presence:update:",
-        users?.length,
-        "users",
-      );
-      setOnlineUsers(users || []);
+      const list = Array.isArray(users) ? users : [];
+      const userMap = new Map<string, OnlineUser>();
+      for (const u of list) {
+        if (!u?.userId) continue;
+        userMap.set(u.userId, u);
+      }
+      setOnlineUsers(Array.from(userMap.values()));
     };
 
-    // Listen for active rooms — always accept new data
     const handleActiveRooms = (rooms: ActiveRoom[]) => {
-      const newRooms = rooms || [];
-      console.log(
-        "[PresenceContext] Received rooms:active:",
-        newRooms.length,
-        "rooms",
-      );
-      newRooms.forEach((r) => {
-        console.log(
-          `[PresenceContext] Room ${r.roomId}: ${r.participants.length} participants`,
-          r.participants.map((p) => p.name).join(", "),
-        );
-      });
-      activeRoomsRef.current = newRooms;
-      setActiveRooms(newRooms);
+      const normalized = normalizeActiveRooms(Array.isArray(rooms) ? rooms : []);
+      setActiveRooms(normalized);
     };
 
     socket.on("presence:update", handlePresenceUpdate);
     socket.on("rooms:active", handleActiveRooms);
 
-    // Request data immediately if already connected, otherwise wait for connect
     if (socket.connected) {
-      console.log(
-        "[PresenceContext] Socket already connected, requesting data",
-      );
-      requestData();
-    } else {
-      console.log("[PresenceContext] Socket not connected, waiting...");
+      requestData(true);
     }
 
     const handleConnect = () => {
-      console.log("[PresenceContext] Socket connected, requesting data");
-      requestData();
+      requestData(true);
+      rejoinCurrentMeeting();
+    };
 
-      // If user was in a meeting, rejoin with new socket
-      if (currentMeetingInfo) {
-        socket.emit("meeting:rejoin", {
-          ...currentMeetingInfo,
-          userId: currentMeetingInfo.userId || currentUser?.id,
-        });
-      }
+    const handleReconnect = () => {
+      requestData(true);
+      rejoinCurrentMeeting();
+    };
+
+    const handleAuthUpdated = () => {
+      updateSocketAuth();
+      requestData(true);
+      rejoinCurrentMeeting();
     };
 
     socket.on("connect", handleConnect);
+    socket.io.on("reconnect", handleReconnect);
+    window.addEventListener("authUpdated", handleAuthUpdated);
 
-    // Also re-request on reconnection
-    socket.io.on("reconnect", () => {
-      console.log("[PresenceContext] Socket reconnected, requesting data");
-      requestData();
-
-      // Rejoin meeting on reconnect
-      if (currentMeetingInfo) {
-        socket.emit("meeting:rejoin", {
-          ...currentMeetingInfo,
-          userId: currentMeetingInfo.userId || currentUser?.id,
-        });
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        requestData();
       }
-    });
+    };
 
-    // Periodic refresh every 3 seconds for more responsive updates
+    const handleWindowFocus = () => {
+      requestData();
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("focus", handleWindowFocus);
+
     const interval = setInterval(() => {
       if (socket.connected) {
-        socket.emit("rooms:get-active");
-        socket.emit("presence:get");
+        requestData();
       }
-    }, 3000);
+    }, PRESENCE_FALLBACK_REFRESH_MS);
 
     return () => {
-      console.log("[PresenceContext] Cleanup - but keeping state");
       clearInterval(interval);
-      // DON'T remove listeners - keep them for the lifetime of the app
-      // This prevents activeRooms from disappearing on navigation
+      refreshFnRef.current = () => {};
+      isRefreshingRef.current = false;
+      window.removeEventListener("authUpdated", handleAuthUpdated);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("focus", handleWindowFocus);
+      socket.off("connect", handleConnect);
+      socket.io.off("reconnect", handleReconnect);
+      socket.off("presence:update", handlePresenceUpdate);
+      socket.off("rooms:active", handleActiveRooms);
     };
-  }, []); // Empty dependency - only run once
+  }, []);
 
   const isUserOnline = useCallback(
     (userId: string) => onlineUsers.some((u) => u.userId === userId),
@@ -218,9 +268,7 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
 
   const getRoomByMeetingId = useCallback(
     (meetingId: string) => {
-      return activeRooms.find(
-        (r) => r.roomId === meetingId || r.roomId === meetingId,
-      );
+      return activeRooms.find((r) => r.roomId === meetingId);
     },
     [activeRooms],
   );
@@ -230,11 +278,9 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
       const room = getRoomByMeetingId(meetingId);
       if (!room) return false;
       const participantCount = room.participants.length;
-      // Room is live if there are participants other than just the current user
       return (
         participantCount > 1 ||
-        (participantCount === 1 &&
-          room.participants[0].userId !== currentUser?.id)
+        (participantCount === 1 && room.participants[0].userId !== currentUser?.id)
       );
     },
     [getRoomByMeetingId, currentUser?.id],
@@ -264,6 +310,7 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
         activeRooms,
         isUserOnline,
         onlineCount: onlineUsers.length,
+        refreshPresence,
         getRoomByMeetingId,
         isRoomLive,
         getRoomParticipantCount,
@@ -285,5 +332,4 @@ export function usePresenceContext() {
   return context;
 }
 
-// Export for backward compatibility with existing code
 export { type ActiveRoom, type OnlineUser };
