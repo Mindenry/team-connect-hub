@@ -1310,13 +1310,58 @@ export default function SharedDrive() {
                     if (isVideoLike(v.mimeType, previewEntry.name)) {
                       return (
                         <div className="w-full h-full flex items-center justify-center">
-                          <video
-                            src={src}
-                            controls
-                            preload="metadata"
-                            className="max-h-full max-w-full rounded-xl shadow-2xl bg-black"
-                            style={{ maxHeight: "calc(85vh - 200px)" }}
-                          />
+                          <div className="relative w-full max-w-5xl rounded-[28px] border border-border/60 bg-gradient-to-br from-background via-background to-muted/30 p-5 shadow-[0_40px_90px_-45px_rgba(15,23,42,0.65)]">
+                            <div className="absolute inset-0 rounded-[28px] ring-1 ring-inset ring-white/10 pointer-events-none" />
+                            <div className="absolute -inset-6 rounded-[34px] bg-gradient-to-br from-primary/12 via-transparent to-sky-500/12 blur-3xl opacity-70 pointer-events-none" />
+
+                            <div className="relative mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border/60 bg-muted/30 px-4 py-3">
+                              <div className="min-w-0 flex items-center gap-3">
+                                <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-primary/20 to-primary/10 text-primary flex items-center justify-center border border-primary/20">
+                                  <FileVideo className="w-5 h-5" />
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="text-sm font-semibold text-foreground truncate max-w-[420px]">{previewEntry.name}</p>
+                                  <p className="text-xs text-muted-foreground flex items-center gap-2 mt-0.5">
+                                    <span>{formatBytes(v.size)}</span>
+                                    <span>•</span>
+                                    <span className="truncate max-w-[220px]">{v.mimeType}</span>
+                                    <span>•</span>
+                                    <span>{formatDate(previewEntry.updatedAt)}</span>
+                                  </p>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-2">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-8 text-xs gap-1.5 border-border/70"
+                                  onClick={() => handleOpenExternal(v.url)}
+                                >
+                                  <Eye className="w-3.5 h-3.5" />
+                                  เปิดแยก
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  className="h-8 text-xs gap-1.5"
+                                  onClick={() => handleDownload(v.url, previewEntry.name)}
+                                >
+                                  <Download className="w-3.5 h-3.5" />
+                                  ดาวน์โหลด
+                                </Button>
+                              </div>
+                            </div>
+
+                            <div className="relative overflow-hidden rounded-2xl border border-black/20 bg-black/95 shadow-[0_20px_55px_-28px_rgba(0,0,0,0.85)]">
+                              <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/10 via-transparent to-black/20" />
+                              <video
+                                src={src}
+                                controls
+                                preload="metadata"
+                                className="relative z-10 w-full max-h-[calc(85vh-320px)] object-contain"
+                              />
+                            </div>
+                          </div>
                         </div>
                       );
                     }
