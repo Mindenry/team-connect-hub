@@ -465,6 +465,7 @@ function MeetingRoomUI({
   const socketRef = useRef(getSocket());
   const hasInitializedMedia = useRef(false);
   const cameraRecoveryAttemptRef = useRef(0);
+  const hasSentLeaveRef = useRef(false);
 
   const userName = currentUser?.name || "Guest";
   const meetingCode = meetingId || "quick-huddle";
@@ -867,6 +868,32 @@ function MeetingRoomUI({
     meetingCode,
     userName,
   ]);
+
+  // Ensure leave event is sent when tab/window is closed or reloaded.
+  useEffect(() => {
+    const handlePageExit = () => {
+      if (hasSentLeaveRef.current) return;
+      hasSentLeaveRef.current = true;
+      try {
+        socketRef.current.emit("meeting:leave", {
+          meetingId: meetingCode,
+          peerId: peerId.current,
+        });
+      } catch {
+        // Ignore - socket may already be closed.
+      }
+      clearCurrentMeeting();
+      meetingPiPLeave();
+    };
+
+    window.addEventListener("beforeunload", handlePageExit);
+    window.addEventListener("pagehide", handlePageExit);
+
+    return () => {
+      window.removeEventListener("beforeunload", handlePageExit);
+      window.removeEventListener("pagehide", handlePageExit);
+    };
+  }, [meetingCode]);
 
   // Timer
   useEffect(() => {
@@ -1611,6 +1638,11 @@ function MeetingRoomUI({
   };
 
   const leaveMeeting = useCallback(async () => {
+    if (hasSentLeaveRef.current) {
+      return;
+    }
+    hasSentLeaveRef.current = true;
+
     // Stop recording if active
     if (isRecording && mediaRecorderRef.current) {
       stopRecording();
@@ -1654,6 +1686,10 @@ function MeetingRoomUI({
       return;
     }
 
+    if (hasSentLeaveRef.current) {
+      return;
+    }
+
     setEndingMeeting(true);
 
     try {
@@ -1666,6 +1702,7 @@ function MeetingRoomUI({
       console.error("End meeting error:", e);
     }
 
+    hasSentLeaveRef.current = true;
     socketRef.current.emit("meeting:leave", {
       meetingId: meetingCode,
       peerId: peerId.current,
@@ -1674,7 +1711,14 @@ function MeetingRoomUI({
     meetingPiPLeave();
     navigate("/meetings");
     setEndingMeeting(false);
-  }, [isHost, meetingId, meetingCode, navigate, leaveMeeting, isQuickHuddle]);
+  }, [
+    isHost,
+    meetingId,
+    meetingCode,
+    navigate,
+    leaveMeeting,
+    isQuickHuddle,
+  ]);
 
   const handleLeaveClick = useCallback(() => {
     if (isHost && meetingId && !isQuickHuddle) {

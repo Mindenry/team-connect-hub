@@ -18,7 +18,9 @@ Avatar.displayName = AvatarPrimitive.Root.displayName;
 const AvatarImage = React.forwardRef<
   React.ElementRef<typeof AvatarPrimitive.Image>,
   React.ComponentPropsWithoutRef<typeof AvatarPrimitive.Image>
->(({ className, src, ...props }, ref) => {
+>(({ className, src, onError, ...props }, ref) => {
+  const [imageBlocked, setImageBlocked] = React.useState(false);
+
   let finalSrc = src;
   if (src && (src.startsWith('/uploads') || src.startsWith('uploads/'))) {
     const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
@@ -26,7 +28,18 @@ const AvatarImage = React.forwardRef<
   }
 
   return (
-    <AvatarPrimitive.Image ref={ref} className={cn("aspect-square h-full w-full object-cover", className)} src={finalSrc} {...props} />
+    <AvatarPrimitive.Image
+      ref={ref}
+      className={cn("aspect-square h-full w-full object-cover", className)}
+      src={imageBlocked ? undefined : finalSrc}
+      referrerPolicy="no-referrer"
+      loading="lazy"
+      onError={(event) => {
+        setImageBlocked(true);
+        onError?.(event);
+      }}
+      {...props}
+    />
   );
 });
 AvatarImage.displayName = AvatarPrimitive.Image.displayName;

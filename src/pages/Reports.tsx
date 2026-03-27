@@ -1,20 +1,15 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useEffect, useMemo, useState } from "react";
 import {
   FileBarChart,
   TrendingUp,
   Users,
   Calendar,
   CheckSquare,
-  Clock,
   Loader2,
   Activity,
   BarChart3,
   Download,
-  FileText,
   MessageSquare,
-  ChevronDown,
-  ArrowUpRight,
   AlertTriangle,
   Trophy,
   Target,
@@ -26,9 +21,9 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { useToast } from "@/components/ui/use-toast";
-import { apiGet } from "@/lib/api";
+import { apiFetch, apiGet } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth";
 import {
@@ -39,8 +34,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-import * as XLSX from "xlsx";
-import html2canvas from "html2canvas";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -167,8 +160,6 @@ interface PerformanceDashboard {
 }
 
 interface TeamOption { id: string; name: string; }
-interface UserOption { id: string; name: string; }
-
 type ReportTab = "overview" | "team" | "performance";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -240,69 +231,11 @@ const statusLabel: Record<string, string> = {
   todo: "ยังไม่เริ่ม",
 };
 
-// ─── Export Functions ────────────────────────────────────────────────────────
-
-function downloadCsv(filename: string, rows: Record<string, any>[]) {
-  if (!rows || rows.length === 0) return;
-  const headers = Array.from(
-    rows.reduce<Set<string>>((set, row) => { Object.keys(row).forEach((key) => set.add(key)); return set; }, new Set<string>())
-  );
-  const escape = (value: any) => {
-    if (value === null || value === undefined) return "";
-    const str = String(value);
-    if (str.includes('"') || str.includes(",") || str.includes("\n")) return `"${str.replace(/"/g, '""')}"`;
-    return str;
-  };
-  const csv = [headers.join(","), ...rows.map((row) => headers.map((h) => escape(row[h])).join(","))].join("\n");
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a"); link.href = url; link.setAttribute("download", filename);
-  document.body.appendChild(link); link.click(); document.body.removeChild(link); URL.revokeObjectURL(url);
-}
-
-function downloadJson(filename: string, rows: Record<string, any>[]) {
-  if (!rows || rows.length === 0) return;
-  const json = JSON.stringify(rows, null, 2);
-  const blob = new Blob([json], { type: "application/json;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a"); link.href = url; link.setAttribute("download", filename);
-  document.body.appendChild(link); link.click(); document.body.removeChild(link); URL.revokeObjectURL(url);
-}
-
-function downloadXlsx(filename: string, rows: Record<string, any>[]) {
-  if (!rows || rows.length === 0) return;
-  const worksheet = XLSX.utils.json_to_sheet(rows);
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, worksheet, "Report");
-  const wbout = XLSX.write(workbook, { bookType: "xlsx", type: "array" });
-  const blob = new Blob([wbout], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a"); link.href = url; link.setAttribute("download", filename);
-  document.body.appendChild(link); link.click(); document.body.removeChild(link); URL.revokeObjectURL(url);
-}
-
-async function downloadPdfFromDom(filename: string, element: HTMLElement | null) {
-  if (!element) return;
-  const { default: jsPDF } = await import("jspdf");
-  const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
-  const canvas = await html2canvas(element, { scale: 2, useCORS: true });
-  const imgData = canvas.toDataURL("image/png");
-  const pageWidth = doc.internal.pageSize.getWidth();
-  const pageHeight = doc.internal.pageSize.getHeight();
-  const ratio = Math.min(pageWidth / canvas.width, pageHeight / canvas.height);
-  const imgWidth = canvas.width * ratio;
-  const imgHeight = canvas.height * ratio;
-  const x = (pageWidth - imgWidth) / 2;
-  const y = (pageHeight - imgHeight) / 2;
-  doc.addImage(imgData, "PNG", x, y, imgWidth, imgHeight);
-  doc.save(filename);
-}
-
 // ─── Main Component ──────────────────────────────────────────────────────────
 
 export default function Reports() {
   const { toast } = useToast();
-  const { user: currentUser } = useAuth();
+  useAuth();
 
   const [activeTab, setActiveTab] = useState<ReportTab>("overview");
   const [dateRange, setDateRange] = useState<DateRangeKey>("month");
@@ -319,10 +252,7 @@ export default function Reports() {
   const [taskReport, setTaskReport] = useState<TaskReport | null>(null);
   const [teamWorkload, setTeamWorkload] = useState<TeamWorkloadReport | null>(null);
   const [performance, setPerformance] = useState<PerformanceDashboard | null>(null);
-  const printRef = useRef<HTMLDivElement | null>(null);
 
-  const isManagerOrAbove =
-    currentUser?.role === "manager" || currentUser?.role === "admin" || currentUser?.role === "org_owner";
   const currentRangeLabel = getDateRangeLabel(dateRange);
   const isLoadingAny = loading || loadingSecondary;
 
@@ -408,32 +338,55 @@ export default function Reports() {
   }, [activeTab, selectedTeamId, dateRange]);
 
   // Export
-  const handleExport = (format: ExportFormat) => {
-    let rows: Record<string, any>[] = [];
-    let filename = "report";
+  const handleExport = async (format: ExportFormat) => {
+    try {
+      const { start, end } = getDateRange(dateRange);
+      const startIso = encodeURIComponent(toIsoDate(start));
+      const endIso = encodeURIComponent(toIsoDate(end));
 
-    if (activeTab === "overview" && personalReport) {
-      rows = [{ งานที่เสร็จ: personalReport.tasksCompleted, การประชุม: personalReport.meetingsAttended, ข้อความ: personalReport.messagesSent, คะแนน: personalReport.productivityScore }];
-      filename = "overview_report";
-    } else if (activeTab === "team" && teamWorkload) {
-      rows = teamWorkload.workload.map((w) => ({ ชื่อ: w.userName, งานทั้งหมด: w.totalTasks, เสร็จ: w.completed, กำลังทำ: w.inProgress, ค้าง: w.overdue }));
-      filename = "team_report";
-    } else if (activeTab === "performance" && performance) {
-      rows = performance.taskCompletionRates.map((r) => ({ ชื่อ: r.userName, งานทั้งหมด: r.totalTasks, เสร็จ: r.completedTasks, "Completion_%": r.completionRate }));
-      filename = "performance_report";
-    }
+      let type: ReportTab = activeTab;
+      if (type === "team" && !selectedTeamId) {
+        toast({ title: "เลือกทีมก่อน", description: "กรุณาเลือกทีมเพื่อออกรายงาน" });
+        return;
+      }
 
-    if (rows.length === 0) {
-      toast({ title: "ไม่มีข้อมูล", description: "ไม่มีข้อมูลให้ดาวน์โหลดสำหรับมุมมองนี้" });
-      return;
-    }
+      const query = new URLSearchParams({
+        type,
+        range: dateRange,
+        format,
+      });
 
-    const fname = `${filename}_${new Date().toISOString().slice(0, 10)}`;
-    switch (format) {
-      case "csv": downloadCsv(`${fname}.csv`, rows); break;
-      case "json": downloadJson(`${fname}.json`, rows); break;
-      case "xlsx": downloadXlsx(`${fname}.xlsx`, rows); break;
-      case "pdf": downloadPdfFromDom(`${fname}.pdf`, printRef.current); break;
+      if (type === "team") {
+        query.set("teamId", selectedTeamId as string);
+        query.set("startDate", startIso);
+        query.set("endDate", endIso);
+      } else if (type === "performance") {
+        if (selectedTeamId) {
+          query.set("teamId", selectedTeamId);
+        }
+        query.set("startDate", startIso);
+        query.set("endDate", endIso);
+      }
+
+      const url = `/reports/export?${query.toString()}`;
+      const res = await apiFetch(url, { method: "GET" });
+      if (!res.ok) {
+        throw new Error("Download failed");
+      }
+      const blob = await res.blob();
+      const filenameBase = `${type}_report_${new Date().toISOString().slice(0, 10)}`;
+      const extension = format === "xlsx" ? "xlsx" : format;
+      const fileUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = fileUrl;
+      link.download = `${filenameBase}.${extension}`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(fileUrl);
+    } catch (error: any) {
+      console.error("Export failed", error);
+      toast({ title: "เกิดข้อผิดพลาด", description: error?.message || "ส่งออกไฟล์ไม่สำเร็จ", variant: "destructive" });
     }
   };
 
@@ -951,44 +904,6 @@ export default function Reports() {
               )}
             </Tabs>
           </div>
-        </div>
-
-        {/* Hidden print layout */}
-        <div ref={printRef} className="fixed top-0 left-[-9999px] bg-white text-black p-10" style={{ width: "1123px" }}>
-          {performance && (
-            <div className="space-y-6">
-              <div className="flex items-start justify-between border-b border-slate-200 pb-4">
-                <div>
-                  <h1 className="text-2xl font-semibold text-slate-900">Team Connect – Performance Report</h1>
-                  <p className="text-sm text-slate-700 mt-1">Period: {currentRangeLabel} {selectedTeam ? ` · Team: ${selectedTeam.name}` : ""}</p>
-                </div>
-                <div className="text-xs text-slate-500 text-right">
-                  <div>Generated at</div>
-                  <div>{new Date().toLocaleString()}</div>
-                </div>
-              </div>
-              <table className="w-full border border-slate-300 border-collapse text-sm">
-                <thead>
-                  <tr className="bg-slate-100">
-                    <th className="px-3 py-2 text-left font-semibold border-b border-slate-300">ชื่อ</th>
-                    <th className="px-3 py-2 text-right font-semibold border-b border-slate-300">งานทั้งหมด</th>
-                    <th className="px-3 py-2 text-right font-semibold border-b border-slate-300">เสร็จแล้ว</th>
-                    <th className="px-3 py-2 text-right font-semibold border-b border-slate-300">Completion %</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {performance.taskCompletionRates.map((r, idx) => (
-                    <tr key={r.userId} className={idx % 2 === 1 ? "bg-slate-50" : undefined}>
-                      <td className="px-3 py-2 border-t border-slate-200">{r.userName}</td>
-                      <td className="px-3 py-2 text-right border-t border-slate-200">{r.totalTasks}</td>
-                      <td className="px-3 py-2 text-right border-t border-slate-200">{r.completedTasks}</td>
-                      <td className="px-3 py-2 text-right border-t border-slate-200">{r.completionRate.toFixed(1)}%</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
         </div>
       </div>
     </TooltipProvider>
