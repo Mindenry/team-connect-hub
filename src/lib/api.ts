@@ -404,14 +404,9 @@ export async function apiGet<T = any>(url: string): Promise<T> {
       // Handle new API response format: {success: true, data: [...], timestamp: '...'}
       // If response has 'data' property, extract it
       let data = parsed;
-      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-        if ('data' in parsed) {
-          // Extract data from response object
-          data = parsed.data;
-        } else if ('success' in parsed && 'data' in parsed) {
-          // Handle {success: true, data: [...]} format
-          data = parsed.data;
-        }
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed) && 'data' in parsed) {
+        // Extract data from response object
+        data = parsed.data;
       }
       
       // If data is null/undefined, handle based on expected type
@@ -443,9 +438,9 @@ export async function apiGet<T = any>(url: string): Promise<T> {
                               url.includes('/meetings');
       return (isArrayEndpoint ? [] : {}) as T;
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     // If it's a 429 error that we've already retried, return empty array to prevent UI crash
-    if (error.message?.includes('429')) {
+    if (error instanceof Error && error.message.includes('429')) {
       console.warn('Rate limited, returning empty result:', url);
       return [] as T;
     }
@@ -453,14 +448,22 @@ export async function apiGet<T = any>(url: string): Promise<T> {
   }
 }
 
-function unwrapResponse<T>(parsed: any): T {
-  if (parsed && typeof parsed === 'object' && !Array.isArray(parsed) && 'data' in parsed) {
-    return parsed.data as T;
+function unwrapResponse<T>(parsed: unknown): T {
+  if (
+    parsed &&
+    typeof parsed === 'object' &&
+    !Array.isArray(parsed) &&
+    'data' in parsed
+  ) {
+    return (parsed as { data: T }).data;
   }
   return parsed as T;
 }
 
-export async function apiPost<T = any>(url: string, data?: any): Promise<T> {
+export async function apiPost<T = unknown>(
+  url: string,
+  data?: unknown,
+): Promise<T> {
   const res = await apiFetch(url, {
     method: 'POST',
     body: JSON.stringify(data),
@@ -474,7 +477,10 @@ export async function apiPost<T = any>(url: string, data?: any): Promise<T> {
   return unwrapResponse<T>(parsed);
 }
 
-export async function apiPut<T = any>(url: string, data?: any): Promise<T> {
+export async function apiPut<T = unknown>(
+  url: string,
+  data?: unknown,
+): Promise<T> {
   const res = await apiFetch(url, {
     method: 'PUT',
     body: JSON.stringify(data),
@@ -488,7 +494,10 @@ export async function apiPut<T = any>(url: string, data?: any): Promise<T> {
   return unwrapResponse<T>(parsed);
 }
 
-export async function apiPatch<T = any>(url: string, data?: any): Promise<T> {
+export async function apiPatch<T = unknown>(
+  url: string,
+  data?: unknown,
+): Promise<T> {
   const res = await apiFetch(url, {
     method: 'PATCH',
     body: JSON.stringify(data),
@@ -502,7 +511,10 @@ export async function apiPatch<T = any>(url: string, data?: any): Promise<T> {
   return unwrapResponse<T>(parsed);
 }
 
-export async function apiDelete<T = any>(url: string, options?: { body?: any }): Promise<T> {
+export async function apiDelete<T = unknown>(
+  url: string,
+  options?: { body?: unknown },
+): Promise<T> {
   const res = await apiFetch(url, {
     method: 'DELETE',
     body: options?.body ? JSON.stringify(options.body) : undefined,

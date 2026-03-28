@@ -294,7 +294,7 @@ export default function SharedDrive() {
 
   useEffect(() => {
     loadTeams();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [teamIdFromQuery]);
 
   useEffect(() => {
@@ -329,7 +329,7 @@ export default function SharedDrive() {
 
   useEffect(() => {
     loadEntries();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [selectedTeamId, currentPath]);
 
   const filteredEntries = useMemo(() => {
@@ -1697,7 +1697,7 @@ function ManageAccessDialog({
     if (open && entry && teamId) {
       loadData();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [open, entry, teamId]);
 
   const loadData = async () => {

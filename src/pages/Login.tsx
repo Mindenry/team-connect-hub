@@ -59,8 +59,6 @@ export default function Login() {
       }
 
       const response = await res.json();
-      console.log("Login response:", response);
-
       const data = response.data || response;
 
       if (!data || !data.user) {
@@ -593,6 +591,8 @@ export default function Login() {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     className="pl-10 h-11 bg-white/[0.04] border-white/[0.08] text-white placeholder:text-slate-500 rounded-xl focus-visible:ring-blue-500/40 focus-visible:border-blue-500/40 transition-all duration-200"
+                    required
+                    autoFocus
                   />
                 </div>
               </div>
@@ -622,6 +622,8 @@ export default function Login() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     className="pl-10 pr-10 h-11 bg-white/[0.04] border-white/[0.08] text-white placeholder:text-slate-500 rounded-xl focus-visible:ring-blue-500/40 focus-visible:border-blue-500/40 transition-all duration-200"
+                    required
+                    minLength={8}
                   />
                   <button
                     type="button"
@@ -673,7 +675,7 @@ export default function Login() {
                 <button
                   id="login-submit"
                   type="submit"
-                  disabled={loading}
+                  disabled={loading || !email.trim() || !password}
                   className="w-full h-11 rounded-xl text-white font-semibold text-sm relative overflow-hidden transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed group"
                   style={{
                     background: loading

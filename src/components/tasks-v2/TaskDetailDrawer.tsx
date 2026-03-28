@@ -1,4 +1,3 @@
-import { useIsMobile } from "@/hooks/use-mobile";
 import TaskDetailDialog from "@/components/dialogs/TaskDetailDialog";
 import type { TaskCardData } from "./TaskCard";
 
@@ -10,9 +9,6 @@ interface TaskDetailDrawerProps {
 }
 
 export default function TaskDetailDrawer({ open, onOpenChange, task, onTaskDeleted }: TaskDetailDrawerProps) {
-  const isMobile = useIsMobile();
-  const isSmallScreen = typeof window !== "undefined" && window.innerWidth < 900;
-  const useFullScreen = isMobile || isSmallScreen;
 
   // Map TaskCardData to the format expected by TaskDetailDialog
   const dialogTask = task

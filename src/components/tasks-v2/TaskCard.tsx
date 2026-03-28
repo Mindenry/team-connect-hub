@@ -86,6 +86,7 @@ export function InlineCreateCard({ onSubmit }: { onSubmit: (title: string) => vo
       <button
         onClick={() => { setActive(true); setTimeout(() => inputRef.current?.focus(), 50); }}
         className="flex items-center gap-1.5 w-full px-3 py-2 text-xs text-muted-foreground/60 hover:text-foreground hover:bg-muted/30 rounded-lg transition-colors"
+        aria-label="Create task in this column"
       >
         <Plus className="w-3.5 h-3.5" />
         Create issue

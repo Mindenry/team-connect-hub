@@ -219,6 +219,19 @@ interface MediaDevice {
   label: string;
 }
 
+type CameraQualityMode = "balanced" | "sharp";
+
+const CAMERA_QUALITY_PRESETS = {
+  balanced: {
+    resolution: VideoPresets.h720,
+    label: "Balanced (720p)",
+  },
+  sharp: {
+    resolution: VideoPresets.h1080,
+    label: "Sharp (1080p)",
+  },
+} as const;
+
 // Custom hook for audio level detection
 function useAudioLevel(track: LocalAudioTrack | null) {
   const [audioLevel, setAudioLevel] = useState(0);
@@ -427,7 +440,7 @@ function MeetingRoomUI({
       Track.Source.ScreenShare,
       Track.Source.ScreenShareAudio,
     ],
-    { onlySubscribed: false },
+    { onlySubscribed: true },
   );
 
   // Local media state
@@ -449,6 +462,10 @@ function MeetingRoomUI({
   );
   const [mirrorVideo, setMirrorVideo] = useState(true);
   const [speakerVolume, setSpeakerVolume] = useState([80]);
+  const [cameraQuality, setCameraQuality] = useState<CameraQualityMode>(() => {
+    const saved = localStorage.getItem("meeting_camera_quality");
+    return saved === "sharp" ? "sharp" : "balanced";
+  });
 
   // Chat enhancements
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
@@ -466,6 +483,10 @@ function MeetingRoomUI({
   const hasInitializedMedia = useRef(false);
   const cameraRecoveryAttemptRef = useRef(0);
   const hasSentLeaveRef = useRef(false);
+
+  useEffect(() => {
+    localStorage.setItem("meeting_camera_quality", cameraQuality);
+  }, [cameraQuality]);
 
   const userName = currentUser?.name || "Guest";
   const meetingCode = meetingId || "quick-huddle";
@@ -525,10 +546,12 @@ function MeetingRoomUI({
   const ensureCameraEnabled = useCallback(async () => {
     if (!lkLocal) return;
 
+    const selectedPreset = CAMERA_QUALITY_PRESETS[cameraQuality];
+
     try {
       await lkLocal.setCameraEnabled(true, {
         deviceId: selectedCamera || undefined,
-        resolution: VideoPresets.h1080,
+        resolution: selectedPreset.resolution,
       });
     } catch (cameraError) {
       console.warn(
@@ -536,10 +559,10 @@ function MeetingRoomUI({
         cameraError,
       );
       await lkLocal.setCameraEnabled(true, {
-        resolution: VideoPresets.h1080,
+        resolution: selectedPreset.resolution,
       });
     }
-  }, [lkLocal, selectedCamera]);
+  }, [lkLocal, selectedCamera, cameraQuality]);
 
   // Initialize meeting and media
   useEffect(() => {
@@ -1528,7 +1551,7 @@ function MeetingRoomUI({
           if (isCameraOn) {
             await lkLocal.setCameraEnabled(true, {
               deviceId,
-              resolution: VideoPresets.h1080,
+              resolution: CAMERA_QUALITY_PRESETS[cameraQuality].resolution,
             });
           }
         } catch (e) {
@@ -1536,7 +1559,7 @@ function MeetingRoomUI({
         }
       }
     },
-    [lkLocal, isCameraOn],
+    [lkLocal, isCameraOn, cameraQuality],
   );
 
 
@@ -2044,18 +2067,20 @@ function MeetingRoomUI({
             <motion.div
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="absolute top-4 left-1/2 -translate-x-1/2 z-50 bg-gradient-to-r from-[#0E71EB] to-[#0D65D0] text-white px-5 py-2.5 rounded-xl flex items-center gap-2.5 shadow-2xl shadow-blue-500/30 backdrop-blur-sm border border-blue-400/20"
+              className="absolute top-4 inset-x-0 z-50 flex justify-center px-4"
             >
-              <Monitor className="w-4 h-4" />
-              <span className="text-sm font-semibold">คุณกำลังแชร์หน้าจอ</span>
-              <Button
-                size="sm"
-                variant="secondary"
-                className="ml-2 h-7 bg-white/20 hover:bg-white/30 text-white border-0"
-                onClick={toggleScreenShare}
-              >
-                หยุดแชร์
-              </Button>
+              <div className="bg-gradient-to-r from-[#0E71EB] to-[#0D65D0] text-white px-5 py-2.5 rounded-xl flex items-center gap-2.5 shadow-2xl shadow-blue-500/30 backdrop-blur-sm border border-blue-400/20">
+                <Monitor className="w-4 h-4" />
+                <span className="text-sm font-semibold">คุณกำลังแชร์หน้าจอ</span>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  className="ml-2 h-7 bg-white/20 hover:bg-white/30 text-white border-0"
+                  onClick={toggleScreenShare}
+                >
+                  หยุดแชร์
+                </Button>
+              </div>
             </motion.div>
           )}
 
@@ -3381,6 +3406,46 @@ function MeetingRoomUI({
                     })()}
                   </div>
 
+                  <div className="bg-[#2a2a2a] border border-white/5 rounded-xl p-4 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-sm font-semibold text-white/70">
+                        Camera quality
+                      </Label>
+                      <span className="text-xs text-white/50">
+                        {CAMERA_QUALITY_PRESETS[cameraQuality].label}
+                      </span>
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setCameraQuality("balanced")}
+                        className={cn(
+                          "w-full rounded-lg border px-3 py-2 text-left text-sm transition",
+                          cameraQuality === "balanced"
+                            ? "border-blue-400/70 bg-blue-500/10 text-blue-200"
+                            : "border-white/10 bg-white/5 text-white/60 hover:border-white/30",
+                        )}
+                      >
+                        Balanced (720p) · lower latency
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setCameraQuality("sharp")}
+                        className={cn(
+                          "w-full rounded-lg border px-3 py-2 text-left text-sm transition",
+                          cameraQuality === "sharp"
+                            ? "border-blue-400/70 bg-blue-500/10 text-blue-200"
+                            : "border-white/10 bg-white/5 text-white/60 hover:border-white/30",
+                        )}
+                      >
+                        Sharp (1080p) · best clarity
+                      </button>
+                    </div>
+                    <p className="text-xs text-white/40">
+                      เลือกให้เหมาะกับเน็ตเพื่อคมชัดและลด latency
+                    </p>
+                  </div>
+
                   <div className="bg-[#2a2a2a] border border-white/5 rounded-xl p-4 flex items-center justify-between">
                     <div>
                       <Label className="text-sm font-medium text-white/90">
@@ -3542,6 +3607,21 @@ export default function MeetingRoom() {
       token={token}
       serverUrl={serverUrl}
       connect={true}
+      options={{
+        adaptiveStream: true,
+        dynacast: true,
+        publishDefaults: {
+          simulcast: true,
+          videoEncoding: {
+            maxBitrate: 2_000_000,
+            maxFramerate: 30,
+          },
+          screenShareEncoding: {
+            maxBitrate: 3_500_000,
+            maxFramerate: 30,
+          },
+        },
+      }}
     >
       <MeetingRoomUI meetingId={id} meetingTitle={title} />
       <RoomAudioRenderer />

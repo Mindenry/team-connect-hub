@@ -66,10 +66,10 @@ export default function TaskList({ tasks, onTaskClick, onCreateTask }: TaskListP
     <ScrollArea className="flex-1">
       <div className="p-4 sm:p-6">
         {/* Column sort header */}
-        <div className="flex items-center gap-1 mb-3 px-3 py-2 rounded-xl bg-card/95 border border-border/60 shadow-sm">
+        <div className="flex flex-wrap items-center gap-1 mb-3 px-3 py-2 rounded-xl bg-card/95 border border-border/60 shadow-sm">
           <ListIcon className="w-3.5 h-3.5 text-muted-foreground mr-1" />
           <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mr-3">
-            {tasks.length} issues
+            {tasks.length} tasks
           </span>
           <div className="flex-1" />
           <span className="text-[10px] text-muted-foreground mr-1">Sort:</span>

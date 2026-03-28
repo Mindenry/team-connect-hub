@@ -108,7 +108,6 @@ export default function Reminders() {
     loadUsers();
     const interval = setInterval(loadData, 60000);
     return () => clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filter]);
 
   const loadData = async () => {
@@ -180,7 +179,6 @@ export default function Reminders() {
         const count = Math.max(1, Math.min(30, Number(newReminder.occurrences) || 10));
         const dates = computeRecurringDates(base, newReminder.recurringPattern, count);
         for (const d of dates) {
-          // eslint-disable-next-line no-await-in-loop
           await apiPost("/reminders", {
             title: newReminder.title,
             description: newReminder.description,

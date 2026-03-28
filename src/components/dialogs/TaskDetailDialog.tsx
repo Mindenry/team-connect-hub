@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import {
-  Calendar,
   CheckSquare,
   MessageSquare,
   Paperclip,
@@ -8,6 +7,11 @@ import {
   Save,
   Trash2,
   Eye,
+  X,
+  AlertTriangle,
+  Calendar,
+  Flag,
+  User,
 } from "lucide-react";
 import {
   AnimatedDialog as Dialog,
@@ -30,6 +34,7 @@ import {
 } from "@/components/ui/select";
 import { auth } from "@/lib/auth";
 import { apiDelete, apiGet, apiPatch, apiPost } from "@/lib/api";
+import { useToast } from "@/components/ui/use-toast";
 
 interface TaskDetailDialogProps {
   open: boolean;
@@ -55,6 +60,7 @@ export default function TaskDetailDialog({
   onDeleted,
 }: TaskDetailDialogProps) {
   const currentUser = auth.getUser();
+  const { toast } = useToast();
 
   const [loading, setLoading] = useState(false);
   const [users, setUsers] = useState<any[]>([]);
@@ -71,6 +77,12 @@ export default function TaskDetailDialog({
   const [newComment, setNewComment] = useState("");
   const [newSubtask, setNewSubtask] = useState("");
   const [saving, setSaving] = useState(false);
+  const [addingComment, setAddingComment] = useState(false);
+  const [addingSubtask, setAddingSubtask] = useState(false);
+  const [uploadingAttachment, setUploadingAttachment] = useState(false);
+  const [togglingWatch, setTogglingWatch] = useState(false);
+  const [deletingTask, setDeletingTask] = useState(false);
+  const [saveBanner, setSaveBanner] = useState<string | null>(null);
 
   const displayTask = taskData || task;
 
@@ -95,12 +107,21 @@ export default function TaskDetailDialog({
         setSubtasks(Array.isArray(taskRes.subtasks) ? taskRes.subtasks : []);
         setAttachments(Array.isArray(taskRes.attachments) ? taskRes.attachments : []);
         setActivityLog(Array.isArray(taskRes.activityLog) ? taskRes.activityLog : []);
+      } else {
+        setTaskData(task ?? null);
       }
 
       setUsers(Array.isArray(usersRes) ? usersRes : []);
       setTeams(Array.isArray(teamsRes) ? teamsRes : []);
       setMeetings(Array.isArray(meetingsRes) ? meetingsRes : []);
       setWatchers(Array.isArray(watchersRes) ? watchersRes : []);
+    } catch {
+      toast({
+        title: "โหลดข้อมูลงานไม่สำเร็จ",
+        description: "กรุณาลองใหม่อีกครั้ง",
+        variant: "destructive",
+      });
+      setTaskData(task ?? null);
     } finally {
       setLoading(false);
     }
@@ -111,6 +132,19 @@ export default function TaskDetailDialog({
       loadAll();
     }
   }, [open, task?.id]);
+
+  useEffect(() => {
+    if (!open) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
+        event.preventDefault();
+        handleSaveTitleDesc();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [open, displayTask?.title, displayTask?.description]);
 
   const assigneeIds = useMemo(() => {
     const ids = new Set<string>();
@@ -124,6 +158,18 @@ export default function TaskDetailDialog({
     return Array.from(ids);
   }, [displayTask?.assigneeId, watchers]);
 
+  const isWatching = watchers.some(
+    (w: any) => (w.userId || w.user?.id) === currentUser?.id,
+  );
+
+  const dueDateValue = displayTask?.dueDate
+    ? new Date(displayTask.dueDate).toISOString().slice(0, 10)
+    : "";
+  const isOverdue =
+    !!displayTask?.dueDate &&
+    new Date(displayTask.dueDate) < new Date() &&
+    displayTask?.status !== "done";
+
   const handleUpdateField = async (field: string, value: any) => {
     if (!task?.id) return;
     setSaving(true);
@@ -132,8 +178,16 @@ export default function TaskDetailDialog({
       payload[field] = value;
       const updated = await apiPatch<any>(`/tasks/${task.id}`, payload);
       setTaskData((prev: any) => ({ ...prev, ...updated, [field]: value }));
+      setSaveBanner("Changes saved");
+    } catch {
+      toast({
+        title: "Update failed",
+        description: "Please try again.",
+        variant: "destructive",
+      });
     } finally {
       setSaving(false);
+      setTimeout(() => setSaveBanner(null), 1800);
     }
   };
 
@@ -147,28 +201,58 @@ export default function TaskDetailDialog({
         description: displayTask.description,
       });
       setTaskData((prev: any) => ({ ...prev, ...updated }));
+      setSaveBanner("Text saved");
+    } catch {
+      toast({
+        title: "Save failed",
+        description: "Please try again.",
+        variant: "destructive",
+      });
     } finally {
       setSaving(false);
+      setTimeout(() => setSaveBanner(null), 1800);
     }
   };
 
   const addComment = async () => {
-    if (!task?.id || !newComment.trim() || !currentUser?.id) return;
-    const created = await apiPost<any>(`/tasks/${task.id}/comments`, {
-      userId: currentUser.id,
-      text: newComment.trim(),
-    });
-    setComments((prev) => [...prev, created]);
-    setNewComment("");
+    if (!task?.id || !newComment.trim() || !currentUser?.id || addingComment) return;
+    setAddingComment(true);
+    try {
+      const created = await apiPost<any>(`/tasks/${task.id}/comments`, {
+        userId: currentUser.id,
+        text: newComment.trim(),
+      });
+      setComments((prev) => [...prev, created]);
+      setNewComment("");
+    } catch {
+      toast({
+        title: "Comment failed",
+        description: "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setAddingComment(false);
+    }
   };
 
   const addSubtask = async () => {
-    if (!task?.id || !newSubtask.trim()) return;
-    const created = await apiPost<any>(`/tasks/${task.id}/subtasks`, {
-      title: newSubtask.trim(),
-    });
-    setSubtasks((prev) => [...prev, created]);
-    setNewSubtask("");
+    if (!task?.id || !newSubtask.trim() || addingSubtask) return;
+    setAddingSubtask(true);
+    try {
+      const created = await apiPost<any>(`/tasks/${task.id}/subtasks`, {
+        title: newSubtask.trim(),
+      });
+      setSubtasks((prev) => [...prev, created]);
+      setNewSubtask("");
+    } catch {
+      toast({
+        title: "Subtask failed",
+        description: "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setAddingSubtask(false);
+    }
   };
 
   const toggleSubtask = async (subtaskId: string, isCompleted: boolean) => {
@@ -181,58 +265,91 @@ export default function TaskDetailDialog({
   };
 
   const uploadAttachment = async (file: File) => {
-    if (!task?.id || !currentUser?.id) return;
-    const formData = new FormData();
-    formData.append("file", file);
+    if (!task?.id || !currentUser?.id || uploadingAttachment) return;
+    setUploadingAttachment(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
 
-    const token = localStorage.getItem("collabhub_token");
-    const uploadRes = await fetch(
-      `${import.meta.env.VITE_API_URL ?? "http://localhost:3000"}/upload?folder=tasks/${task.id}&filename=${encodeURIComponent(file.name)}`,
-      {
-        method: "POST",
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-        body: formData,
-      },
-    );
+      const token = localStorage.getItem("collabhub_token");
+      const uploadRes = await fetch(
+        `${import.meta.env.VITE_API_URL ?? "http://localhost:3000"}/upload?folder=tasks/${task.id}&filename=${encodeURIComponent(file.name)}`,
+        {
+          method: "POST",
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+          body: formData,
+        },
+      );
 
-    const uploadData = await uploadRes.json();
+      const uploadData = await uploadRes.json();
 
-    const created = await apiPost<any>(`/tasks/${task.id}/attachments`, {
-      userId: currentUser.id,
-      name: file.name,
-      url: uploadData.url,
-      mimeType: file.type,
-      size: file.size,
-    });
+      const created = await apiPost<any>(`/tasks/${task.id}/attachments`, {
+        userId: currentUser.id,
+        name: file.name,
+        url: uploadData.url,
+        mimeType: file.type,
+        size: file.size,
+      });
 
-    setAttachments((prev) => [created, ...prev]);
+      setAttachments((prev) => [created, ...prev]);
+    } catch {
+      toast({
+        title: "Upload failed",
+        description: "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setUploadingAttachment(false);
+    }
   };
 
   const toggleWatching = async () => {
-    if (!task?.id || !currentUser?.id) return;
+    if (!task?.id || !currentUser?.id || togglingWatch) return;
     const exists = watchers.some(
       (w: any) => (w.userId || w.user?.id) === currentUser.id,
     );
 
-    if (exists) {
-      await apiDelete(`/task-watchers?taskId=${task.id}&userId=${currentUser.id}`);
-      setWatchers((prev) =>
-        prev.filter((w: any) => (w.userId || w.user?.id) !== currentUser.id),
-      );
-    } else {
-      const created = await apiPost<any>("/task-watchers", {
-        taskId: task.id,
-        userId: currentUser.id,
+    setTogglingWatch(true);
+    try {
+      if (exists) {
+        await apiDelete(`/task-watchers?taskId=${task.id}&userId=${currentUser.id}`);
+        setWatchers((prev) =>
+          prev.filter((w: any) => (w.userId || w.user?.id) !== currentUser.id),
+        );
+      } else {
+        const created = await apiPost<any>("/task-watchers", {
+          taskId: task.id,
+          userId: currentUser.id,
+        });
+        setWatchers((prev) => [...prev, created]);
+      }
+    } catch {
+      toast({
+        title: "Watcher update failed",
+        description: "Please try again.",
+        variant: "destructive",
       });
-      setWatchers((prev) => [...prev, created]);
+    } finally {
+      setTogglingWatch(false);
     }
   };
 
   const deleteTask = async () => {
-    if (!task?.id) return;
-    await apiDelete(`/tasks/${task.id}`);
-    onDeleted?.(task.id);
-    onOpenChange(false);
+    if (!task?.id || deletingTask) return;
+    setDeletingTask(true);
+    try {
+      await apiDelete(`/tasks/${task.id}`);
+      onDeleted?.(task.id);
+      onOpenChange(false);
+    } catch {
+      toast({
+        title: "Delete failed",
+        description: "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setDeletingTask(false);
+    }
   };
 
   if (!task?.id) return null;
@@ -241,17 +358,36 @@ export default function TaskDetailDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-5xl p-0 gap-0">
         <DialogHeader className="px-6 py-4 border-b">
-          <DialogTitle className="flex items-center gap-2">
-            <CheckSquare className="w-4 h-4 text-primary" />
-            Task Details
-          </DialogTitle>
-          <DialogDescription>
-            Manage task within scope 5.1–5.16
-          </DialogDescription>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <DialogTitle className="flex items-center gap-2">
+                <CheckSquare className="w-4 h-4 text-primary" />
+                Task Details
+              </DialogTitle>
+              <DialogDescription>
+                Manage task within scope 5.1–5.16
+              </DialogDescription>
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => onOpenChange(false)}
+              aria-label="Close task details"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
         </DialogHeader>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-0 max-h-[80vh] overflow-hidden">
           <div className="lg:col-span-2 p-5 overflow-y-auto space-y-5 border-r">
+            {saveBanner && (
+              <div className="sticky top-0 z-10 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs font-medium text-emerald-700 mb-3">
+                {saveBanner}
+              </div>
+            )}
             {loading ? (
               <div className="text-sm text-muted-foreground">Loading...</div>
             ) : (
@@ -261,7 +397,7 @@ export default function TaskDetailDialog({
                   <Input
                     value={displayTask?.title || ""}
                     onChange={(e) =>
-                      setTaskData((prev: any) => ({ ...prev, title: e.target.value }))
+                      setTaskData((prev: any) => ({ ...(prev ?? {}), title: e.target.value }))
                     }
                   />
                 </div>
@@ -271,18 +407,19 @@ export default function TaskDetailDialog({
                   <Textarea
                     value={displayTask?.description || ""}
                     onChange={(e) =>
-                      setTaskData((prev: any) => ({ ...prev, description: e.target.value }))
+                      setTaskData((prev: any) => ({ ...(prev ?? {}), description: e.target.value }))
                     }
                     className="min-h-24"
                   />
                   <Button size="sm" onClick={handleSaveTitleDesc} disabled={saving}>
-                    <Save className="w-3.5 h-3.5 mr-1" /> Save text
+                    <Save className="w-3.5 h-3.5 mr-1" /> {saving ? "Saving..." : "Save text"}
                   </Button>
+                  <p className="text-[11px] text-muted-foreground">Tip: Press Ctrl/Cmd + S to save quickly</p>
                 </div>
 
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  <div>
-                    <Label>Status</Label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+                  <div className="rounded-lg border bg-muted/20 p-3 space-y-2">
+                    <Label className="inline-flex items-center gap-1"><CheckSquare className="w-3.5 h-3.5" /> Status</Label>
                     <Select
                       value={displayTask?.status || "todo"}
                       onValueChange={(v) => handleUpdateField("status", v)}
@@ -296,8 +433,8 @@ export default function TaskDetailDialog({
                     </Select>
                   </div>
 
-                  <div>
-                    <Label>Priority</Label>
+                  <div className="rounded-lg border bg-muted/20 p-3 space-y-2">
+                    <Label className="inline-flex items-center gap-1"><Flag className="w-3.5 h-3.5" /> Priority</Label>
                     <Select
                       value={displayTask?.priority || "medium"}
                       onValueChange={(v) => handleUpdateField("priority", v)}
@@ -311,8 +448,8 @@ export default function TaskDetailDialog({
                     </Select>
                   </div>
 
-                  <div>
-                    <Label>Assignee</Label>
+                  <div className="rounded-lg border bg-muted/20 p-3 space-y-2">
+                    <Label className="inline-flex items-center gap-1"><User className="w-3.5 h-3.5" /> Assignee</Label>
                     <Select
                       value={displayTask?.assigneeId || "none"}
                       onValueChange={(v) =>
@@ -329,11 +466,11 @@ export default function TaskDetailDialog({
                     </Select>
                   </div>
 
-                  <div>
-                    <Label>Due Date</Label>
+                  <div className="rounded-lg border bg-muted/20 p-3 space-y-2">
+                    <Label className="inline-flex items-center gap-1"><Calendar className="w-3.5 h-3.5" /> Due Date</Label>
                     <Input
                       type="date"
-                      value={displayTask?.dueDate ? new Date(displayTask.dueDate).toISOString().slice(0, 10) : ""}
+                      value={dueDateValue}
                       onChange={(e) =>
                         handleUpdateField(
                           "dueDate",
@@ -341,10 +478,15 @@ export default function TaskDetailDialog({
                         )
                       }
                     />
+                    {isOverdue && (
+                      <div className="text-[11px] text-red-600 inline-flex items-center gap-1">
+                        <AlertTriangle className="w-3 h-3" /> Overdue
+                      </div>
+                    )}
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <Label>Team</Label>
                     <Select
@@ -389,7 +531,9 @@ export default function TaskDetailDialog({
                       onChange={(e) => setNewSubtask(e.target.value)}
                       placeholder="Add subtask"
                     />
-                    <Button size="sm" onClick={addSubtask}><Plus className="w-3.5 h-3.5" /></Button>
+                    <Button size="sm" onClick={addSubtask} disabled={addingSubtask || !newSubtask.trim()}>
+                      {addingSubtask ? "..." : <Plus className="w-3.5 h-3.5" />}
+                    </Button>
                   </div>
                   <div className="space-y-2">
                     {subtasks.map((s: any) => (
@@ -413,7 +557,9 @@ export default function TaskDetailDialog({
                       onChange={(e) => setNewComment(e.target.value)}
                       placeholder="Write a comment"
                     />
-                    <Button size="sm" onClick={addComment}>Send</Button>
+                    <Button size="sm" onClick={addComment} disabled={addingComment || !newComment.trim()}>
+                      {addingComment ? "Sending..." : "Send"}
+                    </Button>
                   </div>
                   <div className="space-y-2">
                     {comments.map((c: any) => (
@@ -429,11 +575,15 @@ export default function TaskDetailDialog({
                   <Label className="flex items-center gap-1"><Paperclip className="w-3.5 h-3.5" /> Attachments</Label>
                   <Input
                     type="file"
+                    disabled={uploadingAttachment}
                     onChange={(e) => {
                       const f = e.target.files?.[0];
                       if (f) uploadAttachment(f);
                     }}
                   />
+                  {uploadingAttachment && (
+                    <div className="text-[11px] text-muted-foreground">Uploading attachment...</div>
+                  )}
                   <div className="space-y-2">
                     {attachments.map((a: any) => (
                       <a
@@ -456,22 +606,30 @@ export default function TaskDetailDialog({
             <div className="rounded-xl border p-3 space-y-2">
               <div className="flex items-center justify-between">
                 <Label className="text-xs uppercase text-muted-foreground">Watchers</Label>
-                <Button size="sm" variant="outline" onClick={toggleWatching}>
+                <Button
+                  size="sm"
+                  variant={isWatching ? "default" : "outline"}
+                  onClick={toggleWatching}
+                  disabled={togglingWatch}
+                  className="min-w-[92px]"
+                >
                   <Eye className="w-3.5 h-3.5 mr-1" />
-                  {watchers.some((w: any) => (w.userId || w.user?.id) === currentUser?.id)
-                    ? "Unwatch"
-                    : "Watch"}
+                  {isWatching ? "Watching" : "Watch"}
                 </Button>
               </div>
               <div className="flex flex-wrap gap-1.5">
-                {watchers.map((w: any, idx: number) => {
-                  const name = w.user?.name || "User";
-                  return (
-                    <Badge key={`${w.userId || w.user?.id || idx}`} variant="secondary">
-                      {name}
-                    </Badge>
-                  );
-                })}
+                {watchers.length === 0 ? (
+                  <div className="text-xs text-muted-foreground">No watchers yet</div>
+                ) : (
+                  watchers.map((w: any, idx: number) => {
+                    const name = w.user?.name || "User";
+                    return (
+                      <Badge key={`${w.userId || w.user?.id || idx}`} variant="secondary">
+                        {name}
+                      </Badge>
+                    );
+                  })
+                )}
               </div>
             </div>
 
@@ -502,8 +660,8 @@ export default function TaskDetailDialog({
               <div className="text-sm">Attachments: {attachments.length}</div>
             </div>
 
-            <Button variant="destructive" className="w-full" onClick={deleteTask}>
-              <Trash2 className="w-4 h-4 mr-2" /> Delete Task
+            <Button variant="destructive" className="w-full" onClick={deleteTask} disabled={deletingTask}>
+              <Trash2 className="w-4 h-4 mr-2" /> {deletingTask ? "Deleting..." : "Delete Task"}
             </Button>
           </div>
         </div>

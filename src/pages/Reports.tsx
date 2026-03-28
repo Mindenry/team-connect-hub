@@ -300,7 +300,7 @@ export default function Reports() {
       }
     };
     loadBase();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [dateRange]);
 
   // Load tab-specific
@@ -334,7 +334,7 @@ export default function Reports() {
       }
     };
     loadTabData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [activeTab, selectedTeamId, dateRange]);
 
   // Export

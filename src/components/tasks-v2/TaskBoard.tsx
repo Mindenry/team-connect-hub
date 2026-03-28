@@ -129,6 +129,8 @@ export default function TaskBoard({
       await apiPatch(`/tasks/${taskId}/position`, { status: targetStatus, position: columnTasks.length });
     } catch (err) {
       console.error("Failed to move task:", err);
+      // Rollback on failure to keep UI/data consistent
+      onTaskMoved?.(taskId, targetStatus, fromStatus);
     }
   };
 
@@ -219,8 +221,8 @@ export default function TaskBoard({
                 ))}
 
                 {columnTasks.length === 0 && !isDragOver && (
-                  <div className="flex items-center justify-center min-h-[60px] rounded-lg border border-dashed border-border/25 text-[11px] text-muted-foreground/25 select-none">
-                    No issues
+                  <div className="flex items-center justify-center min-h-[60px] rounded-lg border border-dashed border-border/25 text-[11px] text-muted-foreground/50 select-none">
+                    No tasks in this stage
                   </div>
                 )}
 
