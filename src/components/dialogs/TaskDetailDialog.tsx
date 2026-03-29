@@ -12,6 +12,8 @@ import { Progress } from "@/components/ui/progress";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { FilePreview } from "@/components/chat/FilePreview";
+import { PDFViewer } from "@/components/chat/PDFViewer";
+import { ImagePreview } from "@/components/chat/ImagePreview";
 import {
   Select,
   SelectContent,
@@ -543,27 +545,38 @@ export default function TaskDetailDialog({
                     <p className="text-xs text-muted-foreground">รองรับรูปภาพ, PDF, เอกสารทั่วไป (สูงสุด 50MB) — ชื่อไฟล์ภาษาไทยได้</p>
                     {attachments.length > 0 && (
                       <div className="flex flex-wrap gap-3">
-                        {attachments.map((att) => (
-                          <div key={att.id} className="relative group">
-                            <FilePreview url={att.url} name={att.name} />
-                            <Button 
-                              size="sm" 
-                              variant="destructive" 
-                              className="absolute -top-2 -right-2 h-6 w-6 p-0 rounded-full opacity-0 group-hover:opacity-100 shadow-md transition-all scale-90 group-hover:scale-100" 
-                              onClick={async (e) => { 
-                                e.preventDefault();
-                                try { 
-                                  await apiDelete(`/tasks/attachments/${att.id}`); 
-                                  setFullTask({ ...fullTask!, attachments: attachments.filter((a) => a.id !== att.id) }); 
-                                } catch { 
-                                  toast.error("Failed to delete"); 
-                                } 
-                              }}
-                            >
-                              <Trash2 className="w-3 h-3" />
-                            </Button>
-                          </div>
-                        ))}
+                        {attachments.map((att) => {
+                          const isImage = att.mimeType?.startsWith("image/") || att.url?.match(/\.(jpeg|jpg|gif|png)$/i);
+                          const isPDF = att.mimeType === "application/pdf" || att.url?.match(/\.pdf$/i);
+
+                          return (
+                            <div key={att.id} className="relative group">
+                              {isImage ? (
+                                <ImagePreview url={att.url} name={att.name} />
+                              ) : isPDF ? (
+                                <PDFViewer url={att.url} name={att.name} />
+                              ) : (
+                                <FilePreview url={att.url} name={att.name} />
+                              )}
+                              <Button 
+                                size="sm" 
+                                variant="destructive" 
+                                className="absolute -top-2 -right-2 h-6 w-6 p-0 rounded-full opacity-0 group-hover:opacity-100 shadow-md transition-all scale-90 group-hover:scale-100" 
+                                onClick={async (e) => { 
+                                  e.preventDefault();
+                                  try { 
+                                    await apiDelete(`/tasks/attachments/${att.id}`); 
+                                    setFullTask({ ...fullTask!, attachments: attachments.filter((a) => a.id !== att.id) }); 
+                                  } catch { 
+                                    toast.error("Failed to delete"); 
+                                  } 
+                                }}
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </Button>
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
                     <div className="relative flex items-center gap-2 px-3 py-2.5 border border-dashed border-border/50 rounded-lg text-xs text-muted-foreground hover:border-border/80 cursor-pointer transition-colors overflow-hidden">
