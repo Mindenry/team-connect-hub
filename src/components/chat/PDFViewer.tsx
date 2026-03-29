@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { FileText, ExternalLink, Download } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -11,6 +12,11 @@ interface PDFViewerProps {
 export function PDFViewer({ url, name, variant = "default" }: PDFViewerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const isMeeting = variant === "meeting";
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // Cloudinary trick: injecting fl_attachment forces a block-bypassing download for PDFs uploaded as images
   const downloadUrl = url.includes("res.cloudinary.com") && url.includes("/upload/") && !url.includes("fl_attachment")
@@ -21,6 +27,69 @@ export function PDFViewer({ url, name, variant = "default" }: PDFViewerProps) {
     e.preventDefault();
     setIsOpen(true);
   };
+
+  const modalContent = (
+    <div
+      className="fixed inset-0 z-[100] bg-black/80 flex items-center justify-center p-4 sm:p-6 backdrop-blur-sm"
+      onClick={() => setIsOpen(false)}
+    >
+      <div
+        className="relative w-full max-w-4xl h-[85vh] flex flex-col bg-white dark:bg-zinc-900 rounded-xl overflow-hidden shadow-2xl ring-1 ring-white/10"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header restored to match Chat */}
+        <div className="flex items-center justify-between px-4 py-3 bg-white dark:bg-zinc-900 border-b border-gray-200 dark:border-zinc-800 shrink-0 z-20">
+          <div className="flex items-center gap-2 min-w-0">
+            <FileText className="w-5 h-5 text-red-500 flex-shrink-0" />
+            <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-100 truncate">{name}</h3>
+          </div>
+          <div className="flex items-center gap-2">
+            <a
+              href={downloadUrl}
+              download={name}
+              className="p-2 text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-md transition-colors"
+              title="Download PDF"
+            >
+              <Download className="w-4 h-4" />
+            </a>
+            <a
+              href={url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="p-2 text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-md transition-colors"
+              title="Open in new tab"
+            >
+              <ExternalLink className="w-4 h-4" />
+            </a>
+            <div className="w-px h-5 bg-gray-300 dark:bg-zinc-700 mx-1"></div>
+            <button
+              onClick={() => setIsOpen(false)}
+              className="p-2 text-gray-500 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors"
+              title="Close viewer"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+
+        {/* PDF Content */}
+        <div className="flex-1 w-full bg-gray-100 dark:bg-black relative">
+          <iframe
+            src={`${url}#view=FitH`}
+            className="w-full h-full border-none"
+            title={name}
+            loading="lazy"
+          />
+          {/* Optional overlay hint if PDF fails to load due to Cloudinary 401 */}
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none opacity-50 flex flex-col items-center">
+            <FileText className="w-10 h-10 mb-2" />
+            <span className="text-sm font-medium">Loading document...</span>
+            <span className="text-xs text-center mt-2 max-w-[250px]">If it doesn't load (401 Error), Cloudinary security settings may block PDF embedding. Please click the download button above.</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <>
@@ -70,62 +139,7 @@ export function PDFViewer({ url, name, variant = "default" }: PDFViewerProps) {
         </div>
       </a>
 
-      {isOpen && (
-        <div
-          className="fixed inset-0 z-[100] bg-black/80 flex items-center justify-center p-4 sm:p-6 backdrop-blur-sm"
-          onClick={() => setIsOpen(false)}
-        >
-          <div
-            className="relative w-full max-w-4xl h-[85vh] flex flex-col bg-white dark:bg-zinc-900 rounded-xl overflow-hidden shadow-2xl ring-1 ring-white/10"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Header restored to match Chat */}
-            <div className="flex items-center justify-between px-4 py-3 bg-white dark:bg-zinc-900 border-b border-gray-200 dark:border-zinc-800 shrink-0 z-20">
-              <div className="flex items-center gap-2 min-w-0">
-                <FileText className="w-5 h-5 text-red-500 flex-shrink-0" />
-                <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-100 truncate">{name}</h3>
-              </div>
-              <div className="flex items-center gap-2">
-                <a
-                  href={downloadUrl}
-                  download={name}
-                  className="p-2 text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-md transition-colors"
-                  title="Download PDF"
-                >
-                  <Download className="w-4 h-4" />
-                </a>
-                <a
-                  href={url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="p-2 text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-md transition-colors"
-                  title="Open in new tab"
-                >
-                  <ExternalLink className="w-4 h-4" />
-                </a>
-                <div className="w-px h-5 bg-gray-300 dark:bg-zinc-700 mx-1"></div>
-                <button
-                  onClick={() => setIsOpen(false)}
-                  className="p-2 text-gray-500 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors"
-                  title="Close viewer"
-                >
-                  ✕
-                </button>
-              </div>
-            </div>
-
-            {/* PDF Content */}
-            <div className="flex-1 w-full bg-gray-100 dark:bg-black relative">
-              <iframe
-                src={`${url}#view=FitH`}
-                className="w-full h-full border-none"
-                title={name}
-                loading="lazy"
-              />
-            </div>
-          </div>
-        </div>
-      )}
+      {mounted && isOpen ? createPortal(modalContent, document.body) : null}
     </>
   );
 }

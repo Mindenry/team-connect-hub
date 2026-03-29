@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { Download, Maximize, ImageIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -12,6 +13,26 @@ export function ImagePreview({ url, name, variant = "default" }: ImagePreviewPro
   const [isOpen, setIsOpen] = useState(false);
   const isMeeting = variant === "meeting";
   const isTask = variant === "task";
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const modalContent = isOpen ? (
+    <div className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-4 transition-opacity" onClick={() => setIsOpen(false)}>
+      <div className="relative max-w-5xl max-h-[90vh] mx-auto flex flex-col items-center" onClick={(e) => e.stopPropagation()}>
+        <img src={url} alt={name} className="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl" />
+        {name && <div className="mt-3 text-center text-sm font-medium text-white/90 truncate max-w-full px-4">{name}</div>}
+        <div className="absolute -top-12 right-0 flex items-center gap-3">
+          <a href={url} download={name} className="w-10 h-10 rounded-full bg-black/50 hover:bg-black/80 text-white flex items-center justify-center transition-colors border border-white/10" title="Download">
+            <Download className="w-4 h-4" />
+          </a>
+          <button type="button" onClick={() => setIsOpen(false)} className="w-10 h-10 rounded-full bg-black/50 hover:bg-black/80 text-white flex items-center justify-center transition-colors border border-white/10" title="Close">✕</button>
+        </div>
+      </div>
+    </div>
+  ) : null;
 
   if (isTask) {
     return (
@@ -41,20 +62,7 @@ export function ImagePreview({ url, name, variant = "default" }: ImagePreviewPro
             </div>
           </div>
         </div>
-        {isOpen && (
-          <div className="fixed inset-0 z-[60] bg-black/90 flex items-center justify-center p-4 transition-opacity" onClick={() => setIsOpen(false)}>
-            <div className="relative max-w-5xl max-h-[90vh] mx-auto flex flex-col items-center" onClick={(e) => e.stopPropagation()}>
-              <img src={url} alt={name} className="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl" />
-              {name && <div className="mt-3 text-center text-sm font-medium text-white/90 truncate max-w-full px-4">{name}</div>}
-              <div className="absolute -top-12 right-0 flex items-center gap-3">
-                <a href={url} download={name} className="w-10 h-10 rounded-full bg-black/50 hover:bg-black/80 text-white flex items-center justify-center transition-colors border border-white/10" title="Download">
-                  <Download className="w-4 h-4" />
-                </a>
-                <button type="button" onClick={() => setIsOpen(false)} className="w-10 h-10 rounded-full bg-black/50 hover:bg-black/80 text-white flex items-center justify-center transition-colors border border-white/10" title="Close">✕</button>
-              </div>
-            </div>
-          </div>
-        )}
+        {mounted && modalContent ? createPortal(modalContent, document.body) : null}
       </>
     );
   }
@@ -116,47 +124,7 @@ export function ImagePreview({ url, name, variant = "default" }: ImagePreviewPro
         )}
       </div>
 
-      {isOpen && (
-        <div
-          className="fixed inset-0 z-[60] bg-black/90 flex items-center justify-center p-4 transition-opacity"
-          onClick={() => setIsOpen(false)}
-        >
-          <div
-            className="relative max-w-5xl max-h-[90vh] mx-auto flex flex-col items-center"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <img
-              src={url}
-              alt={name}
-              className="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl"
-            />
-            {name && (
-              <div className="mt-3 text-center text-sm font-medium text-white/90 truncate max-w-full px-4">
-                {name}
-              </div>
-            )}
-            
-            <div className="absolute -top-12 right-0 flex items-center gap-3">
-              <a
-                href={url}
-                download={name}
-                className="w-10 h-10 rounded-full bg-black/50 hover:bg-black/80 text-white flex items-center justify-center transition-colors border border-white/10"
-                title="Download"
-              >
-                <Download className="w-4 h-4" />
-              </a>
-              <button
-                type="button"
-                onClick={() => setIsOpen(false)}
-                className="w-10 h-10 rounded-full bg-black/50 hover:bg-black/80 text-white flex items-center justify-center transition-colors border border-white/10"
-                title="Close"
-              >
-                ✕
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {mounted && modalContent ? createPortal(modalContent, document.body) : null}
     </>
   );
 }
