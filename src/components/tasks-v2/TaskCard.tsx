@@ -14,8 +14,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 const issueTypeConfig: Record<string, { icon: any; color: string; bg: string }> = {
   task:    { icon: SquareCheck, color: "hsl(var(--primary))",             bg: "bg-primary/10" },
   bug:     { icon: Bug,         color: "hsl(var(--destructive))",          bg: "bg-destructive/10" },
-  story:   { icon: BookOpen,    color: "hsl(var(--primary))",             bg: "bg-primary/10" },
-  epic:    { icon: Zap,         color: "hsl(var(--primary))",             bg: "bg-primary/10" },
   subtask: { icon: Layers,      color: "hsl(var(--muted-foreground))",    bg: "bg-muted/50" },
 };
 
@@ -48,10 +46,7 @@ export interface TaskCardData {
   assignee?: { id?: string; name: string; initials?: string; avatar?: string };
   dueDate?: string;
   tags?: string[];
-  storyPoints?: number;
   project?: { id: string; key: string; name: string; color?: string };
-  sprint?: { id: string; name: string };
-  epic?: { id: string; name: string; color?: string };
   _count?: { comments?: number; attachments?: number; subtasks?: number; childTasks?: number };
   subtasks?: any[];
   comments?: any[];
@@ -211,20 +206,8 @@ function BoardCard({ task, onClick, draggable, onDragStart }: TaskCardProps) {
           {task.title}
         </p>
 
-        {/* ── Row 3: Epic label ── */}
-        {task.epic?.name && (
-          <div className="flex items-center gap-1.5">
-            <span
-              className="w-1.5 h-1.5 rounded-full shrink-0"
-              style={{ backgroundColor: task.epic.color || "hsl(var(--muted-foreground))" }}
-            />
-            <span className="text-[10px] text-muted-foreground truncate max-w-[180px]">
-              {task.epic.name}
-            </span>
-          </div>
-        )}
+        {/* ── Row 3: Tags (max 2) ── */}
 
-        {/* ── Row 4: Tags (max 2) ── */}
         {task.tags && task.tags.length > 0 && (
           <div className="flex flex-wrap gap-1">
             {task.tags.slice(0, 2).map((tag) => (
@@ -267,16 +250,6 @@ function BoardCard({ task, onClick, draggable, onDragStart }: TaskCardProps) {
         <div className="flex items-center justify-between pt-2 border-t border-border/20 gap-2">
           {/* Left meta */}
           <div className="flex items-center gap-2 text-muted-foreground/80 min-w-0">
-            {task.storyPoints != null && task.storyPoints > 0 && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="text-[10px] font-semibold bg-muted/60 min-w-[18px] h-[18px] inline-flex items-center justify-center rounded font-mono">
-                    {task.storyPoints}
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent className="text-xs">Story Points</TooltipContent>
-              </Tooltip>
-            )}
             {commentCount > 0 && (
               <span className="flex items-center gap-0.5 text-[10px]">
                 <MessageSquare className="w-3 h-3" />
