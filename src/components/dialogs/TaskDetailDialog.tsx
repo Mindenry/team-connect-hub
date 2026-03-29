@@ -230,6 +230,15 @@ export default function TaskDetailDialog({
 
   const isOverdue = fullTask?.dueDate && new Date(fullTask.dueDate) < new Date() && fullTask.status !== "done";
 
+  const resolveValue = (val: string | null) => {
+    if (!val) return val;
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val)) {
+      const user = users.find((u) => u.id === val);
+      if (user) return user.name;
+    }
+    return val;
+  };
+
   /* ─── Handlers ─── */
   const patchTask = async (data: Record<string, any>) => {
     if (!fullTask) return;
@@ -584,7 +593,7 @@ export default function TaskDetailDialog({
                                 <span className="font-semibold">{a.user?.name || "System"}</span>{" "}
                                 <span className="text-muted-foreground">{formatAction(a.action)}</span>
                                 {a.oldValue && a.newValue && (
-                                  <> <span className="line-through text-muted-foreground/60 text-[11px]">{a.oldValue}</span>{" → "}<span className="font-medium text-foreground text-[11px]">{a.newValue}</span></>
+                                  <> <span className="line-through text-muted-foreground/60 text-[11px]">{resolveValue(a.oldValue)}</span>{" → "}<span className="font-medium text-foreground text-[11px]">{resolveValue(a.newValue)}</span></>
                                 )}
                               </p>
                               <span className="text-[10px] text-muted-foreground">{formatFullDateTime(a.createdAt)}</span>
@@ -708,26 +717,6 @@ export default function TaskDetailDialog({
                         )) : <span className="text-xs text-muted-foreground">No watchers</span>}
                       </div>
                     </div>
-
-                    {/* Activity (right sidebar) */}
-                    <div className="rounded-lg border border-border/50 p-3 space-y-2 bg-background">
-                      <div className="flex items-center gap-2">
-                        <History className="w-3.5 h-3.5 text-muted-foreground" />
-                        <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Activity</span>
-                      </div>
-                      {activities.length > 0 ? (
-                        <div className="space-y-2">
-                          {[...activities].reverse().slice(0, 5).map((a) => (
-                            <div key={a.id} className="flex items-start gap-2">
-                              <Avatar className="h-6 w-6 shrink-0 mt-0.5"><AvatarFallback className="text-[8px]">{getInitials(a.user?.name || "?")}</AvatarFallback></Avatar>
-                              <div className="flex-1 min-w-0">
-                                <p className="text-xs"><span className="font-semibold">{a.user?.name || "System"}</span> {formatAction(a.action)}</p>
-                                <span className="text-[10px] text-muted-foreground">{formatFullDateTime(a.createdAt)}</span>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      ) : <span className="text-xs text-muted-foreground">No activity yet</span>}
                     </div>
 
                     {/* Reporter */}
