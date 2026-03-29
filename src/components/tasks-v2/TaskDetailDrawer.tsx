@@ -294,7 +294,7 @@ export default function TaskDetailDrawer({
     setDeletingTask(true);
     try {
       await apiDelete(`/tasks/${task.id}`);
-      onDeleted?.(task.id);
+      onTaskDeleted?.(task.id);
       onOpenChange(false);
     } catch {
       toast({ title: "Delete failed", variant: "destructive" });
@@ -345,7 +345,7 @@ export default function TaskDetailDrawer({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
-        className="w-full sm:max-w-2xl p-0 gap-0 border-l border-border/50"
+        className="w-[40vw] max-w-[600px] min-w-[400px] p-0 gap-0 border-l border-border/50"
       >
         {/* ═══════════════════════════════════════════════════════════
             HEADER - Clean minimal header
