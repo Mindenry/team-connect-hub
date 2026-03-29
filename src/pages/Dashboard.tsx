@@ -25,14 +25,12 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 import StatusIndicator from "@/components/shared/StatusIndicator";
 import CreateMeetingDialog from "@/components/dialogs/CreateMeetingDialog";
 import CreateTaskDialog from "@/components/dialogs/CreateTaskDialog";
-// import TaskDetailDialog from "@/components/dialogs/TaskDetailDialog";
-import TaskDetailDrawer from "@/components/tasks/TaskDetailDrawer";
+import TaskDetailDialog from "@/components/dialogs/TaskDetailDialog";
 import JoinMeetingByCodeDialog from "@/components/dialogs/JoinMeetingByCodeDialog";
 
 import { auth } from "@/lib/auth";
@@ -603,7 +601,7 @@ export default function Dashboard() {
             }}
           />
           <JoinMeetingByCodeDialog open={showJoinByCode} onOpenChange={setShowJoinByCode} />
-          <TaskDetailDrawer
+          <TaskDetailDialog
             open={!!selectedTask}
             onOpenChange={(open) => {
               if (!open) {

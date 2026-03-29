@@ -12,8 +12,11 @@ import {
   X,
   Sparkles,
   ChevronDown,
+  ChevronRight,
   FolderKanban,
   Layers,
+  Users,
+  Inbox,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,12 +30,10 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { apiGet, apiPost, apiPatch, apiDelete } from "@/lib/api";
@@ -43,7 +44,7 @@ import TaskBoard from "@/components/tasks/TaskBoard";
 import TaskList from "@/components/tasks/TaskList";
 import TaskCalendarView from "@/components/tasks/TaskCalendarView";
 import CreateTaskDialog from "@/components/dialogs/CreateTaskDialog";
-import TaskDetailDrawer from "@/components/tasks/TaskDetailDrawer";
+import TaskDetailDialog from "@/components/dialogs/TaskDetailDialog";
 import TaskFilters from "@/components/tasks/TaskFilters";
 import {
   Task,
@@ -72,7 +73,8 @@ export default function Tasks() {
   const [showFilters, setShowFilters] = useState(false);
   const [showCreateTask, setShowCreateTask] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
-  const [showDetailDrawer, setShowDetailDrawer] = useState(false);
+  const [showDetailDialog, setShowDetailDialog] = useState(false);
+  const [expandedTeams, setExpandedTeams] = useState<Set<string>>(new Set());
   
   // Filters
   const [filters, setFilters] = useState<FilterState>({
@@ -170,6 +172,30 @@ export default function Tasks() {
     return result;
   }, [tasks, filters]);
 
+  // Group tasks by team
+  const tasksByTeam = useMemo(() => {
+    const grouped: { [key: string]: { team: Team | null; tasks: Task[] } } = {};
+
+    // Create "No Team" group first
+    grouped["no-team"] = {
+      team: null,
+      tasks: filteredTasks.filter((t) => !t.teamId),
+    };
+
+    // Group by team
+    teams.forEach((team) => {
+      const teamTasks = filteredTasks.filter((t) => t.teamId === team.id);
+      if (teamTasks.length > 0) {
+        grouped[team.id] = {
+          team,
+          tasks: teamTasks,
+        };
+      }
+    });
+
+    return grouped;
+  }, [filteredTasks, teams]);
+
   // Stats
   const stats = useMemo(() => {
     const total = tasks.length;
@@ -223,7 +249,7 @@ export default function Tasks() {
       await apiDelete(`/tasks/${taskId}`);
       setTasks((prev) => prev.filter((t) => t.id !== taskId));
       toast.success("ลบงานสำเร็จ");
-      setShowDetailDrawer(false);
+      setShowDetailDialog(false);
       setSelectedTask(null);
     } catch (err: any) {
       console.error("Failed to delete task:", err);
@@ -233,7 +259,7 @@ export default function Tasks() {
 
   const handleTaskClick = (task: Task) => {
     setSelectedTask(task);
-    setShowDetailDrawer(true);
+    setShowDetailDialog(true);
   };
 
   const clearFilters = () => {
@@ -258,6 +284,32 @@ export default function Tasks() {
     return count;
   }, [filters]);
 
+  const toggleTeamExpanded = (teamId: string) => {
+    setExpandedTeams((prev) => {
+      const next = new Set(prev);
+      if (next.has(teamId)) {
+        next.delete(teamId);
+      } else {
+        next.add(teamId);
+      }
+      return next;
+    });
+  };
+
+  const teamColors: { [key: string]: string } = {
+    default: "from-primary/20 via-primary/10 to-primary/5 border-primary/30",
+    blue: "from-blue-500/20 via-blue-500/10 to-blue-500/5 border-blue-500/30",
+    green: "from-green-500/20 via-green-500/10 to-green-500/5 border-green-500/30",
+    purple: "from-purple-500/20 via-purple-500/10 to-purple-500/5 border-purple-500/30",
+    amber: "from-amber-500/20 via-amber-500/10 to-amber-500/5 border-amber-500/30",
+    red: "from-red-500/20 via-red-500/10 to-red-500/5 border-red-500/30",
+  };
+
+  const getTeamColor = (index: number) => {
+    const colors = Object.values(teamColors);
+    return colors[index % colors.length];
+  };
+
   return (
     <TooltipProvider>
       <div className="flex flex-col h-screen bg-gradient-to-br from-background via-background to-muted/20">
@@ -267,10 +319,10 @@ export default function Tasks() {
             <div className="h-16 flex items-center justify-between gap-4">
               <div className="flex items-center gap-3 min-w-0 flex-1">
                 <div className="relative">
-                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500/25 via-amber-500/10 to-amber-500/5 flex items-center justify-center shadow-md shadow-amber-500/10 ring-1 ring-amber-500/20">
-                    <CheckSquare className="w-5 h-5 text-amber-600" />
+                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary/25 via-primary/10 to-primary/5 flex items-center justify-center shadow-md shadow-primary/10 ring-1 ring-primary/20">
+                    <CheckSquare className="w-5 h-5 text-primary" />
                   </div>
-                  <div className="absolute -top-1 -right-1 flex items-center justify-center w-4 h-4 rounded-full bg-amber-500 text-[9px] text-white border border-background shadow-sm">
+                  <div className="absolute -top-1 -right-1 flex items-center justify-center w-4 h-4 rounded-full bg-primary text-[9px] text-primary-foreground border border-background shadow-sm">
                     <Sparkles className="w-2.5 h-2.5" />
                   </div>
                 </div>
@@ -321,7 +373,7 @@ export default function Tasks() {
 
                 <Button
                   size="sm"
-                  className="h-8 gap-1.5 px-3 font-medium bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600"
+                  className="h-8 gap-1.5 px-3 font-medium bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70"
                   onClick={() => setShowCreateTask(true)}
                 >
                   <Plus className="w-4 h-4" />
@@ -496,7 +548,7 @@ export default function Tasks() {
                   </Button>
                 )}
               </div>
-            ) : (
+            ) : viewMode === "board" || viewMode === "calendar" ? (
               <div className="h-full py-4">
                 {viewMode === "board" && (
                   <TaskBoard
@@ -504,13 +556,6 @@ export default function Tasks() {
                     onTaskClick={handleTaskClick}
                     onTaskUpdate={handleUpdateTask}
                     onTaskCreate={() => setShowCreateTask(true)}
-                  />
-                )}
-                {viewMode === "list" && (
-                  <TaskList
-                    tasks={filteredTasks}
-                    onTaskClick={handleTaskClick}
-                    onTaskUpdate={handleUpdateTask}
                   />
                 )}
                 {viewMode === "calendar" && (
@@ -521,6 +566,89 @@ export default function Tasks() {
                   />
                 )}
               </div>
+            ) : (
+              <ScrollArea className="h-full py-4">
+                <div className="space-y-4 pr-4">
+                  {/* Group by team in list view */}
+                  {Object.entries(tasksByTeam).map(([key, { team, tasks: teamTasks }], teamIndex) => {
+                    if (teamTasks.length === 0) return null;
+                    const isExpanded = expandedTeams.has(key);
+                    const colorClass = team ? getTeamColor(teamIndex) : teamColors.default;
+
+                    return (
+                      <Collapsible
+                        key={key}
+                        open={isExpanded}
+                        onOpenChange={() => toggleTeamExpanded(key)}
+                      >
+                        <div className={cn(
+                          "rounded-xl border bg-gradient-to-br backdrop-blur-sm overflow-hidden",
+                          colorClass
+                        )}>
+                          {/* Team Header */}
+                          <CollapsibleTrigger className="w-full">
+                            <div className="flex items-center justify-between px-4 py-3 hover:bg-muted/10 transition-colors">
+                              <div className="flex items-center gap-3">
+                                {team ? (
+                                  <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center border border-primary/20">
+                                    <Users className="w-4 h-4 text-primary" />
+                                  </div>
+                                ) : (
+                                  <div className="w-8 h-8 rounded-lg bg-muted/50 flex items-center justify-center border border-border/40">
+                                    <Inbox className="w-4 h-4 text-muted-foreground" />
+                                  </div>
+                                )}
+                                <div className="text-left">
+                                  <h3 className="font-semibold text-sm">
+                                    {team?.name || "ไม่มีทีม"}
+                                  </h3>
+                                  <p className="text-xs text-muted-foreground">
+                                    {teamTasks.length} งาน
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                {/* Quick stats for team */}
+                                <div className="hidden sm:flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                                  <span className="inline-flex items-center gap-0.5">
+                                    <div className="w-1.5 h-1.5 rounded-full bg-slate-500" />
+                                    {teamTasks.filter((t) => t.status === "todo").length}
+                                  </span>
+                                  <span className="inline-flex items-center gap-0.5">
+                                    <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+                                    {teamTasks.filter((t) => t.status === "in_progress").length}
+                                  </span>
+                                  <span className="inline-flex items-center gap-0.5">
+                                    <div className="w-1.5 h-1.5 rounded-full bg-green-500" />
+                                    {teamTasks.filter((t) => t.status === "done").length}
+                                  </span>
+                                </div>
+                                <ChevronRight
+                                  className={cn(
+                                    "w-4 h-4 text-muted-foreground transition-transform",
+                                    isExpanded && "rotate-90"
+                                  )}
+                                />
+                              </div>
+                            </div>
+                          </CollapsibleTrigger>
+
+                          {/* Team Tasks */}
+                          <CollapsibleContent>
+                            <div className="border-t border-border/40">
+                              <TaskList
+                                tasks={teamTasks}
+                                onTaskClick={handleTaskClick}
+                                onTaskUpdate={handleUpdateTask}
+                              />
+                            </div>
+                          </CollapsibleContent>
+                        </div>
+                      </Collapsible>
+                    );
+                  })}
+                </div>
+              </ScrollArea>
             )}
           </div>
         </div>
@@ -537,10 +665,10 @@ export default function Tasks() {
           }}
         />
 
-        <TaskDetailDrawer
-          open={showDetailDrawer}
+        <TaskDetailDialog
+          open={showDetailDialog}
           onOpenChange={(open) => {
-            setShowDetailDrawer(open);
+            setShowDetailDialog(open);
             if (!open) setSelectedTask(null);
           }}
           task={selectedTask}
