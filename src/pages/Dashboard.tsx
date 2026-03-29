@@ -25,6 +25,7 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 import StatusIndicator from "@/components/shared/StatusIndicator";
@@ -608,18 +609,21 @@ export default function Dashboard() {
                 setSelectedTask(null);
               }
             }}
-            task={selectedTask as any}
-            onUpdate={async (data) => {
-              if (selectedTask) {
-                try {
-                  await apiPatch(`/tasks/${selectedTask.id}`, data);
-                } catch (err) {
-                  console.error("Failed to update task:", err);
-                }
-              }
-            }}
-            onDelete={() => setSelectedTask(null)}
-            users={[]}
+            task={
+              selectedTask
+                ? {
+                    id: selectedTask.id,
+                    title: selectedTask.title,
+                    priority: selectedTask.priority,
+                    assignee: selectedTask.assignee,
+                    dueDate: selectedTask.dueDate,
+                    tags: selectedTask.tags,
+                    linkedMeeting: undefined,
+                    sprint: undefined,
+                    epic: selectedTask.epic,
+                  }
+                : undefined
+            }
           />
 
           {/* Compact Hero Header */}
