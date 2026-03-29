@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import {
   CheckSquare,
   MessageSquare,
@@ -23,6 +23,12 @@ import {
   Pencil,
   Check,
   ExternalLink,
+  ChevronRight,
+  Clock,
+  FileText,
+  Sparkles,
+  GripVertical,
+  Archive,
 } from "lucide-react";
 import {
   Sheet,
@@ -56,9 +62,9 @@ import { useToast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
 import type { TaskCardData } from "./TaskCard";
 
-/* ═══════════════════════════════════════════════════════════
-   TASK DETAIL DRAWER - Premium Right-Side Panel (Linear-style)
-   ═══════════════════════════════════════════════════════════ */
+/* ════════════════════════════════════════════════════════════════════════════
+   TASK DETAIL DRAWER - Premium Professional Design (Linear/Notion-inspired)
+   ════════════════════════════════════════════════════════════════════════════ */
 
 interface TaskDetailDrawerProps {
   open: boolean;
@@ -67,19 +73,19 @@ interface TaskDetailDrawerProps {
   onTaskDeleted?: (taskId: string) => void;
 }
 
-const STATUS_CONFIG: Record<string, { label: string; color: string; dot: string; bg: string }> = {
-  todo:        { label: "Open",        color: "text-slate-700 dark:text-slate-300",   dot: "bg-slate-400",   bg: "bg-slate-100 dark:bg-slate-800" },
-  in_progress: { label: "In Progress", color: "text-blue-700 dark:text-blue-400",     dot: "bg-blue-500",    bg: "bg-blue-50 dark:bg-blue-950" },
-  in_review:   { label: "In Review",   color: "text-amber-700 dark:text-amber-400",   dot: "bg-amber-500",   bg: "bg-amber-50 dark:bg-amber-950" },
-  done:        { label: "Done",        color: "text-emerald-700 dark:text-emerald-400",dot: "bg-emerald-500", bg: "bg-emerald-50 dark:bg-emerald-950" },
-  canceled:    { label: "Canceled",    color: "text-slate-500",                        dot: "bg-slate-300",   bg: "bg-slate-100 dark:bg-slate-800" },
+const STATUS_CONFIG: Record<string, { label: string; color: string; dot: string; bg: string; icon: any }> = {
+  todo:        { label: "Open",        color: "text-slate-700 dark:text-slate-300",   dot: "bg-slate-400",   bg: "bg-slate-100 dark:bg-slate-800",    icon: CheckSquare },
+  in_progress: { label: "In Progress", color: "text-blue-700 dark:text-blue-400",     dot: "bg-blue-500",    bg: "bg-blue-50 dark:bg-blue-950",       icon: Clock },
+  in_review:   { label: "In Review",   color: "text-amber-700 dark:text-amber-400",   dot: "bg-amber-500",   bg: "bg-amber-50 dark:bg-amber-950",     icon: Eye },
+  done:        { label: "Done",        color: "text-emerald-700 dark:text-emerald-400",dot: "bg-emerald-500", bg: "bg-emerald-50 dark:bg-emerald-950", icon: Check },
+  canceled:    { label: "Canceled",    color: "text-slate-500",                        dot: "bg-slate-300",   bg: "bg-slate-100 dark:bg-slate-800",    icon: Archive },
 };
 
-const PRIORITY_CONFIG: Record<string, { label: string; Icon: any; color: string; bg: string }> = {
-  urgent: { label: "Urgent", Icon: ArrowUp,    color: "text-red-600",    bg: "bg-red-50 dark:bg-red-950" },
-  high:   { label: "High",   Icon: ChevronUp,  color: "text-orange-500", bg: "bg-orange-50 dark:bg-orange-950" },
-  medium: { label: "Medium", Icon: Minus,      color: "text-yellow-600", bg: "bg-yellow-50 dark:bg-yellow-950" },
-  low:    { label: "Low",    Icon: ChevronDown,color: "text-slate-400",  bg: "bg-slate-100 dark:bg-slate-800" },
+const PRIORITY_CONFIG: Record<string, { label: string; Icon: any; color: string; bg: string; gradient: string }> = {
+  urgent: { label: "Urgent", Icon: ArrowUp,    color: "text-red-600",    bg: "bg-red-50 dark:bg-red-950",    gradient: "from-red-500 to-orange-500" },
+  high:   { label: "High",   Icon: ChevronUp,  color: "text-orange-500", bg: "bg-orange-50 dark:bg-orange-950", gradient: "from-orange-500 to-amber-500" },
+  medium: { label: "Medium", Icon: Minus,      color: "text-yellow-600", bg: "bg-yellow-50 dark:bg-yellow-950", gradient: "from-yellow-500 to-lime-500" },
+  low:    { label: "Low",    Icon: ChevronDown,color: "text-slate-400",  bg: "bg-slate-100 dark:bg-slate-800",  gradient: "from-slate-400 to-slate-500" },
 };
 
 function getTimeAgo(date: Date): string {
@@ -102,15 +108,174 @@ function formatActivityMessage(a: any): string {
   }
 }
 
-/* ─── Sidebar property row ─── */
-function PropRow({ icon: Icon, label, children }: { icon?: any; label: string; children: React.ReactNode }) {
+/* ─── Collapsible Section Component ─── */
+function CollapsibleSection({ 
+  title, 
+  icon: Icon, 
+  children, 
+  defaultOpen = true,
+  rightElement,
+}: { 
+  title: string; 
+  icon?: any; 
+  children: React.ReactNode; 
+  defaultOpen?: boolean;
+  rightElement?: React.ReactNode;
+}) {
+  const [isOpen, setIsOpen] = useState(defaultOpen);
+  
   return (
-    <div className="flex items-start gap-3 py-2.5 border-b border-border/40 last:border-0">
-      <div className="flex items-center gap-2 w-28 shrink-0 mt-0.5">
-        {Icon && <Icon className="w-3.5 h-3.5 text-muted-foreground/70" />}
-        <span className="text-xs font-medium text-muted-foreground truncate">{label}</span>
+    <div className="border-b border-border/30 last:border-0">
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full flex items-center justify-between py-3 px-1 hover:bg-muted/20 transition-colors rounded-lg group"
+      >
+        <div className="flex items-center gap-2">
+          {Icon && <Icon className="w-4 h-4 text-muted-foreground/70" />}
+          <span className="text-sm font-semibold text-foreground">{title}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          {rightElement}
+          <ChevronRight className={cn(
+            "w-4 h-4 text-muted-foreground/50 transition-transform duration-200",
+            isOpen && "rotate-90"
+          )} />
+        </div>
+      </button>
+      <div className={cn(
+        "overflow-hidden transition-all duration-300 ease-out",
+        isOpen ? "max-h-[2000px] opacity-100" : "max-h-0 opacity-0"
+      )}>
+        <div className="pb-4 px-1">
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Property Field Component ─── */
+function PropertyField({ 
+  label, 
+  icon: Icon, 
+  children,
+  highlight,
+}: { 
+  label: string; 
+  icon?: any; 
+  children: React.ReactNode;
+  highlight?: boolean;
+}) {
+  return (
+    <div className={cn(
+      "group flex items-start gap-3 py-2.5 px-3 rounded-lg transition-colors",
+      "hover:bg-muted/30",
+      highlight && "bg-red-50/50 dark:bg-red-950/20"
+    )}>
+      <div className="flex items-center gap-2 w-24 shrink-0 pt-0.5">
+        {Icon && <Icon className="w-3.5 h-3.5 text-muted-foreground/60" />}
+        <span className="text-xs font-medium text-muted-foreground/80">{label}</span>
       </div>
       <div className="flex-1 min-w-0">{children}</div>
+    </div>
+  );
+}
+
+/* ─── Visual Status Selector ─── */
+function StatusSelector({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const current = STATUS_CONFIG[value] || STATUS_CONFIG.todo;
+  const StatusIcon = current.icon;
+  
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className={cn(
+          "flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all",
+          "hover:shadow-md active:scale-[0.98]",
+          current.bg, current.color
+        )}
+      >
+        <StatusIcon className="w-4 h-4" />
+        <span>{current.label}</span>
+        <ChevronRight className={cn("w-3.5 h-3.5 ml-1 transition-transform", isOpen && "rotate-90")} />
+      </button>
+      
+      {isOpen && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
+          <div className="absolute top-full left-0 mt-1 z-50 bg-popover border border-border/50 rounded-xl shadow-xl p-1 min-w-[160px] animate-in fade-in-0 zoom-in-95">
+            {Object.entries(STATUS_CONFIG).map(([key, cfg]) => {
+              const Icon = cfg.icon;
+              return (
+                <button
+                  key={key}
+                  onClick={() => { onChange(key); setIsOpen(false); }}
+                  className={cn(
+                    "w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors",
+                    "hover:bg-muted/50",
+                    value === key && "bg-muted/30"
+                  )}
+                >
+                  <div className={cn("w-2 h-2 rounded-full", cfg.dot)} />
+                  <Icon className="w-4 h-4 text-muted-foreground" />
+                  <span className={cfg.color}>{cfg.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+/* ─── Visual Priority Selector ─── */
+function PrioritySelector({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const current = PRIORITY_CONFIG[value] || PRIORITY_CONFIG.medium;
+  const PriorityIcon = current.Icon;
+  
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className={cn(
+          "flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all",
+          "hover:shadow-md active:scale-[0.98]",
+          current.bg, current.color
+        )}
+      >
+        <PriorityIcon className="w-4 h-4" />
+        <span>{current.label}</span>
+        <ChevronRight className={cn("w-3.5 h-3.5 ml-1 transition-transform", isOpen && "rotate-90")} />
+      </button>
+      
+      {isOpen && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
+          <div className="absolute top-full left-0 mt-1 z-50 bg-popover border border-border/50 rounded-xl shadow-xl p-1 min-w-[160px] animate-in fade-in-0 zoom-in-95">
+            {Object.entries(PRIORITY_CONFIG).map(([key, cfg]) => {
+              const Icon = cfg.Icon;
+              return (
+                <button
+                  key={key}
+                  onClick={() => { onChange(key); setIsOpen(false); }}
+                  className={cn(
+                    "w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors",
+                    "hover:bg-muted/50",
+                    value === key && "bg-muted/30"
+                  )}
+                >
+                  <Icon className={cn("w-4 h-4", cfg.color)} />
+                  <span className={cfg.color}>{cfg.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -344,111 +509,127 @@ export default function TaskDetailDrawer({
 
   const status = STATUS_CONFIG[displayTask?.status] || STATUS_CONFIG.todo;
   const priority = PRIORITY_CONFIG[displayTask?.priority] || PRIORITY_CONFIG.medium;
-  const PriorityIcon = priority.Icon;
+  const StatusIcon = status.icon;
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-[480px] sm:w-[540px] md:w-[600px] max-w-[100vw] h-full p-0 gap-0 flex flex-col overflow-hidden border-l border-border/50 shadow-2xl [&>button.absolute]:hidden">
+      <SheetContent 
+        side="right" 
+        className={cn(
+          "w-[520px] sm:w-[580px] md:w-[640px] max-w-[100vw]",
+          "h-full p-0 gap-0 flex flex-col overflow-hidden",
+          "bg-gradient-to-b from-background via-background to-muted/20",
+          "border-l border-border/30",
+          "shadow-2xl shadow-black/10 dark:shadow-black/40",
+          "[&>button.absolute]:hidden"
+        )}
+      >
         <SheetHeader className="sr-only">
           <SheetTitle>{displayTask?.title || "Task Detail"}</SheetTitle>
         </SheetHeader>
 
-        {/* ══════════════════════════════════════════════════════
-            TOP BAR — breadcrumb · actions
-        ══════════════════════════════════════════════════════ */}
-        <div className="shrink-0 flex items-center justify-between px-4 py-2.5 border-b border-border/40 bg-muted/10">
-          {/* Breadcrumb */}
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground min-w-0">
-            <CheckSquare className="w-3.5 h-3.5 shrink-0 text-primary/70" />
-            <span className="shrink-0">Tasks</span>
-            <span className="text-border">/</span>
-            <button
-              onClick={copyTaskId}
-              className="font-mono hover:text-foreground transition-colors flex items-center gap-1 truncate"
-            >
-              #{task.id.slice(0, 8)}
-              <Copy className="w-3 h-3 shrink-0" />
-            </button>
-            {saving && (
-              <span className="ml-2 text-[10px] text-muted-foreground/60 animate-pulse">
-                Saving...
-              </span>
-            )}
-          </div>
-
-          {/* Right actions */}
-          <div className="flex items-center gap-0.5 shrink-0">
-            <Button
-              size="sm"
-              variant={isWatching ? "secondary" : "ghost"}
-              onClick={toggleWatching}
-              disabled={togglingWatch}
-              className="h-7 text-[11px] gap-1.5 px-2"
-            >
-              {isWatching ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
-              <span className="hidden sm:inline">{isWatching ? "Watching" : "Watch"}</span>
-            </Button>
-
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-7 w-7">
-                  <MoreHorizontal className="w-3.5 h-3.5" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-40">
-                <DropdownMenuItem onClick={copyTaskId} className="text-xs">
-                  <Copy className="w-3.5 h-3.5 mr-2" />
-                  Copy task ID
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  className="text-xs text-destructive focus:text-destructive"
-                  onClick={deleteTask}
-                  disabled={deletingTask}
+        {/* ═══════════════════════════════════════════════════════════════
+            PREMIUM HEADER - Glass morphism with gradient accent
+        ═══════════════════════════════════════════════════════════════ */}
+        <div className="shrink-0 relative">
+          {/* Gradient accent line */}
+          <div className={cn(
+            "absolute inset-x-0 top-0 h-1 bg-gradient-to-r",
+            priority.gradient
+          )} />
+          
+          {/* Header content */}
+          <div className="px-5 pt-4 pb-3">
+            {/* Top row: ID + Actions */}
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                {/* Task ID Badge */}
+                <button
+                  onClick={copyTaskId}
+                  className="group flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
                 >
-                  <Trash2 className="w-3.5 h-3.5 mr-2" />
-                  Delete task
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-
-            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onOpenChange(false)}>
-              <X className="w-3.5 h-3.5" />
-            </Button>
-          </div>
-        </div>
-
-        {/* ══════════════════════════════════════════════════════
-            BODY — single column scrollable content
-        ══════════════════════════════════════════════════════ */}
-        <ScrollArea className="flex-1 overflow-hidden">
-          <div className="px-5 py-4 space-y-5">
-
-            {/* Status + Priority + Overdue badges */}
-            <div className="flex flex-wrap items-center gap-2">
-              <span className={cn(
-                "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-semibold",
-                status.bg, status.color
-              )}>
-                <span className={cn("w-1.5 h-1.5 rounded-full", status.dot)} />
-                {status.label}
-              </span>
-              <span className={cn(
-                "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-medium",
-                priority.bg, priority.color
-              )}>
-                <PriorityIcon className="w-3 h-3" />
-                {priority.label}
-              </span>
+                  <span className="font-mono text-xs font-semibold text-muted-foreground group-hover:text-foreground">
+                    {task.id.slice(0, 8).toUpperCase()}
+                  </span>
+                  <Copy className="w-3 h-3 text-muted-foreground/50 group-hover:text-primary transition-colors" />
+                </button>
+                
+                {saving && (
+                  <span className="flex items-center gap-1.5 text-[11px] text-primary animate-pulse">
+                    <Sparkles className="w-3 h-3" />
+                    Saving...
+                  </span>
+                )}
+              </div>
+              
+              {/* Action buttons */}
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={toggleWatching}
+                  disabled={togglingWatch}
+                  className={cn(
+                    "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all",
+                    "hover:shadow-md active:scale-95",
+                    isWatching 
+                      ? "bg-primary/10 text-primary hover:bg-primary/20" 
+                      : "bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground"
+                  )}
+                >
+                  {isWatching ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+                  <span className="hidden sm:inline">{isWatching ? "Watching" : "Watch"}</span>
+                </button>
+                
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button className="p-2 rounded-lg hover:bg-muted/50 transition-colors">
+                      <MoreHorizontal className="w-4 h-4 text-muted-foreground" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-48 rounded-xl">
+                    <DropdownMenuItem onClick={copyTaskId} className="gap-2">
+                      <Copy className="w-4 h-4" />
+                      Copy task ID
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem 
+                      onClick={deleteTask} 
+                      disabled={deletingTask}
+                      className="gap-2 text-destructive focus:text-destructive"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      Delete task
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                
+                <button 
+                  onClick={() => onOpenChange(false)}
+                  className="p-2 rounded-lg hover:bg-muted/50 transition-colors ml-1"
+                >
+                  <X className="w-4 h-4 text-muted-foreground" />
+                </button>
+              </div>
+            </div>
+            
+            {/* Status + Priority Row */}
+            <div className="flex items-center gap-2 mb-3">
+              <StatusSelector 
+                value={displayTask?.status || "todo"} 
+                onChange={(v) => handleUpdateField("status", v)} 
+              />
+              <PrioritySelector 
+                value={displayTask?.priority || "medium"} 
+                onChange={(v) => handleUpdateField("priority", v)} 
+              />
               {isOverdue && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium bg-red-50 text-red-600 dark:bg-red-950 dark:text-red-400">
-                  <AlertTriangle className="w-3 h-3" />
+                <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300 animate-pulse">
+                  <AlertTriangle className="w-3.5 h-3.5" />
                   Overdue
                 </span>
               )}
             </div>
-
-            {/* Title — editable */}
+            
+            {/* Title - Editable */}
             {editingTitle ? (
               <div className="flex items-start gap-2">
                 <Input
@@ -459,442 +640,506 @@ export default function TaskDetailDrawer({
                     if (e.key === "Enter") saveTitle();
                     if (e.key === "Escape") setEditingTitle(false);
                   }}
-                  className="text-lg font-semibold h-auto py-1.5 px-2 leading-tight border-primary"
+                  className="text-xl font-bold h-auto py-2 px-3 leading-tight border-primary/50 bg-muted/30"
                 />
-                <Button size="sm" onClick={saveTitle} className="mt-0.5 shrink-0 h-8">
-                  <Check className="w-4 h-4" />
+                <Button size="sm" onClick={saveTitle} className="mt-1 shrink-0 h-9 px-3">
+                  <Check className="w-4 h-4 mr-1" /> Save
                 </Button>
-                <Button size="sm" variant="ghost" onClick={() => setEditingTitle(false)} className="mt-0.5 shrink-0 h-8">
-                  <X className="w-4 h-4" />
+                <Button size="sm" variant="ghost" onClick={() => setEditingTitle(false)} className="mt-1 shrink-0 h-9">
+                  Cancel
                 </Button>
               </div>
             ) : (
-              <div className="group flex items-start gap-2">
-                <h1 className="text-lg font-semibold leading-tight text-foreground flex-1">
+              <div className="group cursor-text" onClick={() => { setTitleDraft(displayTask?.title || ""); setEditingTitle(true); }}>
+                <h1 className="text-xl font-bold leading-tight text-foreground group-hover:text-primary/80 transition-colors">
                   {displayTask?.title || "Untitled Task"}
                 </h1>
-                <button
-                  onClick={() => {
-                    setTitleDraft(displayTask?.title || "");
-                    setEditingTitle(true);
-                  }}
-                  className="opacity-0 group-hover:opacity-100 transition-opacity mt-0.5 shrink-0 p-1.5 rounded-md hover:bg-muted"
-                >
-                  <Pencil className="w-3.5 h-3.5 text-muted-foreground" />
-                </button>
+                <div className="flex items-center gap-1 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <Pencil className="w-3 h-3 text-muted-foreground" />
+                  <span className="text-[10px] text-muted-foreground">Click to edit</span>
+                </div>
               </div>
             )}
-
+            
             {/* Tags */}
             {displayTask?.tags && displayTask.tags.length > 0 && (
-              <div className="flex flex-wrap gap-1">
+              <div className="flex flex-wrap gap-1.5 mt-3">
                 {displayTask.tags.map((tag: string) => (
-                  <Badge key={tag} variant="secondary" className="text-[10px] rounded-full px-2 py-0.5">
+                  <span 
+                    key={tag}
+                    className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-gradient-to-r from-primary/10 to-primary/5 text-primary border border-primary/10"
+                  >
                     {tag}
-                  </Badge>
+                  </span>
                 ))}
               </div>
             )}
+          </div>
+        </div>
 
+        {/* ═══════════════════════════════════════════════════════════════
+            SCROLLABLE CONTENT AREA
+        ═══════════════════════════════════════════════════════════════ */}
+        <ScrollArea className="flex-1 overflow-hidden">
+          <div className="px-5 py-4 space-y-1">
+            
             {loading ? (
-              <div className="flex items-center justify-center py-12">
-                <div className="w-6 h-6 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+              <div className="flex flex-col items-center justify-center py-16">
+                <div className="relative">
+                  <div className="w-10 h-10 border-2 border-primary/20 border-t-primary rounded-full animate-spin" />
+                  <div className="absolute inset-0 w-10 h-10 border-2 border-transparent border-t-primary/40 rounded-full animate-spin animate-reverse" style={{ animationDirection: 'reverse', animationDuration: '1.5s' }} />
+                </div>
+                <p className="mt-4 text-sm text-muted-foreground">Loading task details...</p>
               </div>
             ) : (
               <>
-                  {/* ── DESCRIPTION ── */}
-                  <section className="mb-8">
-                    <h2 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
-                      <span className="w-4 h-4 rounded bg-primary/10 flex items-center justify-center">
-                        <Pencil className="w-2.5 h-2.5 text-primary" />
+                {/* ─── DESCRIPTION SECTION ─── */}
+                <CollapsibleSection 
+                  title="Description" 
+                  icon={FileText}
+                  rightElement={
+                    displayTask?.description && (
+                      <span className="text-[10px] text-muted-foreground/50">
+                        {displayTask.description.length} chars
                       </span>
-                      Description
-                    </h2>
-                    <div className="bg-muted/20 rounded-lg border border-border/40 p-4">
-                      <Textarea
-                        value={displayTask?.description || ""}
-                        onChange={(e) =>
-                          setTaskData((prev: any) => ({ ...prev, description: e.target.value }))
-                        }
-                        onBlur={() => handleUpdateField("description", displayTask?.description)}
-                        placeholder="Add a description… Use this to describe the task, acceptance criteria, or links to related resources."
-                        className="min-h-28 resize-y border-0 bg-transparent p-0 text-sm focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-muted-foreground/50"
-                      />
-                    </div>
-                  </section>
+                    )
+                  }
+                >
+                  <div className="relative rounded-xl border border-border/40 bg-muted/20 overflow-hidden">
+                    <Textarea
+                      value={displayTask?.description || ""}
+                      onChange={(e) => setTaskData((prev: any) => ({ ...prev, description: e.target.value }))}
+                      onBlur={() => handleUpdateField("description", displayTask?.description)}
+                      placeholder="Add a detailed description...
 
-                  {/* ── SUBTASKS ── */}
-                  <section className="mb-8">
-                    <div className="flex items-center justify-between mb-3">
-                      <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                        <span className="w-4 h-4 rounded bg-primary/10 flex items-center justify-center">
-                          <CheckSquare className="w-2.5 h-2.5 text-primary" />
-                        </span>
-                        Tasks
-                        {subtasks.length > 0 && (
-                          <span className="text-xs font-normal text-muted-foreground">
-                            {completedSubtasks} of {subtasks.length} completed
-                          </span>
-                        )}
-                      </h2>
-                    </div>
-
-                    {subtasks.length > 0 && (
-                      <div className="mb-3">
-                        <div className="flex items-center gap-2 mb-1">
-                          <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
-                            <div
-                              className="h-full bg-primary rounded-full transition-all duration-500"
-                              style={{ width: `${subtaskProgress}%` }}
-                            />
-                          </div>
-                          <span className="text-xs text-muted-foreground font-mono w-8 text-right">
-                            {Math.round(subtaskProgress)}%
-                          </span>
-                        </div>
+Use this space to describe:
+• What needs to be done
+• Acceptance criteria
+• Links to related resources"
+                      className="min-h-32 resize-y border-0 bg-transparent p-4 text-sm leading-relaxed focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-muted-foreground/40"
+                    />
+                    {!displayTask?.description && (
+                      <div className="absolute bottom-3 right-3">
+                        <Sparkles className="w-4 h-4 text-muted-foreground/20" />
                       </div>
                     )}
+                  </div>
+                </CollapsibleSection>
 
-                    <div className="space-y-1 mb-3">
-                      {subtasks.map((s: any) => (
-                        <div
-                          key={s.id}
-                          className="group flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-muted/50 border border-transparent hover:border-border/40 transition-all"
-                        >
+                {/* ─── SUBTASKS SECTION ─── */}
+                <CollapsibleSection 
+                  title="Subtasks" 
+                  icon={CheckSquare}
+                  rightElement={
+                    subtasks.length > 0 && (
+                      <span className={cn(
+                        "text-xs font-medium px-2 py-0.5 rounded-full",
+                        subtaskProgress === 100 
+                          ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
+                          : "bg-muted text-muted-foreground"
+                      )}>
+                        {completedSubtasks}/{subtasks.length}
+                      </span>
+                    )
+                  }
+                >
+                  {subtasks.length > 0 && (
+                    <div className="mb-4">
+                      <div className="flex items-center gap-3 mb-2">
+                        <div className="flex-1 h-2 bg-muted/60 rounded-full overflow-hidden">
+                          <div
+                            className={cn(
+                              "h-full rounded-full transition-all duration-700 ease-out",
+                              subtaskProgress === 100 ? "bg-gradient-to-r from-emerald-400 to-emerald-500" : "bg-gradient-to-r from-primary/60 to-primary"
+                            )}
+                            style={{ width: `${subtaskProgress}%` }}
+                          />
+                        </div>
+                        <span className="text-sm font-semibold text-muted-foreground min-w-[40px] text-right">
+                          {Math.round(subtaskProgress)}%
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                  
+                  <div className="space-y-1.5 mb-4">
+                    {subtasks.map((s: any, index: number) => (
+                      <div
+                        key={s.id}
+                        className={cn(
+                          "group flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all",
+                          "border border-transparent",
+                          s.isCompleted 
+                            ? "bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200/50 dark:border-emerald-800/30"
+                            : "hover:bg-muted/30 hover:border-border/40"
+                        )}
+                      >
+                        <div className="relative flex items-center">
                           <input
                             type="checkbox"
                             checked={!!s.isCompleted}
                             onChange={() => toggleSubtask(s.id, !!s.isCompleted)}
                             className="w-4 h-4 rounded border-border accent-primary cursor-pointer"
                           />
-                          <span className={cn(
-                            "text-sm flex-1 leading-snug",
-                            s.isCompleted && "line-through text-muted-foreground"
-                          )}>
-                            {s.title}
-                          </span>
                         </div>
-                      ))}
-                    </div>
-
-                    <div className="flex gap-2">
-                      <Input
-                        value={newSubtask}
-                        onChange={(e) => setNewSubtask(e.target.value)}
-                        placeholder="Add a subtask..."
-                        onKeyDown={(e) => e.key === "Enter" && addSubtask()}
-                        className="h-9 text-sm bg-muted/30 border-border/40"
-                      />
-                      <Button
-                        size="sm"
-                        onClick={addSubtask}
-                        disabled={addingSubtask || !newSubtask.trim()}
-                        className="h-9 px-3"
-                      >
-                        <Plus className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </section>
-
-                  {/* ── ATTACHMENTS ── */}
-                  {attachments.length > 0 && (
-                    <section className="mb-8">
-                      <h2 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
-                        <span className="w-4 h-4 rounded bg-primary/10 flex items-center justify-center">
-                          <Paperclip className="w-2.5 h-2.5 text-primary" />
+                        <span className={cn(
+                          "text-sm flex-1 leading-snug transition-all",
+                          s.isCompleted && "line-through text-muted-foreground"
+                        )}>
+                          {s.title}
                         </span>
-                        Attachments
-                        <Badge variant="secondary" className="text-[10px]">{attachments.length}</Badge>
-                      </h2>
-                      <div className="grid grid-cols-2 gap-2">
-                        {attachments.map((a: any) => (
-                          <a
-                            key={a.id}
-                            href={a.url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="flex items-center gap-2 px-3 py-2.5 rounded-lg border border-border/50 hover:bg-muted/50 hover:border-border transition-all text-sm group"
-                          >
-                            <Paperclip className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                            <span className="truncate flex-1">{a.name}</span>
-                            <ExternalLink className="w-3 h-3 text-muted-foreground/50 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
-                          </a>
-                        ))}
+                        <span className="text-[10px] text-muted-foreground/40 opacity-0 group-hover:opacity-100 transition-opacity">
+                          #{index + 1}
+                        </span>
                       </div>
-                    </section>
-                  )}
+                    ))}
+                  </div>
+                  
+                  <div className="flex gap-2">
+                    <Input
+                      value={newSubtask}
+                      onChange={(e) => setNewSubtask(e.target.value)}
+                      placeholder="Add a subtask..."
+                      onKeyDown={(e) => e.key === "Enter" && addSubtask()}
+                      className="h-9 text-sm bg-muted/20 border-border/40 focus:border-primary/50"
+                    />
+                    <Button
+                      size="sm"
+                      onClick={addSubtask}
+                      disabled={addingSubtask || !newSubtask.trim()}
+                      className="h-9 px-4 bg-primary/90 hover:bg-primary"
+                    >
+                      {addingSubtask ? (
+                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      ) : (
+                        <Plus className="w-4 h-4" />
+                      )}
+                    </Button>
+                  </div>
+                </CollapsibleSection>
 
-                  {/* ── TABS: Comments / Activity ── */}
-                  <section>
-                    <div className="flex items-center gap-0 mb-4 border-b border-border/50">
-                      {(["overview", "activity"] as const).map((tab) => (
-                        <button
-                          key={tab}
-                          onClick={() => setActiveTab(tab)}
-                          className={cn(
-                            "px-4 py-2 text-sm font-medium transition-all border-b-2 -mb-px",
-                            activeTab === tab
-                              ? "border-primary text-foreground"
-                              : "border-transparent text-muted-foreground hover:text-foreground"
-                          )}
+                {/* ─── ATTACHMENTS SECTION ─── */}
+                {attachments.length > 0 && (
+                  <CollapsibleSection 
+                    title="Attachments" 
+                    icon={Paperclip}
+                    rightElement={
+                      <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
+                        {attachments.length}
+                      </span>
+                    }
+                  >
+                    <div className="grid grid-cols-2 gap-2">
+                      {attachments.map((a: any) => (
+                        <a
+                          key={a.id}
+                          href={a.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="group flex items-center gap-2 px-3 py-2.5 rounded-xl border border-border/40 hover:border-border hover:bg-muted/30 transition-all"
                         >
-                          {tab === "overview" ? (
-                            <span className="flex items-center gap-1.5">
-                              <MessageSquare className="w-3.5 h-3.5" />
-                              Comments
-                              {comments.length > 0 && (
-                                <span className="bg-muted text-muted-foreground text-[10px] rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
-                                  {comments.length}
-                                </span>
-                              )}
-                            </span>
-                          ) : (
-                            <span className="flex items-center gap-1.5">
-                              <Activity className="w-3.5 h-3.5" />
-                              Activity
-                            </span>
-                          )}
-                        </button>
+                          <div className="w-8 h-8 rounded-lg bg-muted/50 flex items-center justify-center shrink-0">
+                            <Paperclip className="w-4 h-4 text-muted-foreground" />
+                          </div>
+                          <span className="truncate flex-1 text-sm">{a.name}</span>
+                          <ExternalLink className="w-3.5 h-3.5 text-muted-foreground/40 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                        </a>
                       ))}
                     </div>
+                  </CollapsibleSection>
+                )}
 
-                    {activeTab === "overview" ? (
-                      <div className="space-y-4">
-                        {/* Comments list */}
-                        {comments.length === 0 ? (
-                          <p className="text-sm text-muted-foreground/60 py-4 text-center">
-                            No comments yet. Be the first to comment.
-                          </p>
+                {/* ─── COMMENTS & ACTIVITY SECTION ─── */}
+                <CollapsibleSection title="Discussion" icon={MessageSquare} defaultOpen={true}>
+                  {/* Tab switcher */}
+                  <div className="flex items-center gap-1 p-1 bg-muted/30 rounded-lg mb-4">
+                    {(["comments", "activity"] as const).map((tab) => (
+                      <button
+                        key={tab}
+                        onClick={() => setActiveTab(tab === "comments" ? "overview" : "activity")}
+                        className={cn(
+                          "flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-all",
+                          (tab === "comments" ? activeTab === "overview" : activeTab === "activity")
+                            ? "bg-background text-foreground shadow-sm"
+                            : "text-muted-foreground hover:text-foreground"
+                        )}
+                      >
+                        {tab === "comments" ? (
+                          <>
+                            <MessageSquare className="w-3.5 h-3.5" />
+                            Comments
+                            {comments.length > 0 && (
+                              <span className="bg-primary/10 text-primary text-[10px] rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1 font-semibold">
+                                {comments.length}
+                              </span>
+                            )}
+                          </>
                         ) : (
-                          <div className="space-y-4">
-                            {comments.map((c: any) => (
-                              <div key={c.id} className="flex gap-3">
-                                <Avatar className="w-8 h-8 shrink-0 mt-0.5">
-                                  <AvatarImage src={c.user?.avatar} />
-                                  <AvatarFallback className="text-xs bg-primary/10 text-primary font-medium">
-                                    {c.user?.name?.slice(0, 2).toUpperCase() || "??"}
-                                  </AvatarFallback>
-                                </Avatar>
-                                <div className="flex-1 min-w-0">
-                                  <div className="bg-muted/40 border border-border/40 rounded-lg px-4 py-3">
-                                    <div className="flex items-center gap-2 mb-2">
-                                      <span className="text-sm font-semibold">{c.user?.name || "User"}</span>
-                                      <span className="text-xs text-muted-foreground">
-                                        {c.createdAt ? getTimeAgo(new Date(c.createdAt)) : ""}
-                                      </span>
-                                    </div>
-                                    <p className="text-sm leading-relaxed">{c.text || c.content}</p>
+                          <>
+                            <Activity className="w-3.5 h-3.5" />
+                            Activity
+                          </>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+
+                  {activeTab === "overview" ? (
+                    <div className="space-y-4">
+                      {comments.length === 0 ? (
+                        <div className="text-center py-8">
+                          <MessageSquare className="w-8 h-8 text-muted-foreground/30 mx-auto mb-2" />
+                          <p className="text-sm text-muted-foreground/60">No comments yet</p>
+                          <p className="text-xs text-muted-foreground/40 mt-1">Be the first to comment</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          {comments.map((c: any) => (
+                            <div key={c.id} className="flex gap-3 group">
+                              <Avatar className="w-8 h-8 shrink-0 ring-2 ring-background">
+                                <AvatarImage src={c.user?.avatar} />
+                                <AvatarFallback className="text-xs bg-gradient-to-br from-primary/20 to-primary/10 text-primary font-semibold">
+                                  {c.user?.name?.slice(0, 2).toUpperCase() || "??"}
+                                </AvatarFallback>
+                              </Avatar>
+                              <div className="flex-1 min-w-0">
+                                <div className="bg-muted/30 border border-border/30 rounded-xl px-4 py-3">
+                                  <div className="flex items-center gap-2 mb-1.5">
+                                    <span className="text-sm font-semibold">{c.user?.name || "User"}</span>
+                                    <span className="text-[10px] text-muted-foreground/50">
+                                      {c.createdAt ? getTimeAgo(new Date(c.createdAt)) : ""}
+                                    </span>
                                   </div>
+                                  <p className="text-sm leading-relaxed text-foreground/90">{c.text || c.content}</p>
                                 </div>
                               </div>
-                            ))}
-                          </div>
-                        )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
 
-                        {/* Add comment */}
-                        <div className="flex gap-3 pt-2">
-                          <Avatar className="w-8 h-8 shrink-0 mt-0.5">
-                            <AvatarImage src={currentUser?.avatar} />
-                            <AvatarFallback className="text-xs bg-primary/10 text-primary font-medium">
-                              {currentUser?.name?.slice(0, 2).toUpperCase() || "ME"}
+                      {/* Add comment */}
+                      <div className="flex gap-3 pt-3 border-t border-border/30">
+                        <Avatar className="w-8 h-8 shrink-0 ring-2 ring-background">
+                          <AvatarImage src={currentUser?.avatar} />
+                          <AvatarFallback className="text-xs bg-gradient-to-br from-primary/20 to-primary/10 text-primary font-semibold">
+                            {currentUser?.name?.slice(0, 2).toUpperCase() || "ME"}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1 min-w-0">
+                          <div className="relative rounded-xl border border-border/40 overflow-hidden focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-primary/10 transition-all">
+                            <Textarea
+                              ref={commentInputRef}
+                              value={newComment}
+                              onChange={(e) => setNewComment(e.target.value)}
+                              placeholder="Write a comment..."
+                              rows={2}
+                              className="border-0 resize-none text-sm bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 pr-20"
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) addComment();
+                              }}
+                            />
+                            <div className="absolute bottom-2 right-2 flex items-center gap-2">
+                              <kbd className="text-[9px] text-muted-foreground/50 bg-muted/50 px-1.5 py-0.5 rounded font-mono hidden sm:block">
+                                ⌘↵
+                              </kbd>
+                              <Button
+                                size="sm"
+                                onClick={addComment}
+                                disabled={addingComment || !newComment.trim()}
+                                className="h-7 text-xs px-3"
+                              >
+                                {addingComment ? "..." : "Send"}
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="relative pl-4">
+                      <div className="absolute left-[11px] top-2 bottom-2 w-0.5 bg-gradient-to-b from-border/60 via-border/40 to-transparent" />
+                      <div className="space-y-4">
+                        {activities.length === 0 ? (
+                          <div className="text-center py-8">
+                            <Activity className="w-8 h-8 text-muted-foreground/30 mx-auto mb-2" />
+                            <p className="text-sm text-muted-foreground/60">No activity yet</p>
+                          </div>
+                        ) : (
+                          activities.map((a: any) => (
+                            <div key={a.id} className="flex items-start gap-3 relative">
+                              <div className="w-5 h-5 rounded-full bg-background border-2 border-border shrink-0 mt-0.5 flex items-center justify-center">
+                                <div className="w-1.5 h-1.5 rounded-full bg-primary/50" />
+                              </div>
+                              <div className="flex-1 min-w-0 bg-muted/20 rounded-lg px-3 py-2">
+                                <p className="text-sm leading-relaxed">
+                                  <span className="font-semibold">{a.user?.name || "Someone"}</span>
+                                  <span className="text-muted-foreground"> {a.message || formatActivityMessage(a)}</span>
+                                </p>
+                                <p className="text-[10px] text-muted-foreground/50 mt-1">
+                                  {a.createdAt ? getTimeAgo(new Date(a.createdAt)) : ""}
+                                </p>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </CollapsibleSection>
+              </>
+            )}
+          </div>
+        </ScrollArea>
+
+        {/* ═══════════════════════════════════════════════════════════════
+            PROPERTIES SIDEBAR - Bottom fixed panel
+        ═══════════════════════════════════════════════════════════════ */}
+        <div className="shrink-0 border-t border-border/30 bg-muted/10">
+          <div className="p-4 space-y-1">
+            {/* Assignees */}
+            <PropertyField label="Assignees" icon={Users}>
+              <div className="flex flex-wrap gap-1.5">
+                {assigneeIds.length > 0 ? (
+                  assigneeIds.map((id) => {
+                    const u = users.find((u) => u.id === id);
+                    return (
+                      <div 
+                        key={id} 
+                        className="group flex items-center gap-1.5 bg-background border border-border/40 rounded-full pl-0.5 pr-2 py-0.5 hover:border-border transition-colors"
+                      >
+                        <Avatar className="w-5 h-5">
+                          <AvatarImage src={u?.avatar} />
+                          <AvatarFallback className="text-[8px] bg-gradient-to-br from-primary/20 to-primary/10 text-primary font-semibold">
+                            {u?.name?.slice(0, 2).toUpperCase() || "??"}
+                          </AvatarFallback>
+                        </Avatar>
+                        <span className="text-xs font-medium">{u?.name || "Unknown"}</span>
+                        <button
+                          className="text-muted-foreground/40 hover:text-destructive transition-colors opacity-0 group-hover:opacity-100"
+                          onClick={() => {
+                            const newIds = assigneeIds.filter((aId) => aId !== id);
+                            setAssigneeIds(newIds);
+                            handleUpdateField("assigneeIds", newIds.length > 0 ? newIds : null);
+                          }}
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <span className="text-xs text-muted-foreground/50">Unassigned</span>
+                )}
+                <Select 
+                  value="" 
+                  onValueChange={(v) => {
+                    if (v && !assigneeIds.includes(v)) {
+                      const newIds = [...assigneeIds, v];
+                      setAssigneeIds(newIds);
+                      handleUpdateField("assigneeIds", newIds);
+                    }
+                  }}
+                >
+                  <SelectTrigger className="h-6 w-auto bg-transparent text-[11px] border-border/30 border-dashed px-2 hover:border-primary/40 transition-colors">
+                    <SelectValue placeholder="+ Add" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {users.filter((u) => !assigneeIds.includes(u.id)).map((u) => (
+                      <SelectItem key={u.id} value={u.id}>
+                        <div className="flex items-center gap-2">
+                          <Avatar className="w-4 h-4">
+                            <AvatarImage src={u.avatar} />
+                            <AvatarFallback className="text-[7px] bg-primary/10 text-primary">
+                              {u.name?.slice(0, 2).toUpperCase()}
                             </AvatarFallback>
                           </Avatar>
-                          <div className="flex-1 min-w-0">
-                            <div className="border border-border/50 rounded-lg overflow-hidden focus-within:border-primary/50 focus-within:ring-1 focus-within:ring-primary/20 transition-all">
-                              <Textarea
-                                ref={commentInputRef}
-                                value={newComment}
-                                onChange={(e) => setNewComment(e.target.value)}
-                                placeholder="Leave a comment..."
-                                rows={3}
-                                className="border-0 resize-none text-sm focus-visible:ring-0 focus-visible:ring-offset-0 rounded-b-none"
-                                onKeyDown={(e) => {
-                                  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) addComment();
-                                }}
-                              />
-                              <div className="flex items-center justify-between px-3 py-2 bg-muted/30 border-t border-border/30">
-                                <span className="text-[11px] text-muted-foreground/60">
-                                  Ctrl+Enter to submit
-                                </span>
-                                <Button
-                                  size="sm"
-                                  onClick={addComment}
-                                  disabled={addingComment || !newComment.trim()}
-                                  className="h-7 text-xs px-3"
-                                >
-                                  {addingComment ? "Sending..." : "Comment"}
-                                </Button>
-                              </div>
-                            </div>
-                          </div>
+                          <span className="text-xs">{u.name}</span>
                         </div>
-                      </div>
-                    ) : (
-                      /* Activity timeline */
-                      <div>
-                        {activities.length === 0 ? (
-                          <p className="text-sm text-muted-foreground/60 py-4 text-center">No activity yet.</p>
-                        ) : (
-                          <div className="relative pl-5">
-                            <div className="absolute left-2 top-3 bottom-3 w-px bg-border/50" />
-                            <div className="space-y-4">
-                              {activities.map((a: any) => (
-                                <div key={a.id} className="flex items-start gap-3 relative">
-                                  <div className="w-3.5 h-3.5 rounded-full bg-background border-2 border-border shrink-0 mt-0.5" />
-                                  <div className="flex-1 min-w-0">
-                                    <p className="text-sm">
-                                      <span className="font-semibold">{a.user?.name || "Someone"}</span>
-                                      <span className="text-muted-foreground"> {a.message || formatActivityMessage(a)}</span>
-                                    </p>
-                                    <p className="text-xs text-muted-foreground/60 mt-0.5">
-                                      {a.createdAt ? getTimeAgo(new Date(a.createdAt)) : ""}
-                                    </p>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </section>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </PropertyField>
 
-                {/* ── PROPERTIES ── */}
-                <section className="border-t border-border/30 pt-4 mt-4 space-y-3">
-                  {/* Status + Priority row */}
-                  <div className="flex gap-3">
-                    <div className="flex-1">
-                      <label className="text-[10px] font-medium text-muted-foreground mb-1 block">Status</label>
-                      <Select
-                        value={displayTask?.status || "todo"}
-                        onValueChange={(v) => handleUpdateField("status", v)}
-                      >
-                        <SelectTrigger className="h-8 bg-background/50 text-xs border-border/40">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {Object.entries(STATUS_CONFIG).map(([value, cfg]) => (
-                            <SelectItem key={value} value={value}>
-                              <div className="flex items-center gap-2">
-                                <div className={cn("w-2 h-2 rounded-full", cfg.dot)} />
-                                <span className="text-xs">{cfg.label}</span>
-                              </div>
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="flex-1">
-                      <label className="text-[10px] font-medium text-muted-foreground mb-1 block">Priority</label>
-                      <Select
-                        value={displayTask?.priority || "medium"}
-                        onValueChange={(v) => handleUpdateField("priority", v)}
-                      >
-                        <SelectTrigger className="h-8 bg-background/50 text-xs border-border/40">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {Object.entries(PRIORITY_CONFIG).map(([value, cfg]) => (
-                            <SelectItem key={value} value={value}>
-                              <div className="flex items-center gap-2">
-                                <cfg.Icon className={cn("w-3.5 h-3.5", cfg.color)} />
-                                <span className="text-xs">{cfg.label}</span>
-                              </div>
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-
-                  {/* Due Date + Team row */}
-                  <div className="flex gap-3">
-                    <div className="flex-1">
-                      <label className="text-[10px] font-medium text-muted-foreground mb-1 block">Due Date</label>
-                      <Input
-                        type="date"
-                        value={displayTask?.dueDate ? new Date(displayTask.dueDate).toISOString().slice(0, 10) : ""}
-                        onChange={(e) => handleUpdateField("dueDate", e.target.value ? new Date(e.target.value).toISOString() : null)}
-                        className={cn("h-8 bg-background/50 text-xs border-border/40", isOverdue && "border-red-400 text-red-600")}
-                      />
-                    </div>
-                    <div className="flex-1">
-                      <label className="text-[10px] font-medium text-muted-foreground mb-1 block">Team</label>
-                      <Select
-                        value={displayTask?.teamId || "none"}
-                        onValueChange={(v) => handleUpdateField("teamId", v === "none" ? null : v)}
-                      >
-                        <SelectTrigger className="h-8 bg-background/50 text-xs border-border/40">
-                          <SelectValue placeholder="No team" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none"><span className="text-xs text-muted-foreground">No team</span></SelectItem>
-                          {teams.map((t) => (
-                            <SelectItem key={t.id} value={t.id}><span className="text-xs">{t.name}</span></SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-
-                  {/* Assignees */}
-                  <div>
-                    <label className="text-[10px] font-medium text-muted-foreground mb-1 block">Assignees</label>
-                    <div className="flex flex-wrap gap-1.5">
-                      {assigneeIds.length > 0 ? (
-                        assigneeIds.map((id) => {
-                          const u = users.find((u) => u.id === id);
-                          return (
-                            <div key={id} className="flex items-center gap-1.5 bg-muted/50 rounded-full pl-1 pr-2 py-0.5">
-                              <Avatar className="w-5 h-5">
-                                <AvatarImage src={u?.avatar} />
-                                <AvatarFallback className="text-[9px] bg-primary/10 text-primary">{u?.name?.slice(0, 2).toUpperCase() || "??"}</AvatarFallback>
-                              </Avatar>
-                              <span className="text-[11px]">{u?.name || "Unknown"}</span>
-                              <button className="text-muted-foreground hover:text-destructive transition-colors" onClick={() => { const newIds = assigneeIds.filter((aId) => aId !== id); setAssigneeIds(newIds); handleUpdateField("assigneeIds", newIds.length > 0 ? newIds : null); }}>
-                                <X className="w-3 h-3" />
-                              </button>
-                            </div>
-                          );
-                        })
-                      ) : null}
-                      <Select value="" onValueChange={(v) => { if (v && !assigneeIds.includes(v)) { const newIds = [...assigneeIds, v]; setAssigneeIds(newIds); handleUpdateField("assigneeIds", newIds); } }}>
-                        <SelectTrigger className="h-6 bg-transparent text-[11px] border-border/30 border-dashed px-2">
-                          <SelectValue placeholder="+ Add" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {users.filter((u) => !assigneeIds.includes(u.id)).map((u) => (
-                            <SelectItem key={u.id} value={u.id}>
-                              <div className="flex items-center gap-2">
-                                <Avatar className="w-4 h-4"><AvatarImage src={u.avatar} /><AvatarFallback className="text-[8px] bg-primary/10 text-primary">{u.name?.slice(0, 2).toUpperCase()}</AvatarFallback></Avatar>
-                                <span className="text-xs">{u.name}</span>
-                              </div>
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-
-                  {/* Attach file */}
-                  <label className="cursor-pointer block">
-                    <input type="file" className="hidden" disabled={uploadingAttachment} onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadAttachment(f); }} />
-                    <span className={cn("flex items-center justify-center gap-2 w-full h-8 rounded-lg border border-dashed border-border/40 text-[11px] text-muted-foreground hover:border-primary/40 hover:text-primary transition-all", uploadingAttachment && "opacity-50 pointer-events-none")}>
-                      <Paperclip className="w-3 h-3" />
-                      {uploadingAttachment ? "Uploading..." : "Attach file"}
-                    </span>
-                  </label>
-
-                  {/* Metadata */}
-                  <div className="flex items-center justify-between text-[10px] text-muted-foreground pt-2 border-t border-border/20">
-                    <span>Created {displayTask?.createdAt ? new Date(displayTask.createdAt).toLocaleDateString("en-GB", { day: "2-digit", month: "short" }) : "—"}</span>
-                    <span>Updated {displayTask?.updatedAt ? getTimeAgo(new Date(displayTask.updatedAt)) : "—"}</span>
-                  </div>
-                </section>
-                </>
-              )}
+            {/* Due Date + Team row */}
+            <div className="flex gap-4">
+              <PropertyField label="Due Date" icon={Calendar} highlight={isOverdue}>
+                <Input
+                  type="date"
+                  value={displayTask?.dueDate ? new Date(displayTask.dueDate).toISOString().slice(0, 10) : ""}
+                  onChange={(e) => handleUpdateField("dueDate", e.target.value ? new Date(e.target.value).toISOString() : null)}
+                  className={cn(
+                    "h-7 bg-background/50 text-xs border-border/40 focus:border-primary/50",
+                    isOverdue && "border-red-400 text-red-600 focus:border-red-500"
+                  )}
+                />
+              </PropertyField>
+              
+              <PropertyField label="Team" icon={Users}>
+                <Select
+                  value={displayTask?.teamId || "none"}
+                  onValueChange={(v) => handleUpdateField("teamId", v === "none" ? null : v)}
+                >
+                  <SelectTrigger className="h-7 bg-background/50 text-xs border-border/40">
+                    <SelectValue placeholder="No team" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">
+                      <span className="text-xs text-muted-foreground">No team</span>
+                    </SelectItem>
+                    {teams.map((t) => (
+                      <SelectItem key={t.id} value={t.id}>
+                        <span className="text-xs">{t.name}</span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </PropertyField>
             </div>
-          </ScrollArea>
+
+            {/* Attach file button */}
+            <label className="cursor-pointer block">
+              <input 
+                type="file" 
+                className="hidden" 
+                disabled={uploadingAttachment} 
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadAttachment(f); }} 
+              />
+              <div className={cn(
+                "flex items-center justify-center gap-2 w-full h-8 rounded-lg",
+                "border border-dashed border-border/40 hover:border-primary/40",
+                "text-xs text-muted-foreground hover:text-primary",
+                "transition-all duration-200",
+                uploadingAttachment && "opacity-50 pointer-events-none"
+              )}>
+                {uploadingAttachment ? (
+                  <>
+                    <div className="w-3.5 h-3.5 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+                    <span>Uploading...</span>
+                  </>
+                ) : (
+                  <>
+                    <Paperclip className="w-3.5 h-3.5" />
+                    <span>Attach file</span>
+                  </>
+                )}
+              </div>
+            </label>
+
+            {/* Metadata */}
+            <div className="flex items-center justify-between text-[10px] text-muted-foreground/50 pt-2 border-t border-border/20">
+              <span className="flex items-center gap-1">
+                <Clock className="w-3 h-3" />
+                Created {displayTask?.createdAt ? new Date(displayTask.createdAt).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "—"}
+              </span>
+              <span>
+                Updated {displayTask?.updatedAt ? getTimeAgo(new Date(displayTask.updatedAt)) : "—"}
+              </span>
+            </div>
+          </div>
+        </div>
       </SheetContent>
     </Sheet>
   );
