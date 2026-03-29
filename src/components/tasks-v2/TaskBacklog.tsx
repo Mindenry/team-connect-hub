@@ -137,7 +137,7 @@ export default function TaskBacklog({ tasks, sprints, onTaskClick, onCreateTask 
 
   return (
     <ScrollArea className="flex-1">
-      <div className="p-4 sm:p-6 space-y-4">
+      <div className="space-y-4 p-4 sm:p-6">
         {groupedTasks.map((group) => {
           const isCollapsed = collapsedSections.has(group.key);
 
@@ -145,16 +145,16 @@ export default function TaskBacklog({ tasks, sprints, onTaskClick, onCreateTask 
             <div
               key={group.key}
               className={cn(
-                "rounded-2xl overflow-hidden border shadow-sm",
+                "overflow-hidden rounded-lg border shadow-sm",
                 group.isActive
-                  ? "border-primary/70 bg-primary/[0.03] shadow-primary/10"
-                  : "border-border/60 bg-card/95"
+                  ? "border-foreground/30 bg-muted/30"
+                  : "border-border/70 bg-card"
               )}
             >
               {/* Section header */}
               <button
                 onClick={() => toggleSection(group.key)}
-                className="w-full px-4 py-3 text-left hover:bg-muted/20 transition-colors"
+                className="w-full px-4 py-3 text-left transition-colors hover:bg-muted/40"
               >
                 <div className="flex items-center gap-2.5">
                   {/* Chevron */}
@@ -188,10 +188,7 @@ export default function TaskBacklog({ tasks, sprints, onTaskClick, onCreateTask 
                         {group.label}
                       </span>
                       {group.isActive && (
-                        <Badge
-                          variant="default"
-                          className="h-[18px] px-2 text-[10px] font-semibold tracking-wide"
-                        >
+                        <Badge variant="secondary" className="h-[18px] px-2 text-[10px] font-semibold tracking-wide">
                           ACTIVE
                         </Badge>
                       )}

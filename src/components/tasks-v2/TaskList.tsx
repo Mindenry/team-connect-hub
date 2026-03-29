@@ -110,14 +110,14 @@ export default function TaskList({ tasks, onTaskClick, onCreateTask }: TaskListP
         {/* ═══ BULK ACTIONS BAR — slides in when items selected ═══ */}
         <div
           className={cn(
-            "shrink-0 border-b border-border/40 bg-primary/5 px-4 sm:px-6",
+            "shrink-0 border-b border-border/60 bg-muted/30 px-4 sm:px-6",
             "flex items-center gap-3 overflow-hidden transition-all duration-200",
             selectedIds.size > 0 ? "h-10 py-0" : "h-0 py-0 border-0"
           )}
         >
           {selectedIds.size > 0 && (
             <>
-              <span className="text-xs font-semibold text-primary shrink-0">
+                <span className="shrink-0 text-xs font-semibold text-foreground">
                 {selectedIds.size} selected
               </span>
               <div className="w-px h-4 bg-border/50 shrink-0" />
@@ -188,9 +188,9 @@ export default function TaskList({ tasks, onTaskClick, onCreateTask }: TaskListP
               className={cn(
                 "w-4 h-4 rounded border flex items-center justify-center cursor-pointer transition-all duration-100",
                 isAllSelected
-                  ? "bg-primary border-primary text-primary-foreground"
+                  ? "bg-foreground border-foreground text-background"
                   : isPartialSelected
-                  ? "bg-primary/20 border-primary/50"
+                  ? "bg-muted border-foreground/40"
                   : "border-border/50 hover:border-border"
               )}
               onClick={toggleSelectAll}
@@ -262,7 +262,7 @@ export default function TaskList({ tasks, onTaskClick, onCreateTask }: TaskListP
         {/* ═══ TASK ROWS ═══ */}
         <div className="flex-1 overflow-auto">
           {/* Count row */}
-          <div className="px-4 py-1.5 flex items-center gap-2 border-b border-border/20">
+          <div className="flex items-center gap-2 border-b border-border/40 px-4 py-1.5">
             <span className="text-[11px] text-muted-foreground">
               <span className="font-semibold text-foreground">{tasks.length}</span> task{tasks.length !== 1 ? "s" : ""}
             </span>

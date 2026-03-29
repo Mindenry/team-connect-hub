@@ -19,16 +19,16 @@ const views: { key: ViewMode; label: string; icon: React.ElementType }[] = [
 export default function ViewSwitcher({ activeView, onViewChange, orientation = "vertical" }: ViewSwitcherProps) {
   if (orientation === "horizontal") {
     return (
-      <div className="flex items-center gap-0.5 bg-muted/50 rounded-lg p-0.5">
+      <div className="flex items-center gap-0.5 rounded-md border border-border bg-muted/30 p-0.5">
         {views.map(({ key, label, icon: Icon }) => (
           <button
             key={key}
             onClick={() => onViewChange(key)}
             className={cn(
-              "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all",
+              "flex items-center gap-1.5 rounded px-2.5 py-1.5 text-xs font-medium transition-colors",
               activeView === key
                 ? "bg-background text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
+                : "text-muted-foreground hover:bg-background/60 hover:text-foreground"
             )}
           >
             <Icon className="w-3.5 h-3.5" />
@@ -47,10 +47,10 @@ export default function ViewSwitcher({ activeView, onViewChange, orientation = "
             <button
               onClick={() => onViewChange(key)}
               className={cn(
-                "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all w-full",
+                "flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
                 activeView === key
-                  ? "bg-primary/10 text-primary"
-                  : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                  ? "bg-accent text-foreground"
+                  : "text-muted-foreground hover:bg-muted/40 hover:text-foreground"
               )}
             >
               <Icon className="w-4 h-4 shrink-0" />

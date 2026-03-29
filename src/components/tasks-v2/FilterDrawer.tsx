@@ -185,15 +185,15 @@ export default function FilterDrawer({
         side="right"
         className={cn(
           "w-full sm:w-[400px] max-w-[100vw] p-0",
-          "bg-gradient-to-b from-background via-background to-muted/10"
+          "bg-background"
         )}
       >
         {/* Header */}
-        <SheetHeader className="px-6 pt-6 pb-5 border-b border-border/30">
+        <SheetHeader className="border-b border-border/60 px-6 pb-5 pt-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center ring-1 ring-primary/20">
-                <SlidersHorizontal className="w-5 h-5 text-primary" />
+              <div className="flex h-10 w-10 items-center justify-center rounded-md border border-border bg-muted/40">
+                <SlidersHorizontal className="h-5 w-5 text-foreground" />
               </div>
               <div>
                 <SheetTitle className="text-lg font-bold tracking-tight">Filters</SheetTitle>
@@ -217,7 +217,7 @@ export default function FilterDrawer({
         </SheetHeader>
 
         {/* Quick filters */}
-        <div className="px-6 py-4 border-b border-border/20 bg-muted/5">
+        <div className="border-b border-border/50 bg-muted/20 px-6 py-4">
           <p className="text-xs font-semibold text-muted-foreground mb-3 uppercase tracking-wide">Quick Filters</p>
           <div className="flex flex-wrap gap-2">
             <QuickFilterButton
@@ -255,7 +255,7 @@ export default function FilterDrawer({
         </div>
 
         {/* Filter sections */}
-        <div className="px-6 py-5 space-y-5 overflow-y-auto max-h-[calc(100vh-280px)]">
+        <div className="max-h-[calc(100vh-280px)] space-y-5 overflow-y-auto px-6 py-5">
           {/* Status */}
           <FilterSelect
             label="Status"
@@ -361,7 +361,7 @@ export default function FilterDrawer({
         </div>
 
         {/* Footer with apply button */}
-        <div className="absolute bottom-0 left-0 right-0 px-6 py-4 border-t border-border/30 bg-background/80 backdrop-blur-xl">
+        <div className="absolute bottom-0 left-0 right-0 border-t border-border/60 bg-background px-6 py-4">
           <div className="flex items-center justify-between gap-3">
             <div className="text-xs text-muted-foreground">
               {activeFilterCount > 0 ? (
@@ -375,10 +375,7 @@ export default function FilterDrawer({
                 "No filters applied"
               )}
             </div>
-            <Button
-              className="gap-2 rounded-xl shadow-lg shadow-primary/20 hover:shadow-xl hover:shadow-primary/30 transition-all"
-              onClick={() => onOpenChange(false)}
-            >
+            <Button className="gap-2 rounded-md" onClick={() => onOpenChange(false)}>
               Apply Filters
             </Button>
           </div>

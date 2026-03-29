@@ -517,8 +517,8 @@ export default function TaskDetailDrawer({
         className={cn(
           "sm:max-w-3xl md:max-w-4xl lg:max-w-5xl",
           "max-h-[90vh] p-0 gap-0 flex flex-col overflow-hidden",
-          "bg-background border-border/50",
-          "shadow-2xl"
+          "border-border/60 bg-background",
+          "shadow-xl"
         )}
       >
         <DialogHeader className="sr-only">
@@ -528,7 +528,7 @@ export default function TaskDetailDrawer({
         {/* ═══════════════════════════════════════════════════════════════
             HEADER
         ═══════════════════════════════════════════════════════════════ */}
-        <div className="shrink-0 relative border-b border-border/30">
+        <div className="relative shrink-0 border-b border-border/60">
           
           {/* Header content */}
           <div className="px-5 pt-4 pb-3">
@@ -538,7 +538,7 @@ export default function TaskDetailDrawer({
                 {/* Task ID Badge */}
                 <button
                   onClick={copyTaskId}
-                  className="group flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
+                  className="group flex items-center gap-1.5 rounded-md border border-border bg-muted/30 px-2.5 py-1 transition-colors hover:bg-muted"
                 >
                   <span className="font-mono text-xs font-semibold text-muted-foreground group-hover:text-foreground">
                     {task.id.slice(0, 8).toUpperCase()}
@@ -559,12 +559,11 @@ export default function TaskDetailDrawer({
                 <button
                   onClick={toggleWatching}
                   disabled={togglingWatch}
-                  className={cn(
-                    "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all",
-                    "hover:shadow-md active:scale-95",
+                    className={cn(
+                    "flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors",
                     isWatching 
-                      ? "bg-primary/10 text-primary hover:bg-primary/20" 
-                      : "bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground"
+                      ? "border-foreground/30 bg-foreground/5 text-foreground" 
+                      : "border-border bg-muted/30 text-muted-foreground hover:bg-muted hover:text-foreground"
                   )}
                 >
                   {isWatching ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
@@ -573,7 +572,7 @@ export default function TaskDetailDrawer({
                 
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <button className="p-2 rounded-lg hover:bg-muted/50 transition-colors">
+                    <button className="rounded-md p-2 transition-colors hover:bg-muted/50">
                       <MoreHorizontal className="w-4 h-4 text-muted-foreground" />
                     </button>
                   </DropdownMenuTrigger>
@@ -596,7 +595,7 @@ export default function TaskDetailDrawer({
                 
                 <button 
                   onClick={() => onOpenChange(false)}
-                  className="p-2 rounded-lg hover:bg-muted/50 transition-colors ml-1"
+                  className="ml-1 rounded-md p-2 transition-colors hover:bg-muted/50"
                 >
                   <X className="w-4 h-4 text-muted-foreground" />
                 </button>
@@ -987,7 +986,7 @@ Use this space to describe:
         {/* ═══════════════════════════════════════════════════════════════
             PROPERTIES SIDEBAR - Bottom fixed panel
         ═══════════════════════════════════════════════════════════════ */}
-        <div className="shrink-0 border-t border-border/30 bg-muted/10">
+        <div className="shrink-0 border-t border-border/60 bg-muted/20">
           <div className="p-4 space-y-1">
             {/* Assignees */}
             <PropertyField label="Assignees" icon={Users}>

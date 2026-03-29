@@ -19,9 +19,9 @@ export default function FilterChips({ filters, onRemove, onClearAll }: FilterChi
   if (filters.length === 0) return null;
 
   return (
-    <div className="flex items-center gap-2 min-h-[32px] overflow-x-auto no-scrollbar py-1">
+    <div className="flex min-h-[34px] items-center gap-2 overflow-x-auto py-1">
       {/* Filter indicator */}
-      <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-muted/30 border border-border/30 shrink-0">
+      <div className="flex shrink-0 items-center gap-1.5 rounded-md border border-border bg-muted/30 px-2 py-1">
         <Filter className="w-3 h-3 text-muted-foreground" />
         <span className="text-[10px] font-medium text-muted-foreground">{filters.length}</span>
       </div>
@@ -32,10 +32,9 @@ export default function FilterChips({ filters, onRemove, onClearAll }: FilterChi
           key={filter.key}
           onClick={() => onRemove(filter.key)}
           className={cn(
-            "group flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium shrink-0",
-            "bg-muted/30 border border-border/40",
-            "text-foreground hover:bg-muted/50 hover:border-border/60",
-            "transition-all duration-150"
+            "group flex shrink-0 items-center gap-1.5 rounded-md border border-border bg-background px-2 py-1 text-xs font-medium",
+            "text-foreground hover:bg-muted/40",
+            "transition-colors"
           )}
         >
           <span className="text-muted-foreground">{filter.label}:</span>
@@ -49,10 +48,9 @@ export default function FilterChips({ filters, onRemove, onClearAll }: FilterChi
         <button
           onClick={onClearAll}
           className={cn(
-            "flex items-center gap-1 px-2 py-1 rounded text-xs font-medium shrink-0",
-            "text-muted-foreground hover:text-destructive",
-            "bg-transparent hover:bg-destructive/5 border border-transparent hover:border-destructive/20",
-            "transition-all duration-150"
+            "flex shrink-0 items-center gap-1 rounded-md border border-border px-2 py-1 text-xs font-medium",
+            "text-muted-foreground hover:text-foreground hover:bg-muted/40",
+            "transition-colors"
           )}
         >
           <X className="w-3 h-3" />

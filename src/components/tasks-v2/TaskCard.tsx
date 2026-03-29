@@ -110,14 +110,13 @@ export function InlineCreateCard({ onSubmit }: { onSubmit: (title: string) => vo
       <button
         onClick={() => { setActive(true); setTimeout(() => inputRef.current?.focus(), 50); }}
         className={cn(
-          "group flex items-center gap-2.5 w-full px-3 py-2.5",
-          "text-xs text-muted-foreground/40 hover:text-muted-foreground/80",
-          "rounded-xl border border-transparent hover:border-border/30",
-          "hover:bg-background/60 transition-all duration-200"
+          "group flex w-full items-center gap-2.5 rounded-md border border-transparent px-3 py-2.5",
+          "text-xs text-muted-foreground hover:border-border hover:bg-muted/40 hover:text-foreground",
+          "transition-colors"
         )}
         aria-label="Create task in this column"
       >
-        <div className="w-6 h-6 rounded-lg flex items-center justify-center bg-muted/20 group-hover:bg-primary/10 text-muted-foreground/30 group-hover:text-primary/60 transition-all duration-200">
+        <div className="flex h-6 w-6 items-center justify-center rounded-md bg-muted text-muted-foreground transition-colors group-hover:bg-background">
           <Plus className="w-3.5 h-3.5" />
         </div>
         <span className="font-medium">Add task</span>
@@ -126,7 +125,7 @@ export function InlineCreateCard({ onSubmit }: { onSubmit: (title: string) => vo
   }
 
   return (
-    <div className="rounded-xl border border-primary/30 bg-background overflow-hidden shadow-lg ring-1 ring-primary/10 transition-all duration-200">
+    <div className="overflow-hidden rounded-md border border-border bg-background shadow-sm transition-colors">
       <div className="p-2">
         <Input
           ref={inputRef}
@@ -174,15 +173,8 @@ function BoardCard({ task, onClick, draggable, onDragStart }: TaskCardProps) {
   return (
     <div
       className={cn(
-        "group relative bg-card rounded-xl cursor-pointer select-none",
-        "border border-border/40",
-        "shadow-sm",
-        "hover:shadow-lg",
-        "hover:-translate-y-0.5",
-        "transition-all duration-200",
-        "hover:border-border/60",
-        "active:scale-[0.98]",
-        "overflow-hidden"
+        "group relative cursor-pointer select-none overflow-hidden rounded-md border border-border bg-card",
+        "shadow-sm transition-all duration-150 hover:border-border/90 hover:shadow-md active:scale-[0.99]"
       )}
       onClick={() => {
         if (hasDraggedRef.current) { hasDraggedRef.current = false; return; }
@@ -193,7 +185,7 @@ function BoardCard({ task, onClick, draggable, onDragStart }: TaskCardProps) {
       draggable={draggable}
       onDragStart={(e) => { hasDraggedRef.current = true; onDragStart?.(e, task); }}
     >
-      <div className="relative p-3 space-y-2.5">
+      <div className="relative space-y-2.5 p-3">
         {/* Row 1: Type + project key + priority */}
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0">
@@ -355,11 +347,9 @@ function BacklogRow({ task, onClick, selected, onSelect }: TaskCardProps) {
   return (
     <div
       className={cn(
-        "group flex items-center gap-3 px-4 py-3 cursor-pointer",
-        "transition-all duration-200",
-        "hover:bg-primary/[0.04] dark:hover:bg-primary/[0.06]",
-        "border-b border-border/15 last:border-0",
-        selected && "bg-primary/5 hover:bg-primary/8 border-l-2 border-l-primary"
+        "group flex cursor-pointer items-center gap-3 border-b border-border/40 px-4 py-3 transition-colors last:border-0",
+        "hover:bg-muted/30",
+        selected && "border-l-2 border-l-foreground/50 bg-muted/40"
       )}
       onClick={() => onClick(task)}
     >
@@ -370,8 +360,8 @@ function BacklogRow({ task, onClick, selected, onSelect }: TaskCardProps) {
         className={cn(
           "shrink-0 w-4 h-4 rounded border flex items-center justify-center transition-all duration-200 cursor-pointer",
           selected
-            ? "bg-primary border-primary text-primary-foreground scale-110"
-            : "border-border/40 hover:border-primary/50 bg-transparent",
+            ? "scale-110 border-foreground bg-foreground text-background"
+            : "border-border/40 bg-transparent hover:border-foreground/40",
           "opacity-0 group-hover:opacity-100",
           selected && "opacity-100"
         )}

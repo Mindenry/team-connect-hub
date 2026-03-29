@@ -218,9 +218,9 @@ export default function TaskBoard({
   }
 
   return (
-    <div className="h-full flex flex-col px-6 py-4">
+    <div className="flex h-full flex-col px-4 py-4 lg:px-6">
       {/* Columns container - fills available width */}
-      <div className="flex-1 flex gap-3 min-h-0">
+      <div className="flex min-h-0 flex-1 gap-3">
         {columns.map((column) => {
           const columnTasks  = tasksByStatus[column.key] || [];
           const isDragOver   = dragOverColumn === column.key;
@@ -232,11 +232,9 @@ export default function TaskBoard({
               key={column.key}
               className={cn(
                 "flex flex-col h-full min-h-0 flex-1 min-w-[200px] max-w-[320px]",
-                "rounded-xl",
-                "bg-muted/30",
-                "border border-border/40",
-                "transition-all duration-200",
-                isDragOver && "border-primary/50 bg-primary/5"
+                "rounded-lg border border-border bg-card",
+                "transition-colors duration-200",
+                isDragOver && "border-foreground/40 bg-muted/30"
               )}
               onMouseEnter={() => setHoveredColumn(column.key)}
               onMouseLeave={() => setHoveredColumn(null)}
@@ -245,7 +243,7 @@ export default function TaskBoard({
               onDrop={(e) => handleDrop(e, column.key)}
             >
               {/* ── Column header ── */}
-              <div className="shrink-0 px-3 pt-3 pb-2 border-b border-border/30">
+              <div className="shrink-0 border-b border-border/70 px-3 pb-2 pt-3">
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2 min-w-0">
                     <ColumnIcon className="w-4 h-4 text-muted-foreground shrink-0" />
@@ -261,7 +259,7 @@ export default function TaskBoard({
                   {isHovered && (
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <button className="p-1 rounded hover:bg-muted/50 text-muted-foreground transition-colors">
+                        <button className="rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
                           <MoreHorizontal className="w-3.5 h-3.5" />
                         </button>
                       </DropdownMenuTrigger>
@@ -288,7 +286,7 @@ export default function TaskBoard({
               {/* ── Cards container ── */}
               <div
                 ref={(el) => { scrollRefs.current[column.key] = el; }}
-                className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-2 py-2 space-y-2"
+                className="flex-1 min-h-0 space-y-2 overflow-x-hidden overflow-y-auto px-2 py-2"
               >
                 {columnTasks.map((task, index) => (
                   <div
@@ -318,8 +316,8 @@ export default function TaskBoard({
 
                 {/* Drop zone indicator */}
                 {isDragOver && (
-                  <div className="flex items-center justify-center py-4 border-2 border-dashed border-primary/30 rounded-lg bg-primary/5 my-1">
-                    <span className="text-xs font-medium text-primary">Drop here</span>
+                  <div className="my-1 flex items-center justify-center rounded-md border border-dashed border-foreground/40 bg-muted/30 py-4">
+                    <span className="text-xs font-medium text-foreground">Drop here</span>
                   </div>
                 )}
               </div>
@@ -335,7 +333,7 @@ export default function TaskBoard({
         {/* ── Add column button ── */}
         <div className="flex flex-col w-[200px] shrink-0">
           {showAddColumn ? (
-            <div className="bg-muted/30 border border-border/40 rounded-xl p-3 space-y-2">
+            <div className="space-y-2 rounded-lg border border-border bg-card p-3">
               <Input
                 value={newColumnName}
                 onChange={(e) => setNewColumnName(e.target.value)}
@@ -370,11 +368,9 @@ export default function TaskBoard({
             <button
               onClick={() => setShowAddColumn(true)}
               className={cn(
-                "flex-1 flex flex-col items-center justify-center gap-2 min-h-[80px] rounded-xl",
-                "border border-dashed border-border/30",
-                "text-muted-foreground/40 hover:text-muted-foreground/70",
-                "hover:border-border/50 hover:bg-muted/20",
-                "transition-all duration-200"
+                "flex min-h-[80px] flex-1 flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border",
+                "text-muted-foreground/60 hover:bg-muted/30 hover:text-foreground",
+                "transition-colors"
               )}
             >
               <Plus className="w-4 h-4" />

@@ -44,7 +44,7 @@ export default function CommandBar({
   const [searchExpanded, setSearchExpanded] = useState(false);
 
   return (
-    <div className="flex items-center gap-2 px-4 lg:px-5 py-2.5 border-b bg-background/80 backdrop-blur-sm sticky top-0 z-20">
+    <div className="sticky top-0 z-20 flex items-center gap-2 border-b border-border/70 bg-background px-4 py-2 lg:px-5">
       {/* Left section: breadcrumb / project context */}
       <div className="flex items-center gap-2 shrink-0">
         {projectName && (
@@ -86,7 +86,7 @@ export default function CommandBar({
               value={search}
               onChange={(e) => onSearchChange(e.target.value)}
               placeholder="Search tasks…"
-              className="h-8 pl-8 pr-8 text-sm"
+              className="h-8 rounded-md border-border pl-8 pr-8 text-sm"
               autoFocus
               onBlur={() => {
                 if (!search) setSearchExpanded(false);
@@ -105,7 +105,7 @@ export default function CommandBar({
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8"
+            className="h-8 w-8 rounded-md border border-border"
             onClick={() => setSearchExpanded(true)}
             title="Search tasks"
           >
@@ -118,7 +118,7 @@ export default function CommandBar({
       <Button
         variant={activeFilterCount > 0 ? "default" : "outline"}
         size="sm"
-        className="h-8 gap-1.5 text-xs"
+        className="h-8 gap-1.5 rounded-md text-xs"
         onClick={onOpenFilters}
       >
         <Filter className="w-3.5 h-3.5" />
@@ -131,13 +131,13 @@ export default function CommandBar({
       </Button>
 
       {/* Sprint management */}
-      <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs hidden lg:flex" onClick={onManageSprints}>
+      <Button variant="outline" size="sm" className="hidden h-8 gap-1.5 rounded-md text-xs lg:flex" onClick={onManageSprints}>
         <Rocket className="w-3.5 h-3.5" />
         Sprints
       </Button>
 
       {/* Create task */}
-      <Button size="sm" className="h-8 gap-1.5 text-xs" onClick={onCreateTask}>
+      <Button size="sm" className="h-8 gap-1.5 rounded-md text-xs" onClick={onCreateTask}>
         <Plus className="w-3.5 h-3.5" />
         <span className="hidden xs:inline">New Task</span>
       </Button>
@@ -145,7 +145,7 @@ export default function CommandBar({
       {/* Overflow menu */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
+          <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 rounded-md border border-border">
             <MoreHorizontal className="w-4 h-4" />
           </Button>
         </DropdownMenuTrigger>
