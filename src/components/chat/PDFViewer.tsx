@@ -72,24 +72,50 @@ export function PDFViewer({ url, name, variant = "default" }: PDFViewerProps) {
 
       {isOpen && (
         <div
-          className="fixed inset-0 z-[100] bg-black/80 flex items-center justify-center p-2 sm:p-5 backdrop-blur-sm"
+          className="fixed inset-0 z-[100] bg-black/80 flex items-center justify-center p-4 sm:p-6 backdrop-blur-sm"
           onClick={() => setIsOpen(false)}
         >
-          {/* Close button outside the modal for a cleaner look */}
-          <button
-            onClick={() => setIsOpen(false)}
-            className="absolute top-4 right-4 sm:top-6 sm:right-6 w-10 h-10 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 text-white backdrop-blur-md transition-all z-10"
-            title="Close viewer"
-          >
-            ✕
-          </button>
-
           <div
-            className="relative w-full max-w-5xl h-[85vh] sm:h-[90vh] flex flex-col bg-zinc-900 rounded-xl sm:rounded-2xl overflow-hidden shadow-2xl ring-1 ring-white/10"
+            className="relative w-full max-w-4xl h-[85vh] flex flex-col bg-white dark:bg-zinc-900 rounded-xl overflow-hidden shadow-2xl ring-1 ring-white/10"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* PDF Content - Clean full height without redundant header */}
-            <div className="flex-1 w-full relative bg-zinc-800">
+            {/* Header restored to match Chat */}
+            <div className="flex items-center justify-between px-4 py-3 bg-white dark:bg-zinc-900 border-b border-gray-200 dark:border-zinc-800 shrink-0 z-20">
+              <div className="flex items-center gap-2 min-w-0">
+                <FileText className="w-5 h-5 text-red-500 flex-shrink-0" />
+                <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-100 truncate">{name}</h3>
+              </div>
+              <div className="flex items-center gap-2">
+                <a
+                  href={downloadUrl}
+                  download={name}
+                  className="p-2 text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-md transition-colors"
+                  title="Download PDF"
+                >
+                  <Download className="w-4 h-4" />
+                </a>
+                <a
+                  href={url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="p-2 text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-md transition-colors"
+                  title="Open in new tab"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                </a>
+                <div className="w-px h-5 bg-gray-300 dark:bg-zinc-700 mx-1"></div>
+                <button
+                  onClick={() => setIsOpen(false)}
+                  className="p-2 text-gray-500 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors"
+                  title="Close viewer"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+
+            {/* PDF Content */}
+            <div className="flex-1 w-full relative bg-gray-100 dark:bg-black/95">
               <iframe
                 src={`${url}#view=FitH`}
                 className="w-full h-full border-none absolute inset-0 z-10 bg-white"
