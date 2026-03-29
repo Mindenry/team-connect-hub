@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 import TaskCard, { InlineCreateCard, type TaskCardData } from "./TaskCard";
 import EmptyState from "./EmptyState";
 import { apiPost, apiPatch, apiGet } from "@/lib/api";
-import { Plus, MoreHorizontal, Loader2, X } from "lucide-react";
+import { Plus, MoreHorizontal, Loader2, X, GripVertical } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -61,7 +61,7 @@ interface TaskBoardProps {
 }
 
 /* ═══════════════════════════════════════════════════════════════════
-   TASK BOARD
+   TASK BOARD — Premium Kanban
 ═══════════════════════════════════════════════════════════════════ */
 export default function TaskBoard({
   tasks,
@@ -198,7 +198,7 @@ export default function TaskBoard({
   }
 
   return (
-    <div className="h-full flex gap-3 overflow-x-auto p-4 pb-6">
+    <div className="h-full flex gap-3 overflow-x-auto px-6 py-4 pb-6">
       {columns.map((column) => {
         const columnTasks  = tasksByStatus[column.key] || [];
         const isDragOver   = dragOverColumn === column.key;
@@ -209,36 +209,30 @@ export default function TaskBoard({
             key={column.key}
             className={cn(
               "flex flex-col h-full min-h-0",
-              "w-[280px] sm:w-[300px] md:w-[316px] shrink-0",
+              "w-[280px] shrink-0",
               "rounded-xl",
-              // Column panel: subtle bg, stronger border on drag-over
-              "bg-muted/20 border border-border/40",
-              "transition-all duration-150",
-              isDragOver && "border-primary/40 bg-primary/5 shadow-md"
+              "bg-muted/20 border border-border/30",
+              "transition-all duration-200",
+              isDragOver && "border-primary/40 bg-primary/[0.02] shadow-lg shadow-primary/5"
             )}
             onDragOver={(e) => handleDragOver(e, column.key)}
             onDragLeave={handleDragLeave}
             onDrop={(e) => handleDrop(e, column.key)}
           >
             {/* ── Column header ── */}
-            <div
-              className="shrink-0 rounded-t-xl border-t-[3px] px-3 pt-3 pb-2.5 flex items-center justify-between gap-2"
-              style={{ borderTopColor: accentColor }}
-            >
+            <div className="shrink-0 px-3 pt-3 pb-2 flex items-center justify-between gap-2 border-b border-border/20">
               <div className="flex items-center gap-2 min-w-0">
-                {/* Status dot */}
-                <span
+                <div
                   className="w-2 h-2 rounded-full shrink-0"
                   style={{ backgroundColor: accentColor }}
                 />
-                <span className="text-sm font-semibold text-foreground truncate">
+                <span className="text-[13px] font-semibold text-foreground truncate">
                   {column.name}
                 </span>
-                {/* Count badge */}
                 <span
-                  className="text-[11px] font-semibold px-1.5 py-px rounded-md shrink-0 leading-tight"
+                  className="text-[11px] font-bold px-1.5 py-0.5 rounded-md shrink-0 leading-tight"
                   style={{
-                    backgroundColor: accentColor + "1a",
+                    backgroundColor: accentColor + "18",
                     color: accentColor,
                   }}
                 >
@@ -246,48 +240,26 @@ export default function TaskBoard({
                 </span>
               </div>
 
-              <div className="flex items-center gap-0.5 shrink-0">
-                {/* Quick add */}
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-6 w-6 text-muted-foreground hover:text-foreground"
-                  onClick={onCreateTask}
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                </Button>
-                {/* Column menu */}
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6 text-muted-foreground hover:text-foreground"
-                    >
-                      <MoreHorizontal className="w-3.5 h-3.5" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-40 text-xs">
-                    <DropdownMenuItem className="text-xs" onClick={onCreateTask}>
-                      <Plus className="w-3 h-3 mr-2" />
-                      New task
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6 text-muted-foreground/60 hover:text-foreground rounded-md opacity-0 group-hover:opacity-100 transition-opacity"
+                onClick={onCreateTask}
+              >
+                <Plus className="w-3.5 h-3.5" />
+              </Button>
             </div>
 
             {/* ── Cards container ── */}
             <div
               ref={(el) => { scrollRefs.current[column.key] = el; }}
-              className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-2 space-y-2"
-              style={{ contain: "strict" }}
+              className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-2 py-2 space-y-2"
             >
               {columnTasks.map((task) => (
                 <div
                   key={task.id}
                   className={cn(
-                    "transition-opacity duration-150",
+                    "transition-all duration-200",
                     draggingTaskId === task.id && "opacity-30 scale-95"
                   )}
                 >
@@ -303,35 +275,18 @@ export default function TaskBoard({
 
               {/* Empty column state */}
               {columnTasks.length === 0 && !isDragOver && (
-                <div className="flex flex-col items-center justify-center py-10 px-3 text-center">
-                  <div
-                    className="w-8 h-8 rounded-lg flex items-center justify-center mb-2 opacity-40"
-                    style={{ backgroundColor: accentColor + "20" }}
-                  >
-                    <span
-                      className="text-base font-bold"
-                      style={{ color: accentColor }}
-                    >
-                      0
-                    </span>
-                  </div>
-                  <p className="text-xs text-muted-foreground/60">No tasks here</p>
-                  <button
-                    onClick={onCreateTask}
-                    className="mt-2 text-[11px] text-muted-foreground/50 hover:text-primary transition-colors"
-                  >
-                    + Add one
-                  </button>
+                <div className="flex flex-col items-center justify-center py-8 px-3 text-center">
+                  <p className="text-[11px] text-muted-foreground/40 font-medium">No tasks</p>
                 </div>
               )}
 
               {/* Drop zone indicator */}
               {isDragOver && (
                 <div
-                  className="flex items-center justify-center py-5 border-2 border-dashed rounded-lg"
-                  style={{ borderColor: accentColor + "60", backgroundColor: accentColor + "08" }}
+                  className="flex items-center justify-center py-4 border-2 border-dashed rounded-lg my-1"
+                  style={{ borderColor: accentColor + "40", backgroundColor: accentColor + "08" }}
                 >
-                  <span className="text-xs font-medium" style={{ color: accentColor }}>
+                  <span className="text-[11px] font-medium" style={{ color: accentColor }}>
                     Drop here
                   </span>
                 </div>
@@ -339,7 +294,7 @@ export default function TaskBoard({
             </div>
 
             {/* ── Inline create footer ── */}
-            <div className="shrink-0 p-2 border-t border-border/20">
+            <div className="shrink-0 px-2 pb-2 pt-1">
               <InlineCreateCard onSubmit={(title) => handleInlineCreate(title, column.key)} />
             </div>
           </div>
@@ -347,38 +302,38 @@ export default function TaskBoard({
       })}
 
       {/* ── Add column ── */}
-      <div className="flex flex-col w-[260px] shrink-0">
+      <div className="flex flex-col w-[280px] shrink-0">
         {showAddColumn ? (
-          <div className="bg-muted/20 border border-border/40 rounded-xl p-3 space-y-2">
+          <div className="bg-muted/30 border border-border/40 rounded-2xl p-4 space-y-3">
             <Input
               value={newColumnName}
               onChange={(e) => setNewColumnName(e.target.value)}
               placeholder="Column name..."
-              className="h-8 text-sm"
+              className="h-9 text-sm rounded-lg"
               autoFocus
               onKeyDown={(e) => {
                 if (e.key === "Enter") handleAddColumn();
                 if (e.key === "Escape") { setShowAddColumn(false); setNewColumnName(""); }
               }}
             />
-            <div className="flex gap-1.5">
+            <div className="flex gap-2">
               <Button
                 size="sm"
-                className="h-7 text-xs flex-1"
+                className="h-8 text-xs flex-1 rounded-lg"
                 onClick={handleAddColumn}
                 disabled={creatingColumn || !newColumnName.trim()}
               >
                 {creatingColumn ? (
-                  <><Loader2 className="w-3 h-3 mr-1.5 animate-spin" />Creating...</>
-                ) : "Create"}
+                  <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />Creating...</>
+                ) : "Create column"}
               </Button>
               <Button
                 size="sm"
                 variant="ghost"
-                className="h-7 text-xs"
+                className="h-8 text-xs rounded-lg"
                 onClick={() => { setShowAddColumn(false); setNewColumnName(""); }}
               >
-                <X className="w-3 h-3" />
+                <X className="w-3.5 h-3.5" />
               </Button>
             </div>
           </div>
@@ -386,11 +341,11 @@ export default function TaskBoard({
           <button
             onClick={() => setShowAddColumn(true)}
             className={cn(
-              "flex-1 flex items-center justify-center gap-2 min-h-[80px] rounded-xl",
-              "border border-dashed border-border/40",
-              "text-muted-foreground/50 hover:text-muted-foreground",
-              "hover:border-border/60 hover:bg-muted/20",
-              "transition-all duration-150 text-xs font-medium"
+              "flex-1 flex items-center justify-center gap-2 min-h-[100px] rounded-2xl",
+              "border-2 border-dashed border-border/30",
+              "text-muted-foreground/40 hover:text-muted-foreground/70",
+              "hover:border-border/50 hover:bg-muted/20",
+              "transition-all duration-200 text-xs font-medium"
             )}
           >
             <Plus className="w-4 h-4" />

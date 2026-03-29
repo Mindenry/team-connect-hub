@@ -12,6 +12,9 @@ import {
   Users,
   ArrowUpDown,
   AlertTriangle,
+  Clock,
+  CircleDot,
+  CircleCheck,
 } from "lucide-react";
 import { apiGet, clearApiCache } from "@/lib/api";
 import { getSocket } from "@/lib/websocket";
@@ -52,11 +55,6 @@ const EMPTY_FILTERS: FilterValues = {
   dueDateFrom: "",
   dueDateTo: "",
 };
-
-const viewConfig: { key: ViewMode; label: string; icon: any }[] = [
-  { key: "board", label: "Board", icon: LayoutGrid },
-  { key: "list", label: "List", icon: List },
-];
 
 const priorityRank: Record<string, number> = {
   urgent: 4,
@@ -314,242 +312,268 @@ export default function Tasks() {
       <div className="flex flex-col h-screen bg-background">
 
         {/* ═══════════════════════════════════════════════════
-            TOP HEADER — title · stats strip · actions
+            PAGE HEADER — consistent with Teams.tsx style
         ═══════════════════════════════════════════════════ */}
-        <header className="shrink-0 h-12 border-b border-border/60 bg-background/98 backdrop-blur-sm flex items-center px-4 sm:px-6 gap-3 z-10">
-          {/* Brand */}
-          <div className="flex items-center gap-2 shrink-0">
-            <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center">
-              <CheckSquare className="w-4 h-4 text-primary" />
-            </div>
-            <span className="text-sm font-semibold tracking-tight">Tasks</span>
-          </div>
+        <div className="shrink-0 border-b border-border/40 bg-background/95 backdrop-blur-xl supports-[backdrop-filter]:bg-background/80">
+          <div className="max-w-7xl mx-auto px-6 lg:px-8">
+            <div className="h-20 flex items-center justify-between gap-6">
+              <div className="flex items-center gap-4 min-w-0 flex-1">
+                <div className="relative">
+                  <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-primary/25 via-primary/10 to-primary/5 flex items-center justify-center shadow-md shadow-primary/10 ring-1 ring-primary/20">
+                    <CheckSquare className="w-6 h-6 text-primary" />
+                  </div>
+                  {taskStats.overdue > 0 && (
+                    <div className="absolute -top-1 -right-1 flex items-center justify-center w-4 h-4 rounded-full bg-red-500 text-[9px] text-white border border-background shadow-sm animate-pulse">
+                      {taskStats.overdue}
+                    </div>
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h1 className="text-xl font-semibold tracking-tight text-foreground">
+                    Tasks
+                  </h1>
+                  <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                    Track, manage and collaborate on your team's work
+                  </p>
+                </div>
+              </div>
 
-          {/* Stats strip — hidden on mobile */}
-          {!loading && (
-            <div className="hidden sm:flex items-center gap-2.5 text-xs ml-2 pl-3 border-l border-border/50">
-              <span className="text-muted-foreground">
-                <span className="font-semibold text-foreground">{taskStats.total}</span> total
-              </span>
-              <span className="text-border/60 select-none">·</span>
-              <span className="font-medium text-primary">{taskStats.inProgress} in progress</span>
-              <span className="text-border/60 select-none">·</span>
-              <span className="text-muted-foreground">{taskStats.done} done</span>
-              {taskStats.overdue > 0 && (
-                <>
-                  <span className="text-border/60 select-none">·</span>
-                  <span className="font-medium text-destructive flex items-center gap-1">
-                    <AlertTriangle className="w-3 h-3" />
-                    {taskStats.overdue} overdue
+              <div className="flex items-center gap-3 shrink-0">
+                <div className="hidden sm:flex items-center gap-2 rounded-xl border border-border/60 bg-background/60 px-3 py-1.5 text-[11px] text-muted-foreground/90">
+                  <span className="inline-flex items-center gap-1">
+                    <CheckSquare className="w-3 h-3" />
+                    <span>{taskStats.total} tasks</span>
                   </span>
-                </>
-              )}
-            </div>
-          )}
+                  <span className="inline-flex items-center gap-1">
+                    <CircleDot className="w-3 h-3 text-blue-500" />
+                    <span className="text-blue-600 dark:text-blue-400">{taskStats.inProgress} active</span>
+                  </span>
+                  <span className="inline-flex items-center gap-1">
+                    <CircleCheck className="w-3 h-3 text-emerald-500" />
+                    <span className="text-emerald-600 dark:text-emerald-400">{taskStats.done} done</span>
+                  </span>
+                </div>
 
-          <div className="flex-1" />
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-9 w-9 border-border/60 bg-background/60 hover:bg-accent hover:text-accent-foreground"
+                      onClick={() => loadData(true)}
+                    >
+                      <RefreshCw className={cn("w-4 h-4", refreshing && "animate-spin")} />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Refresh</TooltipContent>
+                </Tooltip>
 
-          {/* Refresh + New Task */}
-          <div className="flex items-center gap-1.5">
-            <Tooltip>
-              <TooltipTrigger asChild>
                 <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                  onClick={() => loadData(true)}
+                  size="sm"
+                  className="h-9 gap-2 px-3 font-medium"
+                  onClick={() => setCreateDialogOpen(true)}
                 >
-                  <RefreshCw className={cn("w-3.5 h-3.5", refreshing && "animate-spin")} />
+                  <Plus className="w-4 h-4" />
+                  <span className="hidden sm:inline">New Task</span>
                 </Button>
-              </TooltipTrigger>
-              <TooltipContent>Refresh</TooltipContent>
-            </Tooltip>
-
-            <Button
-              size="sm"
-              className="h-8 text-xs gap-1.5 px-3 font-medium"
-              onClick={() => setCreateDialogOpen(true)}
-            >
-              <Plus className="w-3.5 h-3.5" />
-              New Task
-            </Button>
+              </div>
+            </div>
           </div>
-        </header>
+        </div>
 
         {/* ═══════════════════════════════════════════════════
             TOOLBAR — view · team · search · sort · filter
         ═══════════════════════════════════════════════════ */}
-        <div className="shrink-0 border-b border-border/40 bg-background px-4 sm:px-6 h-11 flex items-center gap-2">
+        <div className="shrink-0 border-b border-border/40 bg-muted/20 backdrop-blur-sm">
+          <div className="max-w-[1920px] mx-auto px-4 sm:px-6 lg:px-8 h-12 flex items-center gap-2.5">
 
-          {/* View switcher */}
-          <div className="flex items-center bg-muted/50 rounded-md p-0.5 gap-px border border-border/30">
-            {viewConfig.map(({ key, label, icon: Icon }) => (
-              <button
-                key={key}
-                onClick={() => setActiveView(key)}
-                className={cn(
-                  "flex items-center gap-1.5 px-3 py-1 rounded text-xs font-medium transition-all duration-150",
-                  activeView === key
-                    ? "bg-background shadow-sm text-foreground"
-                    : "text-muted-foreground hover:text-foreground hover:bg-background/50"
-                )}
-              >
-                <Icon className="w-3.5 h-3.5" />
-                {label}
-              </button>
-            ))}
-          </div>
-
-          {/* Team filter */}
-          {myTeams.length > 0 && (
-            <div className="flex items-center bg-muted/50 rounded-md p-0.5 gap-px border border-border/30">
-              {myTeams.length > 1 && (
+            {/* View switcher — pill style */}
+            <div className="flex items-center bg-background rounded-lg p-0.5 gap-0.5 border border-border/40 shadow-sm">
+              {([
+                { key: "board" as ViewMode, label: "Board", icon: LayoutGrid },
+                { key: "list" as ViewMode, label: "List", icon: List },
+              ]).map(({ key, label, icon: Icon }) => (
                 <button
-                  onClick={() => setSelectedTeamId("all")}
+                  key={key}
+                  onClick={() => setActiveView(key)}
                   className={cn(
-                    "flex items-center gap-1 px-2.5 py-1 rounded text-xs transition-all duration-150",
-                    selectedTeamId === "all"
-                      ? "bg-background shadow-sm text-foreground font-medium"
-                      : "text-muted-foreground hover:text-foreground hover:bg-background/50"
+                    "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-150",
+                    activeView === key
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
                   )}
                 >
-                  <Users className="w-3 h-3" />
-                  All
-                </button>
-              )}
-              {myTeams.map((team: any) => (
-                <button
-                  key={team.id}
-                  onClick={() => setSelectedTeamId(team.id)}
-                  className={cn(
-                    "px-2.5 py-1 rounded text-xs truncate max-w-[110px] transition-all duration-150",
-                    selectedTeamId === team.id
-                      ? "bg-background shadow-sm text-foreground font-medium"
-                      : "text-muted-foreground hover:text-foreground hover:bg-background/50"
-                  )}
-                >
-                  {team.name}
+                  <Icon className="w-3.5 h-3.5" />
+                  {label}
                 </button>
               ))}
             </div>
-          )}
 
-          <div className="flex-1" />
+            {/* Divider */}
+            <div className="w-px h-5 bg-border/50 hidden sm:block" />
 
-          {/* Search */}
-          <div className="relative w-44 lg:w-60 shrink-0">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
-            <Input
-              placeholder="Search tasks..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-8 h-8 text-xs bg-muted/30 border-border/40 focus:bg-background focus:border-border transition-colors rounded-md"
-            />
-            {search && (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="absolute right-0.5 top-1/2 -translate-y-1/2 h-7 w-7"
-                onClick={() => setSearch("")}
-              >
-                <X className="w-3 h-3" />
-              </Button>
+            {/* Team filter tabs */}
+            {myTeams.length > 0 && (
+              <div className="hidden sm:flex items-center gap-0.5">
+                {myTeams.length > 1 && (
+                  <button
+                    onClick={() => setSelectedTeamId("all")}
+                    className={cn(
+                      "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-150",
+                      selectedTeamId === "all"
+                        ? "bg-background text-foreground shadow-sm border border-border/50"
+                        : "text-muted-foreground hover:text-foreground hover:bg-background/60"
+                    )}
+                  >
+                    <Users className="w-3 h-3" />
+                    All
+                  </button>
+                )}
+                {myTeams.map((team: any) => (
+                  <button
+                    key={team.id}
+                    onClick={() => setSelectedTeamId(team.id)}
+                    className={cn(
+                      "px-3 py-1.5 rounded-md text-xs font-medium truncate max-w-[120px] transition-all duration-150",
+                      selectedTeamId === team.id
+                        ? "bg-background text-foreground shadow-sm border border-border/50"
+                        : "text-muted-foreground hover:text-foreground hover:bg-background/60"
+                    )}
+                  >
+                    {team.name}
+                  </button>
+                ))}
+              </div>
             )}
-          </div>
 
-          {/* Sort */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-8 text-xs gap-1.5 text-muted-foreground hover:text-foreground px-2.5"
-              >
-                <ArrowUpDown className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Sort</span>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48">
-              {[
-                { value: "updated_desc", label: "Last updated" },
-                { value: "due_asc", label: "Due date (earliest first)" },
-                { value: "priority_desc", label: "Priority (high → low)" },
-                { value: "status_asc", label: "Status" },
-              ].map((opt) => (
-                <DropdownMenuItem
-                  key={opt.value}
-                  onClick={() => setSortMode(opt.value as SortMode)}
-                  className={cn(
-                    "text-xs",
-                    sortMode === opt.value && "text-primary font-medium bg-primary/5"
-                  )}
+            <div className="flex-1" />
+
+            {/* Search */}
+            <div className="relative w-44 lg:w-64 shrink-0">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+              <Input
+                placeholder="Search tasks..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="pl-9 h-9 text-xs bg-background border-border/40 focus:border-primary/50 focus:ring-1 focus:ring-primary/20 rounded-lg transition-all"
+              />
+              {search && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="absolute right-0.5 top-1/2 -translate-y-1/2 h-7 w-7"
+                  onClick={() => setSearch("")}
                 >
-                  {opt.label}
-                  {sortMode === opt.value && (
-                    <span className="ml-auto text-primary text-[10px]">✓</span>
-                  )}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
+                  <X className="w-3 h-3" />
+                </Button>
+              )}
+            </div>
 
-          {/* Filter */}
-          <Button
-            variant="ghost"
-            size="sm"
-            className={cn(
-              "h-8 text-xs gap-1.5 px-2.5 relative",
-              hasActiveFilters
-                ? "text-primary bg-primary/8 hover:bg-primary/12"
-                : "text-muted-foreground hover:text-foreground"
-            )}
-            onClick={() => setFilterDrawerOpen(true)}
-          >
-            <Filter className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Filters</span>
-            {activeFilters.length > 0 && (
-              <span className="bg-primary text-primary-foreground text-[9px] font-bold rounded-full min-w-[16px] h-4 flex items-center justify-center px-1 leading-none">
-                {activeFilters.length}
-              </span>
-            )}
-          </Button>
+            {/* Sort */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-9 text-xs gap-1.5 text-muted-foreground hover:text-foreground px-3 border-border/40"
+                >
+                  <ArrowUpDown className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Sort</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-52">
+                {[
+                  { value: "updated_desc", label: "Last updated" },
+                  { value: "due_asc", label: "Due date (earliest first)" },
+                  { value: "priority_desc", label: "Priority (high → low)" },
+                  { value: "status_asc", label: "Status" },
+                ].map((opt) => (
+                  <DropdownMenuItem
+                    key={opt.value}
+                    onClick={() => setSortMode(opt.value as SortMode)}
+                    className={cn(
+                      "text-xs",
+                      sortMode === opt.value && "text-primary font-medium bg-primary/5"
+                    )}
+                  >
+                    {opt.label}
+                    {sortMode === opt.value && (
+                      <span className="ml-auto text-primary">
+                        <svg className="w-3.5 h-3.5" viewBox="0 0 10 8" fill="none">
+                          <path d="M1 4l3 3 5-6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      </span>
+                    )}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            {/* Filter */}
+            <Button
+              variant={hasActiveFilters ? "default" : "outline"}
+              size="sm"
+              className={cn(
+                "h-9 text-xs gap-1.5 px-3",
+                hasActiveFilters
+                  ? "shadow-sm"
+                  : "text-muted-foreground hover:text-foreground border-border/40"
+              )}
+              onClick={() => setFilterDrawerOpen(true)}
+            >
+              <Filter className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Filters</span>
+              {activeFilters.length > 0 && (
+                <span className={cn(
+                  "text-[9px] font-bold rounded-full min-w-[16px] h-4 flex items-center justify-center px-1 leading-none",
+                  hasActiveFilters
+                    ? "bg-primary-foreground/20 text-primary-foreground"
+                    : "bg-primary text-primary-foreground"
+                )}>
+                  {activeFilters.length}
+                </span>
+              )}
+            </Button>
+          </div>
         </div>
 
         {/* ═══════════════════════════════════════════════════
             ACTIVE FILTER CHIPS
         ═══════════════════════════════════════════════════ */}
         {activeFilters.length > 0 && (
-          <div className="shrink-0 border-b border-border/30 px-4 sm:px-6 py-1.5 bg-muted/15">
-            <FilterChips
-              filters={activeFilters}
-              onRemove={handleRemoveFilter}
-              onClearAll={handleClearAllFilters}
-            />
+          <div className="shrink-0 border-b border-border/30 bg-muted/10">
+            <div className="max-w-[1920px] mx-auto px-4 sm:px-6 lg:px-8 py-2">
+              <FilterChips
+                filters={activeFilters}
+                onRemove={handleRemoveFilter}
+                onClearAll={handleClearAllFilters}
+              />
+            </div>
           </div>
         )}
 
         {/* ═══════════════════════════════════════════════════
             MAIN CONTENT
         ═══════════════════════════════════════════════════ */}
-        <div className="flex-1 overflow-hidden">
+        <div className="flex-1 overflow-hidden bg-muted/10">
           {loading ? (
-            <div className="p-6 space-y-2">
-              {Array.from({ length: 7 }).map((_, i) => (
-                <Skeleton key={i} className="h-14 w-full rounded-lg" />
+            <div className="max-w-[1920px] mx-auto p-6 space-y-3">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <Skeleton key={i} className="h-16 w-full rounded-xl" />
               ))}
             </div>
           ) : errorMessage ? (
             <div className="flex items-center justify-center h-full p-6">
-              <div className="text-center max-w-xs space-y-3">
-                <div className="mx-auto w-10 h-10 rounded-full bg-destructive/10 flex items-center justify-center">
-                  <AlertTriangle className="w-5 h-5 text-destructive" />
+              <div className="text-center max-w-xs space-y-4">
+                <div className="mx-auto w-12 h-12 rounded-2xl bg-destructive/10 flex items-center justify-center">
+                  <AlertTriangle className="w-6 h-6 text-destructive" />
                 </div>
                 <div>
                   <p className="text-sm font-semibold">Couldn't load tasks</p>
-                  <p className="mt-0.5 text-xs text-muted-foreground">{errorMessage}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">{errorMessage}</p>
                 </div>
-                <Button variant="outline" size="sm" onClick={() => loadData(true)}>
-                  <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
+                <Button variant="outline" size="sm" onClick={() => loadData(true)} className="gap-1.5">
+                  <RefreshCw className="w-3.5 h-3.5" />
                   Try again
                 </Button>
               </div>
@@ -583,7 +607,7 @@ export default function Tasks() {
         </div>
 
         {/* ═══════════════════════════════════════════════════
-            OVERLAYS — filter drawer · detail panel · create
+            OVERLAYS
         ═══════════════════════════════════════════════════ */}
         <FilterDrawer
           open={filterDrawerOpen}

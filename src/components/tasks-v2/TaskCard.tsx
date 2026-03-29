@@ -3,7 +3,7 @@ import {
   AlertCircle, ChevronUp, ChevronDown, Minus,
   Calendar, MessageSquare, Paperclip, CheckSquare,
   Plus, SquareCheck, Bug, BookOpen, Zap, Layers,
-  User,
+  User, ArrowUp,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -21,19 +21,19 @@ const issueTypeConfig: Record<string, { icon: any; color: string; bg: string }> 
 const priorityConfig: Record<string, {
   icon: any; color: string; bg: string; label: string; border: string;
 }> = {
-  urgent: { icon: AlertCircle, color: "#ef4444", bg: "bg-red-500/10",    label: "Urgent", border: "border-l-red-500" },
+  urgent: { icon: ArrowUp,     color: "#ef4444", bg: "bg-red-500/10",    label: "Urgent", border: "border-l-red-500" },
   high:   { icon: ChevronUp,   color: "#f97316", bg: "bg-orange-400/10", label: "High",   border: "border-l-orange-400" },
-  medium: { icon: Minus,       color: "#f59e0b", bg: "bg-amber-400/10",  label: "Medium", border: "border-l-amber-400" },
+  medium: { icon: Minus,       color: "#eab308", bg: "bg-yellow-400/10", label: "Medium", border: "border-l-yellow-400" },
   low:    { icon: ChevronDown, color: "hsl(var(--muted-foreground))", bg: "bg-muted/50", label: "Low", border: "border-l-border/40" },
 };
 
 /* ─── STATUS CONFIG ─────────────────────────────────────────────── */
 const statusConfig: Record<string, { label: string; color: string; bg: string; dot: string }> = {
-  todo:        { label: "To Do",       color: "text-slate-500 dark:text-slate-400",   bg: "bg-slate-100 dark:bg-slate-800/60",    dot: "bg-slate-400" },
-  in_progress: { label: "In Progress", color: "text-blue-600 dark:text-blue-400",     bg: "bg-blue-50 dark:bg-blue-900/30",       dot: "bg-blue-500" },
-  in_review:   { label: "In Review",   color: "text-amber-600 dark:text-amber-400",   bg: "bg-amber-50 dark:bg-amber-900/30",     dot: "bg-amber-500" },
-  done:        { label: "Done",        color: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-50 dark:bg-emerald-900/30", dot: "bg-emerald-500" },
-  canceled:    { label: "Canceled",    color: "text-slate-400 dark:text-slate-500",   bg: "bg-slate-100/50 dark:bg-slate-800/30", dot: "bg-slate-300" },
+  todo:        { label: "To Do",       color: "text-slate-600 dark:text-slate-400",     bg: "bg-slate-100 dark:bg-slate-800/60",    dot: "bg-slate-400" },
+  in_progress: { label: "In Progress", color: "text-blue-600 dark:text-blue-400",       bg: "bg-blue-50 dark:bg-blue-900/30",       dot: "bg-blue-500" },
+  in_review:   { label: "In Review",   color: "text-amber-600 dark:text-amber-400",     bg: "bg-amber-50 dark:bg-amber-900/30",     dot: "bg-amber-500" },
+  done:        { label: "Done",        color: "text-emerald-600 dark:text-emerald-400",  bg: "bg-emerald-50 dark:bg-emerald-900/30", dot: "bg-emerald-500" },
+  canceled:    { label: "Canceled",    color: "text-slate-400 dark:text-slate-500",      bg: "bg-slate-100/50 dark:bg-slate-800/30", dot: "bg-slate-300" },
 };
 
 /* ─── TYPES ─────────────────────────────────────────────────────── */
@@ -89,24 +89,24 @@ export function InlineCreateCard({ onSubmit }: { onSubmit: (title: string) => vo
       <button
         onClick={() => { setActive(true); setTimeout(() => inputRef.current?.focus(), 50); }}
         className={cn(
-          "group flex items-center gap-2 w-full px-3 py-2",
-          "text-xs text-muted-foreground/60 hover:text-muted-foreground",
-          "rounded-md border border-transparent hover:border-border/30",
-          "hover:bg-background/60 transition-all duration-150"
+          "group flex items-center gap-2 w-full px-3 py-2.5",
+          "text-xs text-muted-foreground/50 hover:text-muted-foreground",
+          "rounded-xl border border-transparent hover:border-border/30",
+          "hover:bg-background/60 transition-all duration-200"
         )}
         aria-label="Create task in this column"
       >
-        <div className="w-4 h-4 rounded flex items-center justify-center text-muted-foreground/50 group-hover:text-muted-foreground transition-colors">
+        <div className="w-5 h-5 rounded-lg flex items-center justify-center text-muted-foreground/40 group-hover:text-primary/60 group-hover:bg-primary/5 transition-all">
           <Plus className="w-3.5 h-3.5" />
         </div>
-        <span>Add task</span>
+        <span className="font-medium">Add task</span>
       </button>
     );
   }
 
   return (
-    <div className="rounded-md border border-primary/40 bg-background overflow-hidden shadow-sm">
-      <div className="p-1.5">
+    <div className="rounded-xl border border-primary/30 bg-background overflow-hidden shadow-md ring-1 ring-primary/10">
+      <div className="p-2">
         <Input
           ref={inputRef}
           value={title}
@@ -114,15 +114,15 @@ export function InlineCreateCard({ onSubmit }: { onSubmit: (title: string) => vo
           onKeyDown={handleKeyDown}
           onBlur={handleSubmit}
           placeholder="Task title..."
-          className="border-0 h-7 text-xs bg-transparent focus-visible:ring-0 px-1.5"
+          className="border-0 h-8 text-xs bg-transparent focus-visible:ring-0 px-2"
           autoFocus
         />
       </div>
-      <div className="flex items-center gap-1 px-2 pb-1.5 border-t border-border/20">
-        <kbd className="text-[9px] text-muted-foreground/50 bg-muted/40 px-1 py-0.5 rounded font-mono">Enter</kbd>
+      <div className="flex items-center gap-1.5 px-2.5 pb-2 border-t border-border/20 pt-1.5">
+        <kbd className="text-[9px] text-muted-foreground/50 bg-muted/50 px-1.5 py-0.5 rounded font-mono">Enter</kbd>
         <span className="text-[9px] text-muted-foreground/40">save</span>
-        <span className="text-[9px] text-muted-foreground/30 mx-0.5">·</span>
-        <kbd className="text-[9px] text-muted-foreground/50 bg-muted/40 px-1 py-0.5 rounded font-mono">Esc</kbd>
+        <span className="text-[9px] text-muted-foreground/20 mx-0.5">|</span>
+        <kbd className="text-[9px] text-muted-foreground/50 bg-muted/50 px-1.5 py-0.5 rounded font-mono">Esc</kbd>
         <span className="text-[9px] text-muted-foreground/40">cancel</span>
       </div>
     </div>
@@ -130,7 +130,7 @@ export function InlineCreateCard({ onSubmit }: { onSubmit: (title: string) => vo
 }
 
 /* ═══════════════════════════════════════════════════════════════════
-   BOARD CARD — Linear-inspired card with priority left border
+   BOARD CARD — Premium card with glassmorphism + priority accent
 ═══════════════════════════════════════════════════════════════════ */
 function BoardCard({ task, onClick, draggable, onDragStart }: TaskCardProps) {
   const priority = priorityConfig[task.priority] || priorityConfig.medium;
@@ -152,17 +152,14 @@ function BoardCard({ task, onClick, draggable, onDragStart }: TaskCardProps) {
   return (
     <div
       className={cn(
-        // Layout & shape
-        "relative bg-card rounded-lg cursor-pointer select-none",
-        // Border: left accent by priority + outer border
-        "border border-border/50 border-l-[3px]",
+        "group relative bg-card rounded-xl cursor-pointer select-none",
+        "border border-border/40 border-l-[3px]",
         priority.border,
-        // Shadow & hover
-        "shadow-sm hover:shadow-md hover:-translate-y-px",
-        "transition-all duration-150",
-        "hover:border-border/80",
-        // Active press
-        "active:scale-[0.99] active:shadow-sm"
+        "shadow-sm hover:shadow-lg hover:shadow-black/[0.04] dark:hover:shadow-black/20",
+        "hover:-translate-y-0.5",
+        "transition-all duration-200 ease-out",
+        "hover:border-border/60",
+        "active:scale-[0.98] active:shadow-sm"
       )}
       onClick={() => {
         if (hasDraggedRef.current) { hasDraggedRef.current = false; return; }
@@ -171,21 +168,21 @@ function BoardCard({ task, onClick, draggable, onDragStart }: TaskCardProps) {
       draggable={draggable}
       onDragStart={(e) => { hasDraggedRef.current = true; onDragStart?.(e, task); }}
     >
-      <div className="p-3 space-y-2.5">
+      <div className="p-3.5 space-y-3">
 
-        {/* ── Row 1: Type icon + project key + priority ── */}
+        {/* Row 1: Type + project key + priority */}
         <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-1.5 min-w-0">
+          <div className="flex items-center gap-2 min-w-0">
             <Tooltip>
               <TooltipTrigger asChild>
-                <div className={cn("w-4 h-4 rounded flex items-center justify-center shrink-0", issueType.bg)}>
-                  <IssueIcon className="w-2.5 h-2.5" style={{ color: issueType.color }} />
+                <div className={cn("w-5 h-5 rounded-md flex items-center justify-center shrink-0", issueType.bg)}>
+                  <IssueIcon className="w-3 h-3" style={{ color: issueType.color }} />
                 </div>
               </TooltipTrigger>
               <TooltipContent className="text-xs capitalize">{task.issueType || "Task"}</TooltipContent>
             </Tooltip>
             {task.project?.key && (
-              <span className="text-[10px] font-mono text-muted-foreground/70 font-medium truncate">
+              <span className="text-[10px] font-mono text-muted-foreground/60 font-medium truncate">
                 {task.project.key}
               </span>
             )}
@@ -193,7 +190,7 @@ function BoardCard({ task, onClick, draggable, onDragStart }: TaskCardProps) {
 
           <Tooltip>
             <TooltipTrigger asChild>
-              <div className={cn("w-5 h-5 rounded flex items-center justify-center shrink-0", priority.bg)}>
+              <div className={cn("w-5 h-5 rounded-md flex items-center justify-center shrink-0", priority.bg)}>
                 <PriorityIcon className="w-3 h-3" style={{ color: priority.color }} />
               </div>
             </TooltipTrigger>
@@ -201,44 +198,43 @@ function BoardCard({ task, onClick, draggable, onDragStart }: TaskCardProps) {
           </Tooltip>
         </div>
 
-        {/* ── Row 2: Title ── */}
-        <p className="text-[13px] font-medium text-foreground leading-snug line-clamp-2 break-words">
+        {/* Row 2: Title */}
+        <p className="text-[13px] font-semibold text-foreground leading-snug line-clamp-2 break-words group-hover:text-primary/90 transition-colors">
           {task.title}
         </p>
 
-        {/* ── Row 3: Tags (max 2) ── */}
-
+        {/* Row 3: Tags */}
         {task.tags && task.tags.length > 0 && (
           <div className="flex flex-wrap gap-1">
             {task.tags.slice(0, 2).map((tag) => (
               <span
                 key={tag}
-                className="text-[10px] bg-muted/60 text-muted-foreground px-1.5 py-px rounded-sm leading-tight"
+                className="text-[10px] bg-primary/5 text-primary/70 px-2 py-0.5 rounded-full leading-tight font-medium"
               >
                 {tag}
               </span>
             ))}
             {task.tags.length > 2 && (
-              <span className="text-[10px] text-muted-foreground/50">+{task.tags.length - 2}</span>
+              <span className="text-[10px] text-muted-foreground/40 font-medium">+{task.tags.length - 2}</span>
             )}
           </div>
         )}
 
-        {/* ── Row 5: Subtask progress bar ── */}
+        {/* Row 4: Subtask progress bar */}
         {subtaskCount > 0 && (
-          <div className="space-y-1">
+          <div className="space-y-1.5">
             <div className="flex items-center justify-between">
               <span className="text-[10px] text-muted-foreground flex items-center gap-1">
                 <CheckSquare className="w-3 h-3" />
-                {completedSubtasks}/{subtaskCount} subtasks
+                {completedSubtasks}/{subtaskCount}
               </span>
-              <span className="text-[10px] text-muted-foreground font-medium">{subtaskPct}%</span>
+              <span className="text-[10px] text-muted-foreground font-semibold">{subtaskPct}%</span>
             </div>
-            <div className="h-1 bg-muted/50 rounded-full overflow-hidden">
+            <div className="h-1 bg-muted/60 rounded-full overflow-hidden">
               <div
                 className={cn(
-                  "h-full rounded-full transition-all duration-300",
-                  subtaskPct === 100 ? "bg-emerald-500" : "bg-primary/70"
+                  "h-full rounded-full transition-all duration-500 ease-out",
+                  subtaskPct === 100 ? "bg-emerald-500" : "bg-primary/60"
                 )}
                 style={{ width: `${subtaskPct}%` }}
               />
@@ -246,18 +242,18 @@ function BoardCard({ task, onClick, draggable, onDragStart }: TaskCardProps) {
           </div>
         )}
 
-        {/* ── Footer: meta + due + assignee ── */}
-        <div className="flex items-center justify-between pt-2 border-t border-border/20 gap-2">
+        {/* Footer: meta + due + assignee */}
+        <div className="flex items-center justify-between pt-2.5 border-t border-border/15 gap-2">
           {/* Left meta */}
-          <div className="flex items-center gap-2 text-muted-foreground/80 min-w-0">
+          <div className="flex items-center gap-2.5 text-muted-foreground/60 min-w-0">
             {commentCount > 0 && (
-              <span className="flex items-center gap-0.5 text-[10px]">
+              <span className="flex items-center gap-1 text-[10px]">
                 <MessageSquare className="w-3 h-3" />
                 {commentCount}
               </span>
             )}
             {attachmentCount > 0 && (
-              <span className="flex items-center gap-0.5 text-[10px]">
+              <span className="flex items-center gap-1 text-[10px]">
                 <Paperclip className="w-3 h-3" />
                 {attachmentCount}
               </span>
@@ -265,15 +261,15 @@ function BoardCard({ task, onClick, draggable, onDragStart }: TaskCardProps) {
           </div>
 
           {/* Right: due date + assignee */}
-          <div className="flex items-center gap-1.5 shrink-0">
+          <div className="flex items-center gap-2 shrink-0">
             {task.dueDate && (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <span
                     className={cn(
-                      "inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded",
+                      "inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-medium",
                       isOverdue
-                        ? "text-destructive bg-destructive/10 font-medium"
+                        ? "text-red-600 bg-red-50 dark:bg-red-950/50 dark:text-red-400"
                         : "text-muted-foreground bg-muted/50"
                     )}
                   >
@@ -287,14 +283,13 @@ function BoardCard({ task, onClick, draggable, onDragStart }: TaskCardProps) {
               </Tooltip>
             )}
 
-            {/* Assignee — always visible */}
             <Tooltip>
               <TooltipTrigger asChild>
-                <Avatar className="w-5 h-5 border border-background shadow-sm shrink-0">
+                <Avatar className="w-6 h-6 border-2 border-background shadow-sm shrink-0 ring-1 ring-border/20">
                   {task.assignee ? (
                     <>
                       <AvatarImage src={task.assignee.avatar} alt={task.assignee.name} />
-                      <AvatarFallback className="text-[9px] font-semibold bg-primary/10 text-primary">
+                      <AvatarFallback className="text-[9px] font-bold bg-primary/10 text-primary">
                         {initials}
                       </AvatarFallback>
                     </>
@@ -317,7 +312,7 @@ function BoardCard({ task, onClick, draggable, onDragStart }: TaskCardProps) {
 }
 
 /* ═══════════════════════════════════════════════════════════════════
-   LIST ROW — compact table row for the list view
+   LIST ROW — premium table row with hover effects
 ═══════════════════════════════════════════════════════════════════ */
 function BacklogRow({ task, onClick, selected, onSelect }: TaskCardProps) {
   const priority = priorityConfig[task.priority] || priorityConfig.medium;
@@ -335,11 +330,11 @@ function BacklogRow({ task, onClick, selected, onSelect }: TaskCardProps) {
   return (
     <div
       className={cn(
-        "group flex items-center gap-3 px-3 py-2 cursor-pointer",
-        "transition-colors duration-100",
-        "hover:bg-muted/30",
-        "border-b border-border/25 last:border-0",
-        selected && "bg-primary/5 hover:bg-primary/8"
+        "group flex items-center gap-3 px-4 py-2.5 cursor-pointer",
+        "transition-all duration-150",
+        "hover:bg-primary/[0.03] dark:hover:bg-primary/[0.05]",
+        "border-b border-border/20 last:border-0",
+        selected && "bg-primary/5 hover:bg-primary/8 border-l-2 border-l-primary"
       )}
       onClick={() => onClick(task)}
     >
@@ -348,10 +343,10 @@ function BacklogRow({ task, onClick, selected, onSelect }: TaskCardProps) {
         role="checkbox"
         aria-checked={selected}
         className={cn(
-          "shrink-0 w-4 h-4 rounded border flex items-center justify-center transition-all duration-100 cursor-pointer",
+          "shrink-0 w-4 h-4 rounded border flex items-center justify-center transition-all duration-150 cursor-pointer",
           selected
-            ? "bg-primary border-primary text-primary-foreground"
-            : "border-border/50 hover:border-border bg-transparent",
+            ? "bg-primary border-primary text-primary-foreground scale-105"
+            : "border-border/40 hover:border-primary/50 bg-transparent",
           "opacity-0 group-hover:opacity-100",
           selected && "opacity-100"
         )}
@@ -367,8 +362,8 @@ function BacklogRow({ task, onClick, selected, onSelect }: TaskCardProps) {
       {/* Issue type */}
       <Tooltip>
         <TooltipTrigger asChild>
-          <div className={cn("w-4 h-4 rounded flex items-center justify-center shrink-0", issueType.bg)}>
-            <IssueIcon className="w-2.5 h-2.5" style={{ color: issueType.color }} />
+          <div className={cn("w-5 h-5 rounded-md flex items-center justify-center shrink-0", issueType.bg)}>
+            <IssueIcon className="w-3 h-3" style={{ color: issueType.color }} />
           </div>
         </TooltipTrigger>
         <TooltipContent className="text-xs capitalize">{task.issueType || "Task"}</TooltipContent>
@@ -377,21 +372,21 @@ function BacklogRow({ task, onClick, selected, onSelect }: TaskCardProps) {
       {/* Priority */}
       <Tooltip>
         <TooltipTrigger asChild>
-          <div className={cn("w-4 h-4 rounded flex items-center justify-center shrink-0", priority.bg)}>
-            <PriorityIcon className="w-2.5 h-2.5" style={{ color: priority.color }} />
+          <div className={cn("w-5 h-5 rounded-md flex items-center justify-center shrink-0", priority.bg)}>
+            <PriorityIcon className="w-3 h-3" style={{ color: priority.color }} />
           </div>
         </TooltipTrigger>
         <TooltipContent className="text-xs">{priority.label}</TooltipContent>
       </Tooltip>
 
       {/* Title */}
-      <p className="text-[13px] font-medium text-foreground truncate flex-1 min-w-0 group-hover:text-primary transition-colors duration-100">
+      <p className="text-[13px] font-medium text-foreground truncate flex-1 min-w-0 group-hover:text-primary transition-colors duration-150">
         {task.title}
       </p>
 
-      {/* Subtasks count — compact */}
+      {/* Subtasks count */}
       {subtaskCount > 0 && (
-        <span className="hidden md:inline-flex items-center gap-1 text-[10px] text-muted-foreground shrink-0">
+        <span className="hidden md:inline-flex items-center gap-1 text-[10px] text-muted-foreground shrink-0 bg-muted/40 px-2 py-0.5 rounded-full">
           <CheckSquare className="w-3 h-3" />
           {completedSubtasks}/{subtaskCount}
         </span>
@@ -400,7 +395,7 @@ function BacklogRow({ task, onClick, selected, onSelect }: TaskCardProps) {
       {/* Status badge */}
       <span
         className={cn(
-          "hidden sm:inline-flex items-center gap-1.5 text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0",
+          "hidden sm:inline-flex items-center gap-1.5 text-[10px] font-semibold px-2.5 py-1 rounded-full shrink-0",
           s.bg, s.color
         )}
       >
@@ -412,8 +407,8 @@ function BacklogRow({ task, onClick, selected, onSelect }: TaskCardProps) {
       {task.dueDate && (
         <span
           className={cn(
-            "hidden sm:inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded shrink-0",
-            isOverdue ? "text-destructive bg-destructive/10 font-medium" : "text-muted-foreground bg-muted/40"
+            "hidden sm:inline-flex items-center gap-1 text-[10px] px-2 py-1 rounded-full shrink-0 font-medium",
+            isOverdue ? "text-red-600 bg-red-50 dark:bg-red-950/50 dark:text-red-400" : "text-muted-foreground bg-muted/40"
           )}
         >
           <Calendar className="w-3 h-3" />
@@ -424,11 +419,11 @@ function BacklogRow({ task, onClick, selected, onSelect }: TaskCardProps) {
       {/* Assignee */}
       <Tooltip>
         <TooltipTrigger asChild>
-          <Avatar className="w-6 h-6 shrink-0 border border-background shadow-sm">
+          <Avatar className="w-6 h-6 shrink-0 border-2 border-background shadow-sm ring-1 ring-border/20">
             {task.assignee ? (
               <>
                 <AvatarImage src={task.assignee.avatar} alt={task.assignee.name} />
-                <AvatarFallback className="text-[9px] font-semibold bg-primary/10 text-primary">
+                <AvatarFallback className="text-[9px] font-bold bg-primary/10 text-primary">
                   {initials}
                 </AvatarFallback>
               </>
