@@ -330,7 +330,8 @@ export default function TaskDetailDialog({
         setFullTask({ ...fullTask, watchers: watchers.filter((w) => w.userId !== currentUser?.id) });
       } else {
         const w = await apiPost<TaskWatcher>("/task-watchers", { taskId: fullTask.id, userId: currentUser?.id });
-        setFullTask({ ...fullTask, watchers: [...watchers, w] });
+        const newWatcher = { ...w, user: { id: currentUser!.id, name: currentUser!.name, avatar: currentUser!.avatar } };
+        setFullTask({ ...fullTask, watchers: [...watchers, newWatcher] });
       }
     } catch { toast.error("Failed to update watch status"); }
   };
@@ -340,7 +341,7 @@ export default function TaskDetailDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[1050px] w-[95vw] rounded-2xl max-h-[92vh] overflow-hidden p-0 gap-0">
+      <DialogContent className="max-w-[1100px] w-[95vw] rounded-2xl max-h-[92vh] overflow-hidden p-0 gap-0">
         {loading ? (
           <div className="flex items-center justify-center py-24">
             <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
@@ -348,7 +349,7 @@ export default function TaskDetailDialog({
         ) : fullTask ? (
           <div className="flex flex-col max-h-[92vh]">
             {/* ═══ TOP BAR ═══ */}
-            <div className="flex items-center justify-between px-5 py-3 border-b border-border/50 bg-muted/10 shrink-0">
+            <div className="flex items-center justify-between px-5 py-3 border-b border-border/50 bg-muted/10 shrink-0 pr-12">
               <div className="flex items-center gap-2.5">
                 <span className="text-xs text-muted-foreground">กำลังดู:</span>
                 <Avatar className="h-7 w-7">
@@ -361,9 +362,6 @@ export default function TaskDetailDialog({
                   <CheckSquare className="w-3.5 h-3.5" />
                   <span>{subtasks.filter(s => s.isCompleted).length}/{subtasks.length} subtasks</span>
                 </div>
-                <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => onOpenChange(false)}>
-                  <X className="w-4 h-4" />
-                </Button>
               </div>
             </div>
 
@@ -600,9 +598,9 @@ export default function TaskDetailDialog({
               </ScrollArea>
 
               {/* ──────── RIGHT PANEL: Sidebar ──────── */}
-              <div className="w-[300px] border-l border-border/50 bg-muted/5 shrink-0 hidden md:flex flex-col">
+              <div className="w-[320px] border-l border-border/50 bg-muted/5 shrink-0 hidden md:flex flex-col">
                 <ScrollArea className="flex-1">
-                  <div className="p-4 space-y-4">
+                  <div className="p-6 space-y-5">
                     {/* TASK SUMMARY Header */}
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Task Summary</span>
