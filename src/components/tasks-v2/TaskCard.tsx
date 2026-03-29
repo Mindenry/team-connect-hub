@@ -3,7 +3,8 @@ import {
   AlertCircle, ChevronUp, ChevronDown, Minus,
   Calendar, MessageSquare, Paperclip, CheckSquare,
   Plus, SquareCheck, Bug, BookOpen, Zap, Layers,
-  User, ArrowUp,
+  User, ArrowUp, Sparkles, Clock, MoreHorizontal,
+  GripVertical, Eye,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -11,20 +12,52 @@ import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 /* ─── ISSUE TYPE CONFIG ─────────────────────────────────────────── */
-const issueTypeConfig: Record<string, { icon: any; color: string; bg: string }> = {
-  task:    { icon: SquareCheck, color: "hsl(var(--primary))",             bg: "bg-primary/10" },
-  bug:     { icon: Bug,         color: "hsl(var(--destructive))",          bg: "bg-destructive/10" },
-  subtask: { icon: Layers,      color: "hsl(var(--muted-foreground))",    bg: "bg-muted/50" },
+const issueTypeConfig: Record<string, { icon: any; color: string; bg: string; gradient: string }> = {
+  task:    { icon: SquareCheck, color: "#6366f1", bg: "bg-indigo-500/10", gradient: "from-indigo-500/20 to-indigo-500/5" },
+  bug:     { icon: Bug,         color: "#ef4444", bg: "bg-red-500/10",    gradient: "from-red-500/20 to-red-500/5" },
+  subtask: { icon: Layers,      color: "#8b5cf6", bg: "bg-violet-500/10", gradient: "from-violet-500/20 to-violet-500/5" },
 };
 
 /* ─── PRIORITY CONFIG ───────────────────────────────────────────── */
 const priorityConfig: Record<string, {
-  icon: any; color: string; bg: string; label: string; border: string;
+  icon: any; color: string; bg: string; label: string; border: string; gradient: string; glow: string;
 }> = {
-  urgent: { icon: ArrowUp,     color: "#ef4444", bg: "bg-red-500/10",    label: "Urgent", border: "border-l-red-500" },
-  high:   { icon: ChevronUp,   color: "#f97316", bg: "bg-orange-400/10", label: "High",   border: "border-l-orange-400" },
-  medium: { icon: Minus,       color: "#eab308", bg: "bg-yellow-400/10", label: "Medium", border: "border-l-yellow-400" },
-  low:    { icon: ChevronDown, color: "hsl(var(--muted-foreground))", bg: "bg-muted/50", label: "Low", border: "border-l-border/40" },
+  urgent: {
+    icon: ArrowUp,
+    color: "#ef4444",
+    bg: "bg-red-500/10",
+    label: "Urgent",
+    border: "border-l-red-500",
+    gradient: "from-red-500/30 via-red-500/10 to-transparent",
+    glow: "rgba(239, 68, 68, 0.15)"
+  },
+  high: {
+    icon: ChevronUp,
+    color: "#f97316",
+    bg: "bg-orange-500/10",
+    label: "High",
+    border: "border-l-orange-500",
+    gradient: "from-orange-500/25 via-orange-500/8 to-transparent",
+    glow: "rgba(249, 115, 22, 0.12)"
+  },
+  medium: {
+    icon: Minus,
+    color: "#eab308",
+    bg: "bg-yellow-500/10",
+    label: "Medium",
+    border: "border-l-yellow-500",
+    gradient: "from-yellow-500/20 via-yellow-500/5 to-transparent",
+    glow: "rgba(234, 179, 8, 0.08)"
+  },
+  low: {
+    icon: ChevronDown,
+    color: "#64748b",
+    bg: "bg-slate-500/10",
+    label: "Low",
+    border: "border-l-slate-400",
+    gradient: "from-slate-400/15 via-slate-400/5 to-transparent",
+    glow: "rgba(100, 116, 139, 0.05)"
+  },
 };
 
 /* ─── STATUS CONFIG ─────────────────────────────────────────────── */
@@ -65,9 +98,9 @@ interface TaskCardProps {
   onSelect?: (id: string) => void;
 }
 
-/* ═══════════════════════════════════════════════════════════════════
-   INLINE CREATE — keyboard-first quick task creation
-═══════════════════════════════════════════════════════════════════ */
+/* ════════════════════════════════════════════════════════════════════════════
+   INLINE CREATE - Premium quick task creation with keyboard shortcuts
+   ════════════════════════════════════════════════════════════════════════════ */
 export function InlineCreateCard({ onSubmit }: { onSubmit: (title: string) => void }) {
   const [active, setActive] = useState(false);
   const [title, setTitle] = useState("");
@@ -89,14 +122,14 @@ export function InlineCreateCard({ onSubmit }: { onSubmit: (title: string) => vo
       <button
         onClick={() => { setActive(true); setTimeout(() => inputRef.current?.focus(), 50); }}
         className={cn(
-          "group flex items-center gap-2 w-full px-3 py-2.5",
-          "text-xs text-muted-foreground/50 hover:text-muted-foreground",
+          "group flex items-center gap-2.5 w-full px-3 py-2.5",
+          "text-xs text-muted-foreground/40 hover:text-muted-foreground/80",
           "rounded-xl border border-transparent hover:border-border/30",
           "hover:bg-background/60 transition-all duration-200"
         )}
         aria-label="Create task in this column"
       >
-        <div className="w-5 h-5 rounded-lg flex items-center justify-center text-muted-foreground/40 group-hover:text-primary/60 group-hover:bg-primary/5 transition-all">
+        <div className="w-6 h-6 rounded-lg flex items-center justify-center bg-muted/20 group-hover:bg-primary/10 text-muted-foreground/30 group-hover:text-primary/60 transition-all duration-200">
           <Plus className="w-3.5 h-3.5" />
         </div>
         <span className="font-medium">Add task</span>
@@ -105,7 +138,7 @@ export function InlineCreateCard({ onSubmit }: { onSubmit: (title: string) => vo
   }
 
   return (
-    <div className="rounded-xl border border-primary/30 bg-background overflow-hidden shadow-md ring-1 ring-primary/10">
+    <div className="rounded-xl border border-primary/30 bg-background overflow-hidden shadow-lg ring-1 ring-primary/10 transition-all duration-200">
       <div className="p-2">
         <Input
           ref={inputRef}
@@ -129,9 +162,9 @@ export function InlineCreateCard({ onSubmit }: { onSubmit: (title: string) => vo
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════════
-   BOARD CARD — Premium card with glassmorphism + priority accent
-═══════════════════════════════════════════════════════════════════ */
+/* ════════════════════════════════════════════════════════════════════════════
+   BOARD CARD - Premium glass-morphism card with priority accent
+   ════════════════════════════════════════════════════════════════════════════ */
 function BoardCard({ task, onClick, draggable, onDragStart }: TaskCardProps) {
   const priority = priorityConfig[task.priority] || priorityConfig.medium;
   const PriorityIcon = priority.icon;
@@ -141,6 +174,7 @@ function BoardCard({ task, onClick, draggable, onDragStart }: TaskCardProps) {
     || task.assignee?.name?.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()
     || "";
   const hasDraggedRef = useRef(false);
+  const [isHovered, setIsHovered] = useState(false);
 
   const commentCount   = task._count?.comments    ?? task.comments?.length    ?? 0;
   const attachmentCount = task._count?.attachments ?? task.attachments?.length ?? 0;
@@ -153,36 +187,53 @@ function BoardCard({ task, onClick, draggable, onDragStart }: TaskCardProps) {
     <div
       className={cn(
         "group relative bg-card rounded-xl cursor-pointer select-none",
-        "border border-border/40 border-l-[3px]",
+        "border border-border/30 border-l-[3px]",
         priority.border,
-        "shadow-sm hover:shadow-lg hover:shadow-black/[0.04] dark:hover:shadow-black/20",
-        "hover:-translate-y-0.5",
-        "transition-all duration-200 ease-out",
-        "hover:border-border/60",
-        "active:scale-[0.98] active:shadow-sm"
+        "shadow-sm",
+        "hover:shadow-xl hover:shadow-black/[0.08] dark:hover:shadow-black/30",
+        "hover:-translate-y-0.5 hover:scale-[1.01]",
+        "transition-all duration-300 ease-out",
+        "hover:border-border/50",
+        "active:scale-[0.98] active:shadow-md",
+        "overflow-hidden"
       )}
+      style={{
+        boxShadow: isHovered ? `0 8px 24px -8px ${priority.glow}` : undefined
+      }}
       onClick={() => {
         if (hasDraggedRef.current) { hasDraggedRef.current = false; return; }
         onClick(task);
       }}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
       draggable={draggable}
       onDragStart={(e) => { hasDraggedRef.current = true; onDragStart?.(e, task); }}
     >
-      <div className="p-3.5 space-y-3">
+      {/* Priority gradient overlay */}
+      <div
+        className={cn(
+          "absolute inset-0 bg-gradient-to-r opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none",
+          priority.gradient
+        )}
+      />
 
+      <div className="relative p-3.5 space-y-3">
         {/* Row 1: Type + project key + priority */}
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0">
             <Tooltip>
               <TooltipTrigger asChild>
-                <div className={cn("w-5 h-5 rounded-md flex items-center justify-center shrink-0", issueType.bg)}>
-                  <IssueIcon className="w-3 h-3" style={{ color: issueType.color }} />
+                <div
+                  className={cn("w-6 h-6 rounded-lg flex items-center justify-center shrink-0 transition-all duration-200 group-hover:scale-110", issueType.bg)}
+                  style={{ boxShadow: `0 2px 8px ${issueType.color}20` }}
+                >
+                  <IssueIcon className="w-3.5 h-3.5" style={{ color: issueType.color }} />
                 </div>
               </TooltipTrigger>
               <TooltipContent className="text-xs capitalize">{task.issueType || "Task"}</TooltipContent>
             </Tooltip>
             {task.project?.key && (
-              <span className="text-[10px] font-mono text-muted-foreground/60 font-medium truncate">
+              <span className="text-[10px] font-mono text-muted-foreground/50 font-semibold tracking-wide uppercase">
                 {task.project.key}
               </span>
             )}
@@ -190,8 +241,11 @@ function BoardCard({ task, onClick, draggable, onDragStart }: TaskCardProps) {
 
           <Tooltip>
             <TooltipTrigger asChild>
-              <div className={cn("w-5 h-5 rounded-md flex items-center justify-center shrink-0", priority.bg)}>
-                <PriorityIcon className="w-3 h-3" style={{ color: priority.color }} />
+              <div
+                className={cn("w-6 h-6 rounded-lg flex items-center justify-center shrink-0 transition-all duration-200 group-hover:scale-110", priority.bg)}
+                style={{ boxShadow: `0 2px 8px ${priority.color}15` }}
+              >
+                <PriorityIcon className="w-3.5 h-3.5" style={{ color: priority.color }} />
               </div>
             </TooltipTrigger>
             <TooltipContent className="text-xs">{priority.label} priority</TooltipContent>
@@ -199,7 +253,7 @@ function BoardCard({ task, onClick, draggable, onDragStart }: TaskCardProps) {
         </div>
 
         {/* Row 2: Title */}
-        <p className="text-[13px] font-semibold text-foreground leading-snug line-clamp-2 break-words group-hover:text-primary/90 transition-colors">
+        <p className="text-[13px] font-semibold text-foreground leading-snug line-clamp-2 break-words group-hover:text-primary/90 transition-colors duration-200">
           {task.title}
         </p>
 
@@ -209,13 +263,13 @@ function BoardCard({ task, onClick, draggable, onDragStart }: TaskCardProps) {
             {task.tags.slice(0, 2).map((tag) => (
               <span
                 key={tag}
-                className="text-[10px] bg-primary/5 text-primary/70 px-2 py-0.5 rounded-full leading-tight font-medium"
+                className="text-[10px] bg-primary/8 text-primary/70 px-2 py-0.5 rounded-full leading-tight font-medium border border-primary/10"
               >
                 {tag}
               </span>
             ))}
             {task.tags.length > 2 && (
-              <span className="text-[10px] text-muted-foreground/40 font-medium">+{task.tags.length - 2}</span>
+              <span className="text-[10px] text-muted-foreground/50 font-semibold">+{task.tags.length - 2}</span>
             )}
           </div>
         )}
@@ -224,17 +278,17 @@ function BoardCard({ task, onClick, draggable, onDragStart }: TaskCardProps) {
         {subtaskCount > 0 && (
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
-              <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+              <span className="text-[10px] text-muted-foreground flex items-center gap-1 font-medium">
                 <CheckSquare className="w-3 h-3" />
                 {completedSubtasks}/{subtaskCount}
               </span>
-              <span className="text-[10px] text-muted-foreground font-semibold">{subtaskPct}%</span>
+              <span className="text-[10px] font-bold text-muted-foreground">{subtaskPct}%</span>
             </div>
-            <div className="h-1 bg-muted/60 rounded-full overflow-hidden">
+            <div className="h-1.5 bg-muted/60 rounded-full overflow-hidden">
               <div
                 className={cn(
                   "h-full rounded-full transition-all duration-500 ease-out",
-                  subtaskPct === 100 ? "bg-emerald-500" : "bg-primary/60"
+                  subtaskPct === 100 ? "bg-gradient-to-r from-emerald-400 to-emerald-500" : "bg-gradient-to-r from-primary/70 to-primary"
                 )}
                 style={{ width: `${subtaskPct}%` }}
               />
@@ -247,13 +301,13 @@ function BoardCard({ task, onClick, draggable, onDragStart }: TaskCardProps) {
           {/* Left meta */}
           <div className="flex items-center gap-2.5 text-muted-foreground/60 min-w-0">
             {commentCount > 0 && (
-              <span className="flex items-center gap-1 text-[10px]">
+              <span className="flex items-center gap-1 text-[10px] font-medium">
                 <MessageSquare className="w-3 h-3" />
                 {commentCount}
               </span>
             )}
             {attachmentCount > 0 && (
-              <span className="flex items-center gap-1 text-[10px]">
+              <span className="flex items-center gap-1 text-[10px] font-medium">
                 <Paperclip className="w-3 h-3" />
                 {attachmentCount}
               </span>
@@ -267,10 +321,10 @@ function BoardCard({ task, onClick, draggable, onDragStart }: TaskCardProps) {
                 <TooltipTrigger asChild>
                   <span
                     className={cn(
-                      "inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-medium",
+                      "inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-semibold transition-all duration-200",
                       isOverdue
-                        ? "text-red-600 bg-red-50 dark:bg-red-950/50 dark:text-red-400"
-                        : "text-muted-foreground bg-muted/50"
+                        ? "text-red-600 bg-red-50 dark:bg-red-950/50 dark:text-red-400 ring-1 ring-red-200 dark:ring-red-800"
+                        : "text-muted-foreground bg-muted/40"
                     )}
                   >
                     <Calendar className="w-3 h-3" />
@@ -285,7 +339,7 @@ function BoardCard({ task, onClick, draggable, onDragStart }: TaskCardProps) {
 
             <Tooltip>
               <TooltipTrigger asChild>
-                <Avatar className="w-6 h-6 border-2 border-background shadow-sm shrink-0 ring-1 ring-border/20">
+                <Avatar className="w-6 h-6 border-2 border-background shadow-sm shrink-0 ring-1 ring-border/20 transition-transform duration-200 group-hover:scale-110">
                   {task.assignee ? (
                     <>
                       <AvatarImage src={task.assignee.avatar} alt={task.assignee.name} />
@@ -307,13 +361,20 @@ function BoardCard({ task, onClick, draggable, onDragStart }: TaskCardProps) {
           </div>
         </div>
       </div>
+
+      {/* Drag handle indicator */}
+      {isHovered && draggable && (
+        <div className="absolute left-0 top-1/2 -translate-y-1/2 p-1 opacity-50">
+          <GripVertical className="w-3 h-3 text-muted-foreground" />
+        </div>
+      )}
     </div>
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════════
-   LIST ROW — premium table row with hover effects
-═══════════════════════════════════════════════════════════════════ */
+/* ════════════════════════════════════════════════════════════════════════════
+   LIST ROW - Premium table row with hover effects
+   ════════════════════════════════════════════════════════════════════════════ */
 function BacklogRow({ task, onClick, selected, onSelect }: TaskCardProps) {
   const priority = priorityConfig[task.priority] || priorityConfig.medium;
   const PriorityIcon = priority.icon;
@@ -330,10 +391,10 @@ function BacklogRow({ task, onClick, selected, onSelect }: TaskCardProps) {
   return (
     <div
       className={cn(
-        "group flex items-center gap-3 px-4 py-2.5 cursor-pointer",
-        "transition-all duration-150",
-        "hover:bg-primary/[0.03] dark:hover:bg-primary/[0.05]",
-        "border-b border-border/20 last:border-0",
+        "group flex items-center gap-3 px-4 py-3 cursor-pointer",
+        "transition-all duration-200",
+        "hover:bg-primary/[0.04] dark:hover:bg-primary/[0.06]",
+        "border-b border-border/15 last:border-0",
         selected && "bg-primary/5 hover:bg-primary/8 border-l-2 border-l-primary"
       )}
       onClick={() => onClick(task)}
@@ -343,9 +404,9 @@ function BacklogRow({ task, onClick, selected, onSelect }: TaskCardProps) {
         role="checkbox"
         aria-checked={selected}
         className={cn(
-          "shrink-0 w-4 h-4 rounded border flex items-center justify-center transition-all duration-150 cursor-pointer",
+          "shrink-0 w-4 h-4 rounded border flex items-center justify-center transition-all duration-200 cursor-pointer",
           selected
-            ? "bg-primary border-primary text-primary-foreground scale-105"
+            ? "bg-primary border-primary text-primary-foreground scale-110"
             : "border-border/40 hover:border-primary/50 bg-transparent",
           "opacity-0 group-hover:opacity-100",
           selected && "opacity-100"
@@ -362,7 +423,9 @@ function BacklogRow({ task, onClick, selected, onSelect }: TaskCardProps) {
       {/* Issue type */}
       <Tooltip>
         <TooltipTrigger asChild>
-          <div className={cn("w-5 h-5 rounded-md flex items-center justify-center shrink-0", issueType.bg)}>
+          <div
+            className={cn("w-5 h-5 rounded-md flex items-center justify-center shrink-0 transition-transform duration-200 group-hover:scale-110", issueType.bg)}
+          >
             <IssueIcon className="w-3 h-3" style={{ color: issueType.color }} />
           </div>
         </TooltipTrigger>
@@ -372,7 +435,9 @@ function BacklogRow({ task, onClick, selected, onSelect }: TaskCardProps) {
       {/* Priority */}
       <Tooltip>
         <TooltipTrigger asChild>
-          <div className={cn("w-5 h-5 rounded-md flex items-center justify-center shrink-0", priority.bg)}>
+          <div
+            className={cn("w-5 h-5 rounded-md flex items-center justify-center shrink-0 transition-transform duration-200 group-hover:scale-110", priority.bg)}
+          >
             <PriorityIcon className="w-3 h-3" style={{ color: priority.color }} />
           </div>
         </TooltipTrigger>
@@ -380,13 +445,13 @@ function BacklogRow({ task, onClick, selected, onSelect }: TaskCardProps) {
       </Tooltip>
 
       {/* Title */}
-      <p className="text-[13px] font-medium text-foreground truncate flex-1 min-w-0 group-hover:text-primary transition-colors duration-150">
+      <p className="text-[13px] font-medium text-foreground truncate flex-1 min-w-0 group-hover:text-primary transition-colors duration-200">
         {task.title}
       </p>
 
       {/* Subtasks count */}
       {subtaskCount > 0 && (
-        <span className="hidden md:inline-flex items-center gap-1 text-[10px] text-muted-foreground shrink-0 bg-muted/40 px-2 py-0.5 rounded-full">
+        <span className="hidden md:inline-flex items-center gap-1 text-[10px] text-muted-foreground shrink-0 bg-muted/40 px-2 py-0.5 rounded-full font-medium">
           <CheckSquare className="w-3 h-3" />
           {completedSubtasks}/{subtaskCount}
         </span>
@@ -407,7 +472,7 @@ function BacklogRow({ task, onClick, selected, onSelect }: TaskCardProps) {
       {task.dueDate && (
         <span
           className={cn(
-            "hidden sm:inline-flex items-center gap-1 text-[10px] px-2 py-1 rounded-full shrink-0 font-medium",
+            "hidden sm:inline-flex items-center gap-1 text-[10px] px-2 py-1 rounded-full shrink-0 font-semibold",
             isOverdue ? "text-red-600 bg-red-50 dark:bg-red-950/50 dark:text-red-400" : "text-muted-foreground bg-muted/40"
           )}
         >
@@ -419,7 +484,7 @@ function BacklogRow({ task, onClick, selected, onSelect }: TaskCardProps) {
       {/* Assignee */}
       <Tooltip>
         <TooltipTrigger asChild>
-          <Avatar className="w-6 h-6 shrink-0 border-2 border-background shadow-sm ring-1 ring-border/20">
+          <Avatar className="w-6 h-6 shrink-0 border-2 border-background shadow-sm ring-1 ring-border/20 transition-transform duration-200 group-hover:scale-110">
             {task.assignee ? (
               <>
                 <AvatarImage src={task.assignee.avatar} alt={task.assignee.name} />
@@ -440,9 +505,9 @@ function BacklogRow({ task, onClick, selected, onSelect }: TaskCardProps) {
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════════
+/* ════════════════════════════════════════════════════════════════════════════
    EXPORT
-═══════════════════════════════════════════════════════════════════ */
+   ════════════════════════════════════════════════════════════════════════════ */
 export default function TaskCard(props: TaskCardProps) {
   if (props.variant === "backlog") return <BacklogRow {...props} />;
   return <BoardCard {...props} />;

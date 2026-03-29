@@ -15,12 +15,23 @@ import {
   Clock,
   CircleDot,
   CircleCheck,
+  Sparkles,
+  Kanban,
+  SlidersHorizontal,
+  CalendarDays,
+  TrendingUp,
+  Target,
+  Zap,
+  ChevronDown,
+  Layers,
+  BarChart3,
 } from "lucide-react";
 import { apiGet, clearApiCache } from "@/lib/api";
 import { getSocket } from "@/lib/websocket";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Badge } from "@/components/ui/badge";
 import {
   Tooltip,
   TooltipContent,
@@ -31,6 +42,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
@@ -71,6 +83,9 @@ const statusRank: Record<string, number> = {
   canceled: 5,
 };
 
+/* ════════════════════════════════════════════════════════════════════════════
+   TASKS PAGE - Premium Professional Design (Linear/Notion-inspired)
+   ════════════════════════════════════════════════════════════════════════════ */
 export default function Tasks() {
   const location = useLocation();
   const { user } = useAuth();
@@ -268,9 +283,12 @@ export default function Tasks() {
   const taskStats = useMemo(
     () => ({
       total: visibleTasks.length,
+      todo: visibleTasks.filter((t) => t.status === "todo").length,
       inProgress: visibleTasks.filter((t) => t.status === "in_progress").length,
+      inReview: visibleTasks.filter((t) => t.status === "in_review").length,
       done: visibleTasks.filter((t) => t.status === "done").length,
       overdue: visibleTasks.filter((t) => t.dueDate && new Date(t.dueDate) < new Date() && t.status !== "done").length,
+      highPriority: visibleTasks.filter((t) => t.priority === "urgent" || t.priority === "high").length,
     }),
     [visibleTasks],
   );
@@ -309,86 +327,188 @@ export default function Tasks() {
 
   return (
     <TooltipProvider>
-      <div className="flex flex-col h-screen bg-background">
-
-        {/* ═══════════════════════════════════════════════════
-            PAGE HEADER — consistent with Teams.tsx style
-        ═══════════════════════════════════════════════════ */}
-        <div className="shrink-0 border-b border-border/40 bg-background/95 backdrop-blur-xl supports-[backdrop-filter]:bg-background/80">
-          <div className="max-w-7xl mx-auto px-6 lg:px-8">
-            <div className="h-20 flex items-center justify-between gap-6">
-              <div className="flex items-center gap-4 min-w-0 flex-1">
-                <div className="relative">
-                  <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-primary/25 via-primary/10 to-primary/5 flex items-center justify-center shadow-md shadow-primary/10 ring-1 ring-primary/20">
-                    <CheckSquare className="w-6 h-6 text-primary" />
-                  </div>
-                  {taskStats.overdue > 0 && (
-                    <div className="absolute -top-1 -right-1 flex items-center justify-center w-4 h-4 rounded-full bg-red-500 text-[9px] text-white border border-background shadow-sm animate-pulse">
-                      {taskStats.overdue}
+      <div className="flex flex-col h-screen bg-gradient-to-br from-background via-background to-muted/30">
+        
+        {/* ══════════════════════════════════════════════════════════════════
+            PREMIUM HEADER - Glass morphism with stats dashboard
+        ══════════════════════════════════════════════════════════════════ */}
+        <div className="shrink-0 relative">
+          {/* Gradient accent */}
+          <div className="absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-primary/5 via-primary/2 to-transparent pointer-events-none" />
+          
+          <div className="relative border-b border-border/30 bg-background/80 backdrop-blur-xl">
+            <div className="max-w-[1800px] mx-auto px-6 lg:px-8">
+              {/* Main header row */}
+              <div className="h-16 flex items-center justify-between gap-6">
+                <div className="flex items-center gap-4 min-w-0 flex-1">
+                  {/* Logo with animated ring */}
+                  <div className="relative">
+                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary via-primary/90 to-primary/70 flex items-center justify-center shadow-lg shadow-primary/20 ring-1 ring-primary/30">
+                      <Kanban className="w-5 h-5 text-primary-foreground" />
                     </div>
-                  )}
+                    {taskStats.overdue > 0 && (
+                      <div className="absolute -top-1 -right-1 flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-[9px] font-bold text-white border-2 border-background shadow-lg animate-pulse">
+                        {taskStats.overdue}
+                      </div>
+                    )}
+                  </div>
+                  
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <h1 className="text-lg font-bold tracking-tight text-foreground">
+                        Task Management
+                      </h1>
+                      <Badge variant="secondary" className="text-[10px] font-semibold px-2 py-0.5 rounded-full">
+                        {taskStats.total} total
+                      </Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Organize, track, and deliver your team's work
+                    </p>
+                  </div>
                 </div>
-                <div className="min-w-0 flex-1">
-                  <h1 className="text-xl font-semibold tracking-tight text-foreground">
-                    Tasks
-                  </h1>
-                  <p className="text-xs text-muted-foreground mt-0.5 truncate">
-                    Track, manage and collaborate on your team's work
-                  </p>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  {/* Quick stats */}
+                  <div className="hidden lg:flex items-center gap-1 px-3 py-1.5 rounded-xl bg-muted/30 border border-border/30">
+                    <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg hover:bg-background/50 transition-colors cursor-default">
+                      <CircleDot className="w-3.5 h-3.5 text-blue-500" />
+                      <span className="text-xs font-semibold text-blue-600 dark:text-blue-400">{taskStats.inProgress}</span>
+                    </div>
+                    <div className="w-px h-4 bg-border/40" />
+                    <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg hover:bg-background/50 transition-colors cursor-default">
+                      <CircleCheck className="w-3.5 h-3.5 text-emerald-500" />
+                      <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">{taskStats.done}</span>
+                    </div>
+                    {taskStats.overdue > 0 && (
+                      <>
+                        <div className="w-px h-4 bg-border/40" />
+                        <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-red-50 dark:bg-red-950/30">
+                          <AlertTriangle className="w-3.5 h-3.5 text-red-500" />
+                          <span className="text-xs font-semibold text-red-600 dark:text-red-400">{taskStats.overdue}</span>
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  <div className="w-px h-6 bg-border/40 hidden lg:block" />
+
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 rounded-lg hover:bg-muted/50"
+                        onClick={() => loadData(true)}
+                        disabled={refreshing}
+                      >
+                        <RefreshCw className={cn("w-4 h-4", refreshing && "animate-spin")} />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Refresh</TooltipContent>
+                  </Tooltip>
+
+                  <Button
+                    size="sm"
+                    className="h-8 gap-2 px-4 font-semibold shadow-md shadow-primary/20 hover:shadow-lg hover:shadow-primary/30 transition-all"
+                    onClick={() => setCreateDialogOpen(true)}
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span className="hidden sm:inline">New Task</span>
+                  </Button>
                 </div>
               </div>
+            </div>
+          </div>
 
-              <div className="flex items-center gap-3 shrink-0">
-                <div className="hidden sm:flex items-center gap-2 rounded-xl border border-border/60 bg-background/60 px-3 py-1.5 text-[11px] text-muted-foreground/90">
-                  <span className="inline-flex items-center gap-1">
-                    <CheckSquare className="w-3 h-3" />
-                    <span>{taskStats.total} tasks</span>
-                  </span>
-                  <span className="inline-flex items-center gap-1">
-                    <CircleDot className="w-3 h-3 text-blue-500" />
-                    <span className="text-blue-600 dark:text-blue-400">{taskStats.inProgress} active</span>
-                  </span>
-                  <span className="inline-flex items-center gap-1">
-                    <CircleCheck className="w-3 h-3 text-emerald-500" />
-                    <span className="text-emerald-600 dark:text-emerald-400">{taskStats.done} done</span>
-                  </span>
+          {/* ══════════════════════════════════════════════════════════════════
+              STATS CARDS - Premium dashboard metrics
+          ══════════════════════════════════════════════════════════════════ */}
+          <div className="relative bg-muted/10 border-b border-border/20">
+            <div className="max-w-[1800px] mx-auto px-6 lg:px-8 py-3">
+              <div className="flex items-center gap-3 overflow-x-auto pb-1">
+                {/* Todo */}
+                <div className="flex items-center gap-2.5 px-4 py-2 rounded-xl bg-slate-50 dark:bg-slate-900/30 border border-slate-200/50 dark:border-slate-800/50 min-w-[140px] group hover:shadow-md transition-all">
+                  <div className="w-8 h-8 rounded-lg bg-slate-200 dark:bg-slate-800 flex items-center justify-center shrink-0">
+                    <Target className="w-4 h-4 text-slate-600 dark:text-slate-400" />
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground font-medium">To Do</p>
+                    <p className="text-lg font-bold text-slate-700 dark:text-slate-300">{taskStats.todo}</p>
+                  </div>
                 </div>
 
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      className="h-9 w-9 border-border/60 bg-background/60 hover:bg-accent hover:text-accent-foreground"
-                      onClick={() => loadData(true)}
-                    >
-                      <RefreshCw className={cn("w-4 h-4", refreshing && "animate-spin")} />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Refresh</TooltipContent>
-                </Tooltip>
+                {/* In Progress */}
+                <div className="flex items-center gap-2.5 px-4 py-2 rounded-xl bg-blue-50 dark:bg-blue-950/30 border border-blue-200/50 dark:border-blue-800/50 min-w-[140px] group hover:shadow-md transition-all">
+                  <div className="w-8 h-8 rounded-lg bg-blue-200 dark:bg-blue-800 flex items-center justify-center shrink-0">
+                    <Zap className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground font-medium">In Progress</p>
+                    <p className="text-lg font-bold text-blue-700 dark:text-blue-300">{taskStats.inProgress}</p>
+                  </div>
+                </div>
 
-                <Button
-                  size="sm"
-                  className="h-9 gap-2 px-3 font-medium"
-                  onClick={() => setCreateDialogOpen(true)}
-                >
-                  <Plus className="w-4 h-4" />
-                  <span className="hidden sm:inline">New Task</span>
-                </Button>
+                {/* In Review */}
+                <div className="flex items-center gap-2.5 px-4 py-2 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200/50 dark:border-amber-800/50 min-w-[140px] group hover:shadow-md transition-all">
+                  <div className="w-8 h-8 rounded-lg bg-amber-200 dark:bg-amber-800 flex items-center justify-center shrink-0">
+                    <Layers className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground font-medium">In Review</p>
+                    <p className="text-lg font-bold text-amber-700 dark:text-amber-300">{taskStats.inReview}</p>
+                  </div>
+                </div>
+
+                {/* Done */}
+                <div className="flex items-center gap-2.5 px-4 py-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200/50 dark:border-emerald-800/50 min-w-[140px] group hover:shadow-md transition-all">
+                  <div className="w-8 h-8 rounded-lg bg-emerald-200 dark:bg-emerald-800 flex items-center justify-center shrink-0">
+                    <CircleCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground font-medium">Completed</p>
+                    <p className="text-lg font-bold text-emerald-700 dark:text-emerald-300">{taskStats.done}</p>
+                  </div>
+                </div>
+
+                {/* High Priority */}
+                {taskStats.highPriority > 0 && (
+                  <div className="flex items-center gap-2.5 px-4 py-2 rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-200/50 dark:border-red-800/50 min-w-[140px] group hover:shadow-md transition-all">
+                    <div className="w-8 h-8 rounded-lg bg-red-200 dark:bg-red-800 flex items-center justify-center shrink-0 animate-pulse">
+                      <TrendingUp className="w-4 h-4 text-red-600 dark:text-red-400" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground font-medium">High Priority</p>
+                      <p className="text-lg font-bold text-red-700 dark:text-red-300">{taskStats.highPriority}</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Completion Rate */}
+                <div className="flex items-center gap-2.5 px-4 py-2 rounded-xl bg-purple-50 dark:bg-purple-950/30 border border-purple-200/50 dark:border-purple-800/50 min-w-[160px] group hover:shadow-md transition-all">
+                  <div className="w-8 h-8 rounded-lg bg-purple-200 dark:bg-purple-800 flex items-center justify-center shrink-0">
+                    <BarChart3 className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground font-medium">Completion</p>
+                    <p className="text-lg font-bold text-purple-700 dark:text-purple-300">
+                      {taskStats.total > 0 ? Math.round((taskStats.done / taskStats.total) * 100) : 0}%
+                    </p>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
         </div>
 
-        {/* ═══════════════════════════════════════════════════
-            TOOLBAR — view · team · search · sort · filter
-        ═══════════════════════════════════════════════════ */}
-        <div className="shrink-0 border-b border-border/40 bg-muted/20 backdrop-blur-sm">
-          <div className="max-w-[1920px] mx-auto px-4 sm:px-6 lg:px-8 h-12 flex items-center gap-2.5">
-
-            {/* View switcher — pill style */}
-            <div className="flex items-center bg-background rounded-lg p-0.5 gap-0.5 border border-border/40 shadow-sm">
+        {/* ══════════════════════════════════════════════════════════════════
+            COMMAND BAR - View, Team, Search, Sort, Filter
+        ══════════════════════════════════════════════════════════════════ */}
+        <div className="shrink-0 bg-background/95 backdrop-blur-sm border-b border-border/30">
+          <div className="max-w-[1800px] mx-auto px-6 lg:px-8 h-11 flex items-center gap-3">
+            
+            {/* View switcher */}
+            <div className="flex items-center bg-muted/40 rounded-lg p-0.5 gap-0.5">
               {([
                 { key: "board" as ViewMode, label: "Board", icon: LayoutGrid },
                 { key: "list" as ViewMode, label: "List", icon: List },
@@ -397,10 +517,10 @@ export default function Tasks() {
                   key={key}
                   onClick={() => setActiveView(key)}
                   className={cn(
-                    "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-150",
+                    "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all duration-200",
                     activeView === key
-                      ? "bg-primary text-primary-foreground shadow-sm"
-                      : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                      ? "bg-background text-foreground shadow-sm ring-1 ring-border/50"
+                      : "text-muted-foreground hover:text-foreground hover:bg-background/50"
                   )}
                 >
                   <Icon className="w-3.5 h-3.5" />
@@ -409,83 +529,77 @@ export default function Tasks() {
               ))}
             </div>
 
-            {/* Divider */}
-            <div className="w-px h-5 bg-border/50 hidden sm:block" />
+            <div className="w-px h-5 bg-border/40" />
 
-            {/* Team filter tabs */}
+            {/* Team selector */}
             {myTeams.length > 0 && (
-              <div className="hidden sm:flex items-center gap-0.5">
-                {myTeams.length > 1 && (
-                  <button
-                    onClick={() => setSelectedTeamId("all")}
-                    className={cn(
-                      "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-150",
-                      selectedTeamId === "all"
-                        ? "bg-background text-foreground shadow-sm border border-border/50"
-                        : "text-muted-foreground hover:text-foreground hover:bg-background/60"
-                    )}
-                  >
-                    <Users className="w-3 h-3" />
-                    All
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors">
+                    <Users className="w-3.5 h-3.5" />
+                    <span className="max-w-[100px] truncate">
+                      {selectedTeamId === "all" ? "All Teams" : myTeams.find((t: any) => t.id === selectedTeamId)?.name || "Team"}
+                    </span>
+                    <ChevronDown className="w-3 h-3 opacity-50" />
                   </button>
-                )}
-                {myTeams.map((team: any) => (
-                  <button
-                    key={team.id}
-                    onClick={() => setSelectedTeamId(team.id)}
-                    className={cn(
-                      "px-3 py-1.5 rounded-md text-xs font-medium truncate max-w-[120px] transition-all duration-150",
-                      selectedTeamId === team.id
-                        ? "bg-background text-foreground shadow-sm border border-border/50"
-                        : "text-muted-foreground hover:text-foreground hover:bg-background/60"
-                    )}
-                  >
-                    {team.name}
-                  </button>
-                ))}
-              </div>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="min-w-[160px]">
+                  {myTeams.length > 1 && (
+                    <DropdownMenuItem
+                      onClick={() => setSelectedTeamId("all")}
+                      className={cn("text-xs", selectedTeamId === "all" && "bg-primary/5 text-primary font-medium")}
+                    >
+                      All Teams
+                    </DropdownMenuItem>
+                  )}
+                  <DropdownMenuSeparator />
+                  {myTeams.map((team: any) => (
+                    <DropdownMenuItem
+                      key={team.id}
+                      onClick={() => setSelectedTeamId(team.id)}
+                      className={cn("text-xs", selectedTeamId === team.id && "bg-primary/5 text-primary font-medium")}
+                    >
+                      {team.name}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
             )}
 
             <div className="flex-1" />
 
             {/* Search */}
-            <div className="relative w-44 lg:w-64 shrink-0">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+            <div className="relative w-48 lg:w-64 shrink-0">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground/50 pointer-events-none" />
               <Input
                 placeholder="Search tasks..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="pl-9 h-9 text-xs bg-background border-border/40 focus:border-primary/50 focus:ring-1 focus:ring-primary/20 rounded-lg transition-all"
+                className="pl-9 h-8 text-xs bg-muted/30 border-border/30 focus:border-primary/40 focus:bg-background rounded-lg transition-all"
               />
               {search && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="absolute right-0.5 top-1/2 -translate-y-1/2 h-7 w-7"
+                <button
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-muted/50 transition-colors"
                   onClick={() => setSearch("")}
                 >
-                  <X className="w-3 h-3" />
-                </Button>
+                  <X className="w-3 h-3 text-muted-foreground" />
+                </button>
               )}
             </div>
 
             {/* Sort */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-9 text-xs gap-1.5 text-muted-foreground hover:text-foreground px-3 border-border/40"
-                >
+                <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors">
                   <ArrowUpDown className="w-3.5 h-3.5" />
                   <span className="hidden sm:inline">Sort</span>
-                </Button>
+                </button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-52">
+              <DropdownMenuContent align="end" className="w-48">
                 {[
                   { value: "updated_desc", label: "Last updated" },
-                  { value: "due_asc", label: "Due date (earliest first)" },
-                  { value: "priority_desc", label: "Priority (high → low)" },
+                  { value: "due_asc", label: "Due date" },
+                  { value: "priority_desc", label: "Priority" },
                   { value: "status_asc", label: "Status" },
                 ].map((opt) => (
                   <DropdownMenuItem
@@ -493,7 +607,7 @@ export default function Tasks() {
                     onClick={() => setSortMode(opt.value as SortMode)}
                     className={cn(
                       "text-xs",
-                      sortMode === opt.value && "text-primary font-medium bg-primary/5"
+                      sortMode === opt.value && "bg-primary/5 text-primary font-medium"
                     )}
                   >
                     {opt.label}
@@ -510,39 +624,33 @@ export default function Tasks() {
             </DropdownMenu>
 
             {/* Filter */}
-            <Button
-              variant={hasActiveFilters ? "default" : "outline"}
-              size="sm"
-              className={cn(
-                "h-9 text-xs gap-1.5 px-3",
-                hasActiveFilters
-                  ? "shadow-sm"
-                  : "text-muted-foreground hover:text-foreground border-border/40"
-              )}
+            <button
               onClick={() => setFilterDrawerOpen(true)}
+              className={cn(
+                "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all",
+                hasActiveFilters
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted/40"
+              )}
             >
-              <Filter className="w-3.5 h-3.5" />
+              <SlidersHorizontal className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">Filters</span>
               {activeFilters.length > 0 && (
                 <span className={cn(
-                  "text-[9px] font-bold rounded-full min-w-[16px] h-4 flex items-center justify-center px-1 leading-none",
-                  hasActiveFilters
-                    ? "bg-primary-foreground/20 text-primary-foreground"
-                    : "bg-primary text-primary-foreground"
+                  "text-[9px] font-bold rounded-full min-w-[16px] h-4 flex items-center justify-center px-1",
+                  hasActiveFilters ? "bg-primary-foreground/20 text-primary-foreground" : "bg-primary text-primary-foreground"
                 )}>
                   {activeFilters.length}
                 </span>
               )}
-            </Button>
+            </button>
           </div>
         </div>
 
-        {/* ═══════════════════════════════════════════════════
-            ACTIVE FILTER CHIPS
-        ═══════════════════════════════════════════════════ */}
+        {/* Active filter chips */}
         {activeFilters.length > 0 && (
-          <div className="shrink-0 border-b border-border/30 bg-muted/10">
-            <div className="max-w-[1920px] mx-auto px-4 sm:px-6 lg:px-8 py-2">
+          <div className="shrink-0 bg-muted/5 border-b border-border/20">
+            <div className="max-w-[1800px] mx-auto px-6 lg:px-8 py-2">
               <FilterChips
                 filters={activeFilters}
                 onRemove={handleRemoveFilter}
@@ -552,28 +660,37 @@ export default function Tasks() {
           </div>
         )}
 
-        {/* ═══════════════════════════════════════════════════
-            MAIN CONTENT
-        ═══════════════════════════════════════════════════ */}
-        <div className="flex-1 overflow-hidden bg-muted/10">
+        {/* ══════════════════════════════════════════════════════════════════
+            MAIN CONTENT AREA
+        ══════════════════════════════════════════════════════════════════ */}
+        <div className="flex-1 overflow-hidden bg-muted/5">
           {loading ? (
-            <div className="max-w-[1920px] mx-auto p-6 space-y-3">
-              {Array.from({ length: 5 }).map((_, i) => (
-                <Skeleton key={i} className="h-16 w-full rounded-xl" />
-              ))}
+            <div className="max-w-[1800px] mx-auto p-6 space-y-4">
+              <div className="flex gap-4">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} className="w-72 shrink-0">
+                    <Skeleton className="h-8 w-24 mb-3 rounded-lg" />
+                    <div className="space-y-2">
+                      {Array.from({ length: 3 }).map((_, j) => (
+                        <Skeleton key={j} className="h-28 rounded-xl" />
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           ) : errorMessage ? (
             <div className="flex items-center justify-center h-full p-6">
-              <div className="text-center max-w-xs space-y-4">
-                <div className="mx-auto w-12 h-12 rounded-2xl bg-destructive/10 flex items-center justify-center">
-                  <AlertTriangle className="w-6 h-6 text-destructive" />
+              <div className="text-center max-w-sm space-y-4">
+                <div className="mx-auto w-14 h-14 rounded-2xl bg-red-50 dark:bg-red-950/30 flex items-center justify-center ring-1 ring-red-200 dark:ring-red-800">
+                  <AlertTriangle className="w-7 h-7 text-red-500" />
                 </div>
                 <div>
-                  <p className="text-sm font-semibold">Couldn't load tasks</p>
-                  <p className="mt-1 text-xs text-muted-foreground">{errorMessage}</p>
+                  <p className="text-base font-semibold">Couldn't load tasks</p>
+                  <p className="mt-1 text-sm text-muted-foreground">{errorMessage}</p>
                 </div>
-                <Button variant="outline" size="sm" onClick={() => loadData(true)} className="gap-1.5">
-                  <RefreshCw className="w-3.5 h-3.5" />
+                <Button variant="outline" size="sm" onClick={() => loadData(true)} className="gap-2 rounded-lg">
+                  <RefreshCw className="w-4 h-4" />
                   Try again
                 </Button>
               </div>
@@ -606,9 +723,9 @@ export default function Tasks() {
           )}
         </div>
 
-        {/* ═══════════════════════════════════════════════════
+        {/* ══════════════════════════════════════════════════════════════════
             OVERLAYS
-        ═══════════════════════════════════════════════════ */}
+        ══════════════════════════════════════════════════════════════════ */}
         <FilterDrawer
           open={filterDrawerOpen}
           onOpenChange={setFilterDrawerOpen}

@@ -3,13 +3,28 @@ import { cn } from "@/lib/utils";
 import TaskCard, { InlineCreateCard, type TaskCardData } from "./TaskCard";
 import EmptyState from "./EmptyState";
 import { apiPost, apiPatch, apiGet } from "@/lib/api";
-import { Plus, MoreHorizontal, Loader2, X, GripVertical } from "lucide-react";
+import {
+  Plus,
+  MoreHorizontal,
+  Loader2,
+  X,
+  GripVertical,
+  Sparkles,
+  Kanban,
+  CircleDot,
+  CheckCircle2,
+  Clock,
+  Eye,
+  Trash2,
+  Settings2,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -19,6 +34,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 /* ─── TYPES ─────────────────────────────────────────────────────── */
 export interface WorkflowStatus {
@@ -32,7 +48,7 @@ export interface WorkflowStatus {
 
 /* ─── FALLBACK COLUMNS ──────────────────────────────────────────── */
 const FALLBACK_COLUMNS: WorkflowStatus[] = [
-  { id: "fb-1", key: "todo",        name: "To Do",       color: "#94a3b8", category: "todo",  position: 0 },
+  { id: "fb-1", key: "todo",        name: "To Do",       color: "#64748b", category: "todo",  position: 0 },
   { id: "fb-2", key: "in_progress", name: "In Progress", color: "#3b82f6", category: "doing", position: 1 },
   { id: "fb-3", key: "in_review",   name: "In Review",   color: "#f59e0b", category: "doing", position: 2 },
   { id: "fb-4", key: "done",        name: "Done",        color: "#10b981", category: "done",  position: 3 },
@@ -45,7 +61,16 @@ function getColumnAccent(column: WorkflowStatus): string {
     case "done":  return "#10b981";
     case "doing":
       return column.key.includes("review") ? "#f59e0b" : "#3b82f6";
-    default:      return "#94a3b8";
+    default:      return "#64748b";
+  }
+}
+
+/* ─── Column icon based on category ─────────────────────────────── */
+function getColumnIcon(category: string) {
+  switch (category) {
+    case "done": return CheckCircle2;
+    case "doing": return Clock;
+    default: return CircleDot;
   }
 }
 
@@ -60,9 +85,9 @@ interface TaskBoardProps {
   statuses?: WorkflowStatus[];
 }
 
-/* ═══════════════════════════════════════════════════════════════════
-   TASK BOARD — Premium Kanban
-═══════════════════════════════════════════════════════════════════ */
+/* ════════════════════════════════════════════════════════════════════════════
+   TASK BOARD - Premium Glass-morphism Kanban (Linear-inspired)
+   ════════════════════════════════════════════════════════════════════════════ */
 export default function TaskBoard({
   tasks,
   onTaskClick,
@@ -78,6 +103,7 @@ export default function TaskBoard({
   const [showAddColumn, setShowAddColumn]     = useState(false);
   const [newColumnName, setNewColumnName]     = useState("");
   const [creatingColumn, setCreatingColumn]   = useState(false);
+  const [hoveredColumn, setHoveredColumn]     = useState<string | null>(null);
   const scrollRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   const tasksByStatus = useMemo(() => {
@@ -167,7 +193,7 @@ export default function TaskBoard({
     try {
       const key     = newColumnName.toLowerCase().replace(/\s+/g, "_");
       const created = await apiPost<WorkflowStatus>("/task-statuses", {
-        name: newColumnName.trim(), key, color: "#94a3b8",
+        name: newColumnName.trim(), key, color: "#64748b",
         category: "todo", position: columns.length, teamId,
       });
       if (created) {
@@ -175,7 +201,7 @@ export default function TaskBoard({
       } else {
         setColumns((prev) => [...prev, {
           id: `col-${Date.now()}`, key, name: newColumnName.trim(),
-          color: "#94a3b8", category: "todo", position: prev.length,
+          color: "#64748b", category: "todo", position: prev.length,
         }]);
       }
       setNewColumnName("");
@@ -184,7 +210,7 @@ export default function TaskBoard({
       const key = newColumnName.toLowerCase().replace(/\s+/g, "_");
       setColumns((prev) => [...prev, {
         id: `col-${Date.now()}`, key, name: newColumnName.trim(),
-        color: "#94a3b8", category: "todo", position: prev.length,
+        color: "#64748b", category: "todo", position: prev.length,
       }]);
       setNewColumnName("");
       setShowAddColumn(false);
@@ -198,70 +224,120 @@ export default function TaskBoard({
   }
 
   return (
-    <div className="h-full flex gap-3 overflow-x-auto px-6 py-4 pb-6">
+    <div className="h-full flex gap-4 overflow-x-auto px-6 py-5 pb-8">
       {columns.map((column) => {
         const columnTasks  = tasksByStatus[column.key] || [];
         const isDragOver   = dragOverColumn === column.key;
         const accentColor  = getColumnAccent(column);
+        const ColumnIcon   = getColumnIcon(column.category);
+        const isHovered    = hoveredColumn === column.key;
 
         return (
           <div
             key={column.key}
             className={cn(
               "flex flex-col h-full min-h-0",
-              "w-[280px] shrink-0",
-              "rounded-xl",
-              "bg-muted/20 border border-border/30",
-              "transition-all duration-200",
-              isDragOver && "border-primary/40 bg-primary/[0.02] shadow-lg shadow-primary/5"
+              "w-[300px] shrink-0",
+              "rounded-2xl",
+              "bg-gradient-to-b from-muted/30 via-muted/20 to-muted/10",
+              "border border-border/30",
+              "transition-all duration-300 ease-out",
+              isDragOver && "border-primary/50 bg-primary/[0.03] shadow-xl shadow-primary/10 scale-[1.01]",
+              isHovered && "border-border/50"
             )}
+            onMouseEnter={() => setHoveredColumn(column.key)}
+            onMouseLeave={() => setHoveredColumn(null)}
             onDragOver={(e) => handleDragOver(e, column.key)}
             onDragLeave={handleDragLeave}
             onDrop={(e) => handleDrop(e, column.key)}
           >
             {/* ── Column header ── */}
-            <div className="shrink-0 px-3 pt-3 pb-2 flex items-center justify-between gap-2 border-b border-border/20">
-              <div className="flex items-center gap-2 min-w-0">
-                <div
-                  className="w-2 h-2 rounded-full shrink-0"
-                  style={{ backgroundColor: accentColor }}
-                />
-                <span className="text-[13px] font-semibold text-foreground truncate">
-                  {column.name}
-                </span>
-                <span
-                  className="text-[11px] font-bold px-1.5 py-0.5 rounded-md shrink-0 leading-tight"
-                  style={{
-                    backgroundColor: accentColor + "18",
-                    color: accentColor,
-                  }}
-                >
-                  {columnTasks.length}
-                </span>
-              </div>
+            <div className="shrink-0 px-4 pt-4 pb-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  {/* Icon with accent */}
+                  <div
+                    className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 shadow-sm transition-all duration-200"
+                    style={{
+                      backgroundColor: accentColor + "15",
+                      boxShadow: `0 2px 8px ${accentColor}20`
+                    }}
+                  >
+                    <ColumnIcon className="w-4 h-4" style={{ color: accentColor }} />
+                  </div>
+                  
+                  <div className="min-w-0">
+                    <h3 className="text-sm font-semibold text-foreground truncate tracking-tight">
+                      {column.name}
+                    </h3>
+                  </div>
+                  
+                  {/* Task count pill */}
+                  <span
+                    className="text-[11px] font-bold px-2 py-0.5 rounded-md shrink-0 leading-tight transition-all duration-200"
+                    style={{
+                      backgroundColor: accentColor + "18",
+                      color: accentColor,
+                    }}
+                  >
+                    {columnTasks.length}
+                  </span>
+                </div>
 
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6 text-muted-foreground/60 hover:text-foreground rounded-md opacity-0 group-hover:opacity-100 transition-opacity"
-                onClick={onCreateTask}
-              >
-                <Plus className="w-3.5 h-3.5" />
-              </Button>
+                {/* Column actions */}
+                <div className={cn(
+                  "flex items-center gap-1 transition-opacity duration-200",
+                  isHovered ? "opacity-100" : "opacity-0"
+                )}>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button className="p-1.5 rounded-lg hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors">
+                        <MoreHorizontal className="w-4 h-4" />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-40">
+                      <DropdownMenuItem className="text-xs gap-2" onClick={onCreateTask}>
+                        <Plus className="w-3.5 h-3.5" />
+                        Add task
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem className="text-xs gap-2 text-muted-foreground">
+                        <Settings2 className="w-3.5 h-3.5" />
+                        Edit column
+                      </DropdownMenuItem>
+                      <DropdownMenuItem className="text-xs gap-2 text-red-600 dark:text-red-400">
+                        <Trash2 className="w-3.5 h-3.5" />
+                        Delete column
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+              </div>
+              
+              {/* Progress bar for done column */}
+              {column.category === "done" && columnTasks.length > 0 && (
+                <div className="mt-3 h-1 bg-muted/50 rounded-full overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-emerald-500 transition-all duration-500"
+                    style={{ width: `${Math.min(100, (columnTasks.length / tasks.length) * 100)}%` }}
+                  />
+                </div>
+              )}
             </div>
 
             {/* ── Cards container ── */}
             <div
               ref={(el) => { scrollRefs.current[column.key] = el; }}
-              className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-2 py-2 space-y-2"
+              className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-3 pb-3 space-y-2.5"
             >
-              {columnTasks.map((task) => (
+              {columnTasks.map((task, index) => (
                 <div
                   key={task.id}
                   className={cn(
-                    "transition-all duration-200",
-                    draggingTaskId === task.id && "opacity-30 scale-95"
+                    "transition-all duration-200 ease-out",
+                    draggingTaskId === task.id && "opacity-30 scale-95 rotate-1"
                   )}
+                  style={{ animationDelay: `${index * 30}ms` }}
                 >
                   <TaskCard
                     task={task}
@@ -275,26 +351,45 @@ export default function TaskBoard({
 
               {/* Empty column state */}
               {columnTasks.length === 0 && !isDragOver && (
-                <div className="flex flex-col items-center justify-center py-8 px-3 text-center">
-                  <p className="text-[11px] text-muted-foreground/40 font-medium">No tasks</p>
+                <div className="flex flex-col items-center justify-center py-10 px-4 text-center">
+                  <div
+                    className="w-12 h-12 rounded-2xl flex items-center justify-center mb-3"
+                    style={{ backgroundColor: accentColor + "10" }}
+                  >
+                    <Kanban className="w-6 h-6" style={{ color: accentColor + "60" }} />
+                  </div>
+                  <p className="text-xs text-muted-foreground/50 font-medium">No tasks yet</p>
+                  <p className="text-[10px] text-muted-foreground/30 mt-1">Drag tasks here</p>
                 </div>
               )}
 
               {/* Drop zone indicator */}
               {isDragOver && (
                 <div
-                  className="flex items-center justify-center py-4 border-2 border-dashed rounded-lg my-1"
-                  style={{ borderColor: accentColor + "40", backgroundColor: accentColor + "08" }}
+                  className="flex items-center justify-center py-6 border-2 border-dashed rounded-xl my-2 transition-all duration-200"
+                  style={{
+                    borderColor: accentColor + "50",
+                    backgroundColor: accentColor + "08",
+                    boxShadow: `inset 0 0 20px ${accentColor}10`
+                  }}
                 >
-                  <span className="text-[11px] font-medium" style={{ color: accentColor }}>
-                    Drop here
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <div
+                      className="w-6 h-6 rounded-lg flex items-center justify-center"
+                      style={{ backgroundColor: accentColor + "20" }}
+                    >
+                      <Plus className="w-3.5 h-3.5" style={{ color: accentColor }} />
+                    </div>
+                    <span className="text-xs font-semibold" style={{ color: accentColor }}>
+                      Drop here
+                    </span>
+                  </div>
                 </div>
               )}
             </div>
 
             {/* ── Inline create footer ── */}
-            <div className="shrink-0 px-2 pb-2 pt-1">
+            <div className="shrink-0 px-3 pb-3 pt-1">
               <InlineCreateCard onSubmit={(title) => handleInlineCreate(title, column.key)} />
             </div>
           </div>
@@ -302,14 +397,18 @@ export default function TaskBoard({
       })}
 
       {/* ── Add column ── */}
-      <div className="flex flex-col w-[280px] shrink-0">
+      <div className="flex flex-col w-[300px] shrink-0">
         {showAddColumn ? (
-          <div className="bg-muted/30 border border-border/40 rounded-2xl p-4 space-y-3">
+          <div className="bg-gradient-to-b from-muted/40 via-muted/30 to-muted/20 border border-border/40 rounded-2xl p-4 space-y-3 shadow-lg">
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <Sparkles className="w-4 h-4" />
+              <span className="text-xs font-medium">New Column</span>
+            </div>
             <Input
               value={newColumnName}
               onChange={(e) => setNewColumnName(e.target.value)}
               placeholder="Column name..."
-              className="h-9 text-sm rounded-lg"
+              className="h-9 text-sm rounded-xl bg-background/50 border-border/40"
               autoFocus
               onKeyDown={(e) => {
                 if (e.key === "Enter") handleAddColumn();
@@ -319,7 +418,7 @@ export default function TaskBoard({
             <div className="flex gap-2">
               <Button
                 size="sm"
-                className="h-8 text-xs flex-1 rounded-lg"
+                className="h-8 text-xs flex-1 rounded-xl font-semibold"
                 onClick={handleAddColumn}
                 disabled={creatingColumn || !newColumnName.trim()}
               >
@@ -330,7 +429,7 @@ export default function TaskBoard({
               <Button
                 size="sm"
                 variant="ghost"
-                className="h-8 text-xs rounded-lg"
+                className="h-8 text-xs rounded-xl px-3"
                 onClick={() => { setShowAddColumn(false); setNewColumnName(""); }}
               >
                 <X className="w-3.5 h-3.5" />
@@ -341,15 +440,17 @@ export default function TaskBoard({
           <button
             onClick={() => setShowAddColumn(true)}
             className={cn(
-              "flex-1 flex items-center justify-center gap-2 min-h-[100px] rounded-2xl",
-              "border-2 border-dashed border-border/30",
+              "flex-1 flex flex-col items-center justify-center gap-3 min-h-[120px] rounded-2xl",
+              "border-2 border-dashed border-border/25",
               "text-muted-foreground/40 hover:text-muted-foreground/70",
-              "hover:border-border/50 hover:bg-muted/20",
-              "transition-all duration-200 text-xs font-medium"
+              "hover:border-border/40 hover:bg-muted/10",
+              "transition-all duration-300 group"
             )}
           >
-            <Plus className="w-4 h-4" />
-            Add column
+            <div className="w-10 h-10 rounded-xl bg-muted/20 flex items-center justify-center group-hover:bg-muted/30 group-hover:scale-110 transition-all duration-200">
+              <Plus className="w-5 h-5" />
+            </div>
+            <span className="text-xs font-medium">Add column</span>
           </button>
         )}
       </div>
