@@ -115,10 +115,10 @@ export function PDFViewer({ url, name, variant = "default" }: PDFViewerProps) {
             </div>
 
             {/* PDF Content */}
-            <div className="flex-1 w-full relative bg-gray-100 dark:bg-black/95">
+            <div className="flex-1 w-full bg-gray-100 dark:bg-black relative">
               <iframe
                 src={`${url}#view=FitH`}
-                className="w-full h-full border-none absolute inset-0 z-10 bg-white"
+                className="w-full h-full border-none"
                 title={name}
                 loading="lazy"
               />
