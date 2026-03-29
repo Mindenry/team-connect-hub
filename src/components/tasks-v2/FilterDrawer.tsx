@@ -1,6 +1,7 @@
-import { Filter } from "lucide-react";
+import { Filter, Calendar } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -14,6 +15,8 @@ export interface FilterValues {
   priority: string;
   assigneeId: string;
   status: string;
+  dueDateFrom: string;
+  dueDateTo: string;
 }
 
 interface FilterDrawerProps {
@@ -124,6 +127,34 @@ export default function FilterDrawer({
             placeholder="Anyone"
             items={users.map((u) => ({ value: u.id, label: u.name }))}
           />
+
+          {/* Due Date Range */}
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+              <Calendar className="w-3 h-3" />
+              Due Date Range
+            </Label>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <Label className="text-[10px] text-muted-foreground">From</Label>
+                <Input
+                  type="date"
+                  value={filters.dueDateFrom || ""}
+                  onChange={(e) => onFilterChange("dueDateFrom", e.target.value)}
+                  className="h-9 text-sm"
+                />
+              </div>
+              <div>
+                <Label className="text-[10px] text-muted-foreground">To</Label>
+                <Input
+                  type="date"
+                  value={filters.dueDateTo || ""}
+                  onChange={(e) => onFilterChange("dueDateTo", e.target.value)}
+                  className="h-9 text-sm"
+                />
+              </div>
+            </div>
+          </div>
         </div>
       </SheetContent>
     </Sheet>

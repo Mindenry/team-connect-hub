@@ -53,6 +53,8 @@ const EMPTY_FILTERS: FilterValues = {
   priority: "",
   assigneeId: "",
   status: "",
+  dueDateFrom: "",
+  dueDateTo: "",
 };
 
 const viewConfig: { key: ViewMode; label: string; icon: any }[] = [
@@ -133,6 +135,8 @@ export default function Tasks() {
         if (filters.status) params.set("status", filters.status);
         if (filters.assigneeId) params.set("assigneeId", filters.assigneeId);
         if (filters.priority) params.set("priority", filters.priority);
+        if (filters.dueDateFrom) params.set("dueDateFrom", filters.dueDateFrom);
+        if (filters.dueDateTo) params.set("dueDateTo", filters.dueDateTo);
         if (search) params.set("search", search);
         if (selectedTeamId !== "all") params.set("teamId", selectedTeamId);
         const qs = params.toString() ? `?${params.toString()}` : "";
@@ -258,6 +262,12 @@ export default function Tasks() {
       const found = users.find((u) => u.id === filters.assigneeId);
       chips.push({ key: "assigneeId", label: "Assignee", value: filters.assigneeId, displayValue: found?.name || "User" });
     }
+    if (filters.dueDateFrom || filters.dueDateTo) {
+      const from = filters.dueDateFrom ? new Date(filters.dueDateFrom).toLocaleDateString() : "";
+      const to = filters.dueDateTo ? new Date(filters.dueDateTo).toLocaleDateString() : "";
+      const display = from && to ? `${from} - ${to}` : from || to;
+      chips.push({ key: "dueDateFrom", label: "Due Date", value: `${filters.dueDateFrom}|${filters.dueDateTo}`, displayValue: display });
+    }
     return chips;
   }, [filters, users]);
 
@@ -274,7 +284,13 @@ export default function Tasks() {
 
   const handleFilterChange = (key: keyof FilterValues, value: string) =>
     setFilters((prev) => ({ ...prev, [key]: value }));
-  const handleRemoveFilter = (key: string) => setFilters((prev) => ({ ...prev, [key]: "" }));
+  const handleRemoveFilter = (key: string) => {
+    if (key === "dueDateFrom") {
+      setFilters((prev) => ({ ...prev, dueDateFrom: "", dueDateTo: "" }));
+    } else {
+      setFilters((prev) => ({ ...prev, [key]: "" }));
+    }
+  };
   const handleClearAllFilters = () => {
     setFilters({ ...EMPTY_FILTERS });
     setSearch("");
