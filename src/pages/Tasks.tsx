@@ -427,71 +427,50 @@ export default function Tasks() {
           <div className="relative bg-muted/10 border-b border-border/20">
             <div className="max-w-[1800px] mx-auto px-6 lg:px-8 py-3">
               <div className="flex items-center gap-3 overflow-x-auto pb-1">
-                {/* Todo */}
-                <div className="flex items-center gap-2.5 px-4 py-2 rounded-xl bg-slate-50 dark:bg-slate-900/30 border border-slate-200/50 dark:border-slate-800/50 min-w-[140px] group hover:shadow-md transition-all">
-                  <div className="w-8 h-8 rounded-lg bg-slate-200 dark:bg-slate-800 flex items-center justify-center shrink-0">
-                    <Target className="w-4 h-4 text-slate-600 dark:text-slate-400" />
-                  </div>
+                {/* Total */}
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-muted/30 border border-border/40 min-w-[100px]">
+                  <CheckSquare className="w-4 h-4 text-muted-foreground" />
                   <div>
-                    <p className="text-xs text-muted-foreground font-medium">To Do</p>
-                    <p className="text-lg font-bold text-slate-700 dark:text-slate-300">{taskStats.todo}</p>
+                    <p className="text-[10px] text-muted-foreground font-medium">Total</p>
+                    <p className="text-sm font-bold">{taskStats.total}</p>
                   </div>
                 </div>
 
                 {/* In Progress */}
-                <div className="flex items-center gap-2.5 px-4 py-2 rounded-xl bg-blue-50 dark:bg-blue-950/30 border border-blue-200/50 dark:border-blue-800/50 min-w-[140px] group hover:shadow-md transition-all">
-                  <div className="w-8 h-8 rounded-lg bg-blue-200 dark:bg-blue-800 flex items-center justify-center shrink-0">
-                    <Zap className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                  </div>
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary/5 border border-primary/20 min-w-[100px]">
+                  <Clock className="w-4 h-4 text-primary" />
                   <div>
-                    <p className="text-xs text-muted-foreground font-medium">In Progress</p>
-                    <p className="text-lg font-bold text-blue-700 dark:text-blue-300">{taskStats.inProgress}</p>
-                  </div>
-                </div>
-
-                {/* In Review */}
-                <div className="flex items-center gap-2.5 px-4 py-2 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200/50 dark:border-amber-800/50 min-w-[140px] group hover:shadow-md transition-all">
-                  <div className="w-8 h-8 rounded-lg bg-amber-200 dark:bg-amber-800 flex items-center justify-center shrink-0">
-                    <Layers className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground font-medium">In Review</p>
-                    <p className="text-lg font-bold text-amber-700 dark:text-amber-300">{taskStats.inReview}</p>
+                    <p className="text-[10px] text-muted-foreground font-medium">In Progress</p>
+                    <p className="text-sm font-bold">{taskStats.inProgress}</p>
                   </div>
                 </div>
 
                 {/* Done */}
-                <div className="flex items-center gap-2.5 px-4 py-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200/50 dark:border-emerald-800/50 min-w-[140px] group hover:shadow-md transition-all">
-                  <div className="w-8 h-8 rounded-lg bg-emerald-200 dark:bg-emerald-800 flex items-center justify-center shrink-0">
-                    <CircleCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                  </div>
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary/5 border border-primary/20 min-w-[100px]">
+                  <CircleCheck className="w-4 h-4 text-primary" />
                   <div>
-                    <p className="text-xs text-muted-foreground font-medium">Completed</p>
-                    <p className="text-lg font-bold text-emerald-700 dark:text-emerald-300">{taskStats.done}</p>
+                    <p className="text-[10px] text-muted-foreground font-medium">Completed</p>
+                    <p className="text-sm font-bold">{taskStats.done}</p>
                   </div>
                 </div>
 
                 {/* High Priority */}
                 {taskStats.highPriority > 0 && (
-                  <div className="flex items-center gap-2.5 px-4 py-2 rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-200/50 dark:border-red-800/50 min-w-[140px] group hover:shadow-md transition-all">
-                    <div className="w-8 h-8 rounded-lg bg-red-200 dark:bg-red-800 flex items-center justify-center shrink-0 animate-pulse">
-                      <TrendingUp className="w-4 h-4 text-red-600 dark:text-red-400" />
-                    </div>
+                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-destructive/5 border border-destructive/20 min-w-[100px]">
+                    <TrendingUp className="w-4 h-4 text-destructive" />
                     <div>
-                      <p className="text-xs text-muted-foreground font-medium">High Priority</p>
-                      <p className="text-lg font-bold text-red-700 dark:text-red-300">{taskStats.highPriority}</p>
+                      <p className="text-[10px] text-muted-foreground font-medium">High Priority</p>
+                      <p className="text-sm font-bold text-destructive">{taskStats.highPriority}</p>
                     </div>
                   </div>
                 )}
 
                 {/* Completion Rate */}
-                <div className="flex items-center gap-2.5 px-4 py-2 rounded-xl bg-purple-50 dark:bg-purple-950/30 border border-purple-200/50 dark:border-purple-800/50 min-w-[160px] group hover:shadow-md transition-all">
-                  <div className="w-8 h-8 rounded-lg bg-purple-200 dark:bg-purple-800 flex items-center justify-center shrink-0">
-                    <BarChart3 className="w-4 h-4 text-purple-600 dark:text-purple-400" />
-                  </div>
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-muted/30 border border-border/40 min-w-[100px]">
+                  <BarChart3 className="w-4 h-4 text-muted-foreground" />
                   <div>
-                    <p className="text-xs text-muted-foreground font-medium">Completion</p>
-                    <p className="text-lg font-bold text-purple-700 dark:text-purple-300">
+                    <p className="text-[10px] text-muted-foreground font-medium">Completion</p>
+                    <p className="text-sm font-bold">
                       {taskStats.total > 0 ? Math.round((taskStats.done / taskStats.total) * 100) : 0}%
                     </p>
                   </div>
