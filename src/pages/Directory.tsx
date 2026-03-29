@@ -30,6 +30,9 @@ import {
   Calendar,
   UserCircle,
   Zap,
+  Upload,
+  Briefcase,
+  Image,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import InviteUserDialog from "@/components/dialogs/InviteUserDialog";
@@ -59,7 +62,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
-import { apiGet, apiPatch, apiDelete, apiPut, apiPost } from "@/lib/api";
+import { apiGet, apiPatch, apiDelete, apiPut, apiPost, apiFetch, API_BASE } from "@/lib/api";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -141,7 +144,9 @@ export default function Directory() {
     name: "",
     allowedDomains: "",
     defaultTeam: "",
+    logo: "",
   });
+  const [logoUploading, setLogoUploading] = useState(false);
   const [orgId, setOrgId] = useState<string | null>(null);
   const [showInviteDialog, setShowInviteDialog] = useState(false);
   const [orgSettingsJson, setOrgSettingsJson] = useState<any>({});
@@ -374,6 +379,7 @@ export default function Directory() {
             name: org.name || "",
             allowedDomains: Array.isArray(org.allowedDomains) ? org.allowedDomains.join(", ") : org.domain || "",
             defaultTeam: (org.settings?.defaultTeamId as string) || "",
+            logo: org.logo || "",
           });
           // Hydrate security settings if present
           if (org.settings?.securityPolicy) {
@@ -432,6 +438,8 @@ export default function Directory() {
         name: editingUser.name,
         role: editingUser.role,
         isActive: editingUser.isActive,
+        department: editingUser.department || null,
+        position: editingUser.position || null,
       });
       toast.success("User updated successfully");
       setShowEditUser(false);
@@ -476,6 +484,7 @@ export default function Directory() {
         .filter(Boolean);
       await apiPatch(`/organizations/${orgId}`, {
         name: orgSettings.name,
+        logo: orgSettings.logo || null,
         allowedDomains,
         settings: {
           ...(orgSettingsJson || {}),
@@ -486,6 +495,37 @@ export default function Directory() {
       loadData();
     } catch (err: any) {
       toast.error(err.message || "Failed to save settings");
+    }
+  };
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please select an image file");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("Image must be under 5MB");
+      return;
+    }
+    setLogoUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await apiFetch("/storage/upload", {
+        method: "POST",
+        body: formData,
+      });
+      if (!res.ok) throw new Error("Upload failed");
+      const data = await res.json();
+      const url = data?.data?.url || data?.url || "";
+      setOrgSettings((prev) => ({ ...prev, logo: url }));
+      toast.success("Logo uploaded! Click Save to apply.");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to upload logo");
+    } finally {
+      setLogoUploading(false);
     }
   };
 
@@ -1222,6 +1262,35 @@ export default function Directory() {
                 <CardDescription className="text-xs">Configure your organization's general settings and policies.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-5">
+                {/* Organization Logo */}
+                <div>
+                  <Label className="flex items-center gap-2"><Image className="w-4 h-4" />Organization Logo</Label>
+                  <div className="mt-2 flex items-center gap-4">
+                    <div className="w-20 h-20 rounded-xl border-2 border-dashed border-border/60 bg-muted/30 flex items-center justify-center overflow-hidden">
+                      {orgSettings.logo ? (
+                        <img src={orgSettings.logo} alt="Org logo" className="w-full h-full object-cover rounded-xl" />
+                      ) : (
+                        <Building className="w-8 h-8 text-muted-foreground/40" />
+                      )}
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <label className="cursor-pointer">
+                        <input type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} disabled={logoUploading} />
+                        <div className={cn("inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-border/60 bg-background/60 hover:bg-accent text-sm font-medium transition-colors", logoUploading && "opacity-50 pointer-events-none")}>
+                          <Upload className="w-4 h-4" />
+                          {logoUploading ? "Uploading..." : "Upload Logo"}
+                        </div>
+                      </label>
+                      {orgSettings.logo && (
+                        <Button variant="ghost" size="sm" className="h-8 text-xs text-destructive hover:text-destructive" onClick={() => setOrgSettings({ ...orgSettings, logo: "" })}>
+                          <X className="w-3 h-3 mr-1" /> Remove
+                        </Button>
+                      )}
+                      <p className="text-[11px] text-muted-foreground">Recommended: 200×200px, PNG or JPG, max 5MB</p>
+                    </div>
+                  </div>
+                </div>
+                <Separator className="opacity-50" />
                 <div>
                   <Label>Organization Name</Label>
                   <Input
@@ -1592,6 +1661,32 @@ export default function Directory() {
                   </SelectContent>
                 </Select>
               </div>
+              <Separator className="opacity-50" />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="flex items-center gap-1.5"><Building className="w-3.5 h-3.5" />Department</Label>
+                  <Input
+                    value={editingUser.department || ""}
+                    onChange={(e) =>
+                      setEditingUser({ ...editingUser, department: e.target.value })
+                    }
+                    className="mt-1"
+                    placeholder="e.g. Engineering"
+                  />
+                </div>
+                <div>
+                  <Label className="flex items-center gap-1.5"><Briefcase className="w-3.5 h-3.5" />Position</Label>
+                  <Input
+                    value={editingUser.position || ""}
+                    onChange={(e) =>
+                      setEditingUser({ ...editingUser, position: e.target.value })
+                    }
+                    className="mt-1"
+                    placeholder="e.g. Full Stack Developer"
+                  />
+                </div>
+              </div>
+              <Separator className="opacity-50" />
               <div className="flex items-center justify-between">
                 <div>
                   <Label>Active Status</Label>
