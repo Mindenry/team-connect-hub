@@ -11,10 +11,6 @@ import {
   RefreshCw,
   Users,
   ArrowUpDown,
-  Sparkles,
-  Clock3,
-  CircleCheckBig,
-  ListTodo,
   AlertTriangle,
 } from "lucide-react";
 import { apiGet, clearApiCache } from "@/lib/api";
@@ -265,7 +261,7 @@ export default function Tasks() {
     if (filters.dueDateFrom || filters.dueDateTo) {
       const from = filters.dueDateFrom ? new Date(filters.dueDateFrom).toLocaleDateString() : "";
       const to = filters.dueDateTo ? new Date(filters.dueDateTo).toLocaleDateString() : "";
-      const display = from && to ? `${from} - ${to}` : from || to;
+      const display = from && to ? `${from} – ${to}` : from || to;
       chips.push({ key: "dueDateFrom", label: "Due Date", value: `${filters.dueDateFrom}|${filters.dueDateTo}`, displayValue: display });
     }
     return chips;
@@ -274,7 +270,6 @@ export default function Tasks() {
   const taskStats = useMemo(
     () => ({
       total: visibleTasks.length,
-      todo: visibleTasks.filter((t) => t.status === "todo").length,
       inProgress: visibleTasks.filter((t) => t.status === "in_progress").length,
       done: visibleTasks.filter((t) => t.status === "done").length,
       overdue: visibleTasks.filter((t) => t.dueDate && new Date(t.dueDate) < new Date() && t.status !== "done").length,
@@ -317,230 +312,279 @@ export default function Tasks() {
   return (
     <TooltipProvider>
       <div className="flex flex-col h-screen bg-background">
-        {/* Header */}
-        <div className="shrink-0 border-b border-border/50 bg-background/95 backdrop-blur-xl">
-          <div className="px-4 sm:px-6 lg:px-8">
-            <div className="h-14 sm:h-16 flex items-center justify-between gap-4">
-              <div className="flex items-center gap-3 min-w-0 flex-1">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary/20 via-primary/10 to-primary/5 flex items-center justify-center">
-                  <CheckSquare className="w-5 h-5 text-primary" />
+
+        {/* ═══════════════════════════════════════════════════
+            TOP HEADER — title · stats strip · actions
+        ═══════════════════════════════════════════════════ */}
+        <header className="shrink-0 h-12 border-b border-border/60 bg-background/98 backdrop-blur-sm flex items-center px-4 sm:px-6 gap-3 z-10">
+          {/* Brand */}
+          <div className="flex items-center gap-2 shrink-0">
+            <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center">
+              <CheckSquare className="w-4 h-4 text-primary" />
+            </div>
+            <span className="text-sm font-semibold tracking-tight">Tasks</span>
+          </div>
+
+          {/* Stats strip — hidden on mobile */}
+          {!loading && (
+            <div className="hidden sm:flex items-center gap-2.5 text-xs ml-2 pl-3 border-l border-border/50">
+              <span className="text-muted-foreground">
+                <span className="font-semibold text-foreground">{taskStats.total}</span> total
+              </span>
+              <span className="text-border/60 select-none">·</span>
+              <span className="font-medium text-primary">{taskStats.inProgress} in progress</span>
+              <span className="text-border/60 select-none">·</span>
+              <span className="text-muted-foreground">{taskStats.done} done</span>
+              {taskStats.overdue > 0 && (
+                <>
+                  <span className="text-border/60 select-none">·</span>
+                  <span className="font-medium text-destructive flex items-center gap-1">
+                    <AlertTriangle className="w-3 h-3" />
+                    {taskStats.overdue} overdue
+                  </span>
+                </>
+              )}
+            </div>
+          )}
+
+          <div className="flex-1" />
+
+          {/* Refresh + New Task */}
+          <div className="flex items-center gap-1.5">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                  onClick={() => loadData(true)}
+                >
+                  <RefreshCw className={cn("w-3.5 h-3.5", refreshing && "animate-spin")} />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Refresh</TooltipContent>
+            </Tooltip>
+
+            <Button
+              size="sm"
+              className="h-8 text-xs gap-1.5 px-3 font-medium"
+              onClick={() => setCreateDialogOpen(true)}
+            >
+              <Plus className="w-3.5 h-3.5" />
+              New Task
+            </Button>
+          </div>
+        </header>
+
+        {/* ═══════════════════════════════════════════════════
+            TOOLBAR — view · team · search · sort · filter
+        ═══════════════════════════════════════════════════ */}
+        <div className="shrink-0 border-b border-border/40 bg-background px-4 sm:px-6 h-11 flex items-center gap-2">
+
+          {/* View switcher */}
+          <div className="flex items-center bg-muted/50 rounded-md p-0.5 gap-px border border-border/30">
+            {viewConfig.map(({ key, label, icon: Icon }) => (
+              <button
+                key={key}
+                onClick={() => setActiveView(key)}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1 rounded text-xs font-medium transition-all duration-150",
+                  activeView === key
+                    ? "bg-background shadow-sm text-foreground"
+                    : "text-muted-foreground hover:text-foreground hover:bg-background/50"
+                )}
+              >
+                <Icon className="w-3.5 h-3.5" />
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {/* Team filter */}
+          {myTeams.length > 0 && (
+            <div className="flex items-center bg-muted/50 rounded-md p-0.5 gap-px border border-border/30">
+              {myTeams.length > 1 && (
+                <button
+                  onClick={() => setSelectedTeamId("all")}
+                  className={cn(
+                    "flex items-center gap-1 px-2.5 py-1 rounded text-xs transition-all duration-150",
+                    selectedTeamId === "all"
+                      ? "bg-background shadow-sm text-foreground font-medium"
+                      : "text-muted-foreground hover:text-foreground hover:bg-background/50"
+                  )}
+                >
+                  <Users className="w-3 h-3" />
+                  All
+                </button>
+              )}
+              {myTeams.map((team: any) => (
+                <button
+                  key={team.id}
+                  onClick={() => setSelectedTeamId(team.id)}
+                  className={cn(
+                    "px-2.5 py-1 rounded text-xs truncate max-w-[110px] transition-all duration-150",
+                    selectedTeamId === team.id
+                      ? "bg-background shadow-sm text-foreground font-medium"
+                      : "text-muted-foreground hover:text-foreground hover:bg-background/50"
+                  )}
+                >
+                  {team.name}
+                </button>
+              ))}
+            </div>
+          )}
+
+          <div className="flex-1" />
+
+          {/* Search */}
+          <div className="relative w-44 lg:w-60 shrink-0">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+            <Input
+              placeholder="Search tasks..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-8 h-8 text-xs bg-muted/30 border-border/40 focus:bg-background focus:border-border transition-colors rounded-md"
+            />
+            {search && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="absolute right-0.5 top-1/2 -translate-y-1/2 h-7 w-7"
+                onClick={() => setSearch("")}
+              >
+                <X className="w-3 h-3" />
+              </Button>
+            )}
+          </div>
+
+          {/* Sort */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 text-xs gap-1.5 text-muted-foreground hover:text-foreground px-2.5"
+              >
+                <ArrowUpDown className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Sort</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48">
+              {[
+                { value: "updated_desc", label: "Last updated" },
+                { value: "due_asc", label: "Due date (earliest first)" },
+                { value: "priority_desc", label: "Priority (high → low)" },
+                { value: "status_asc", label: "Status" },
+              ].map((opt) => (
+                <DropdownMenuItem
+                  key={opt.value}
+                  onClick={() => setSortMode(opt.value as SortMode)}
+                  className={cn(
+                    "text-xs",
+                    sortMode === opt.value && "text-primary font-medium bg-primary/5"
+                  )}
+                >
+                  {opt.label}
+                  {sortMode === opt.value && (
+                    <span className="ml-auto text-primary text-[10px]">✓</span>
+                  )}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          {/* Filter */}
+          <Button
+            variant="ghost"
+            size="sm"
+            className={cn(
+              "h-8 text-xs gap-1.5 px-2.5 relative",
+              hasActiveFilters
+                ? "text-primary bg-primary/8 hover:bg-primary/12"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+            onClick={() => setFilterDrawerOpen(true)}
+          >
+            <Filter className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Filters</span>
+            {activeFilters.length > 0 && (
+              <span className="bg-primary text-primary-foreground text-[9px] font-bold rounded-full min-w-[16px] h-4 flex items-center justify-center px-1 leading-none">
+                {activeFilters.length}
+              </span>
+            )}
+          </Button>
+        </div>
+
+        {/* ═══════════════════════════════════════════════════
+            ACTIVE FILTER CHIPS
+        ═══════════════════════════════════════════════════ */}
+        {activeFilters.length > 0 && (
+          <div className="shrink-0 border-b border-border/30 px-4 sm:px-6 py-1.5 bg-muted/15">
+            <FilterChips
+              filters={activeFilters}
+              onRemove={handleRemoveFilter}
+              onClearAll={handleClearAllFilters}
+            />
+          </div>
+        )}
+
+        {/* ═══════════════════════════════════════════════════
+            MAIN CONTENT
+        ═══════════════════════════════════════════════════ */}
+        <div className="flex-1 overflow-hidden">
+          {loading ? (
+            <div className="p-6 space-y-2">
+              {Array.from({ length: 7 }).map((_, i) => (
+                <Skeleton key={i} className="h-14 w-full rounded-lg" />
+              ))}
+            </div>
+          ) : errorMessage ? (
+            <div className="flex items-center justify-center h-full p-6">
+              <div className="text-center max-w-xs space-y-3">
+                <div className="mx-auto w-10 h-10 rounded-full bg-destructive/10 flex items-center justify-center">
+                  <AlertTriangle className="w-5 h-5 text-destructive" />
                 </div>
-                <div className="min-w-0">
-                  <h1 className="text-lg sm:text-xl font-bold tracking-tight">Task Workspace</h1>
-                  <p className="text-xs text-muted-foreground truncate">Plan, prioritize, and deliver work with your team.</p>
+                <div>
+                  <p className="text-sm font-semibold">Couldn't load tasks</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">{errorMessage}</p>
                 </div>
-              </div>
-
-              <div className="flex items-center gap-1.5">
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button variant="outline" size="icon" className="h-9 w-9" onClick={() => loadData(true)}>
-                      <RefreshCw className={cn("w-4 h-4", refreshing && "animate-spin")} />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Refresh</TooltipContent>
-                </Tooltip>
-
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="sm" className="h-9 gap-1.5 text-xs">
-                      <ArrowUpDown className="w-3.5 h-3.5" />
-                      Sort
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-48">
-                    <DropdownMenuItem onClick={() => setSortMode("updated_desc")}>Last updated</DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setSortMode("due_asc")}>Due date</DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setSortMode("priority_desc")}>Priority</DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setSortMode("status_asc")}>Status</DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-
-                <Button size="sm" className="h-9 gap-1.5 text-xs" onClick={() => setCreateDialogOpen(true)}>
-                  <Plus className="w-3.5 h-3.5" />
-                  New Task
+                <Button variant="outline" size="sm" onClick={() => loadData(true)}>
+                  <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
+                  Try again
                 </Button>
               </div>
             </div>
-          </div>
-        </div>
-
-        {/* Main Content */}
-        <div className="flex-1 overflow-hidden">
-          <div className="h-full flex flex-col">
-            {/* Stats & Toolbar */}
-            <div className="shrink-0 px-4 sm:px-6 lg:px-8 py-4 space-y-4 border-b border-border/30">
-              {/* Stats Cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
-                <div className="rounded-xl border border-border/50 bg-card p-4">
-                  <div className="flex items-center justify-between">
-                    <p className="text-xs text-muted-foreground">Total Tasks</p>
-                    <ListTodo className="w-4 h-4 text-muted-foreground" />
-                  </div>
-                  <p className="mt-1 text-2xl font-semibold">{taskStats.total}</p>
-                </div>
-                <div className="rounded-xl border border-border/50 bg-card p-4">
-                  <div className="flex items-center justify-between">
-                    <p className="text-xs text-muted-foreground">In Progress</p>
-                    <Clock3 className="w-4 h-4 text-primary" />
-                  </div>
-                  <p className="mt-1 text-2xl font-semibold">{taskStats.inProgress}</p>
-                </div>
-                <div className="rounded-xl border border-border/50 bg-card p-4">
-                  <div className="flex items-center justify-between">
-                    <p className="text-xs text-muted-foreground">Done</p>
-                    <CircleCheckBig className="w-4 h-4 text-muted-foreground" />
-                  </div>
-                  <p className="mt-1 text-2xl font-semibold">{taskStats.done}</p>
-                </div>
-                <div className="rounded-xl border border-border/50 bg-card p-4">
-                  <div className="flex items-center justify-between">
-                    <p className="text-xs text-muted-foreground">Focus</p>
-                    <Sparkles className="w-4 h-4 text-primary" />
-                  </div>
-                  <p className="mt-1 text-sm font-medium">{search ? `Searching: "${search}"` : "No search keyword"}</p>
-                  {taskStats.overdue > 0 && (
-                    <div className="mt-2 inline-flex items-center gap-1 rounded bg-destructive/10 text-destructive px-2 py-1 text-[11px] font-medium">
-                      <AlertTriangle className="w-3 h-3" />
-                      {taskStats.overdue} overdue
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Toolbar */}
-              <div className="rounded-xl border border-border/50 bg-card p-4 space-y-3">
-                <div className="flex flex-wrap items-center gap-3">
-                  <div className="flex items-center gap-1 p-1 bg-muted/30 rounded-lg border border-border/30">
-                    {viewConfig.map(({ key, label, icon: Icon }) => (
-                      <button
-                        key={key}
-                        onClick={() => setActiveView(key)}
-                        className={cn(
-                          "px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-1.5",
-                          activeView === key
-                            ? "bg-background shadow-sm text-foreground"
-                            : "text-muted-foreground hover:text-foreground hover:bg-muted/50",
-                        )}
-                      >
-                        <Icon className={cn("w-3.5 h-3.5", activeView === key && "text-primary")} />
-                        <span>{label}</span>
-                      </button>
-                    ))}
-                  </div>
-
-                  {myTeams.length > 0 && (
-                    <div className="flex items-center gap-1 p-1 bg-muted/30 rounded-lg border border-border/30">
-                      <span className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] text-muted-foreground">
-                        <Users className="w-3 h-3" /> Team
-                      </span>
-                      {myTeams.length > 1 && (
-                        <button
-                          onClick={() => setSelectedTeamId("all")}
-                          className={cn(
-                            "px-3 py-1.5 rounded-md text-xs font-medium",
-                            selectedTeamId === "all" ? "bg-background shadow-sm" : "text-muted-foreground",
-                          )}
-                        >
-                          All
-                        </button>
-                      )}
-                      {myTeams.map((team: any) => (
-                        <button
-                          key={team.id}
-                          onClick={() => setSelectedTeamId(team.id)}
-                          className={cn(
-                            "px-3 py-1.5 rounded-md text-xs font-medium truncate max-w-[120px]",
-                            selectedTeamId === team.id ? "bg-background shadow-sm" : "text-muted-foreground",
-                          )}
-                        >
-                          {team.name}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                <div className="flex items-center gap-3 flex-wrap">
-                  <div className="relative flex-1 min-w-[240px]">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <Input
-                      placeholder="Search by title, description, assignee..."
-                      value={search}
-                      onChange={(e) => setSearch(e.target.value)}
-                      className="pl-9 h-10"
-                    />
-                    {search && (
-                      <Button variant="ghost" size="icon" className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8" onClick={() => setSearch("")}>
-                        <X className="w-4 h-4" />
-                      </Button>
-                    )}
-                  </div>
-
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    className={cn("h-10 w-10", hasActiveFilters && "bg-primary/10 border-primary/30 text-primary")}
-                    onClick={() => setFilterDrawerOpen(true)}
-                  >
-                    <Filter className="w-4 h-4" />
-                  </Button>
-                </div>
-
-                <div className="text-xs text-muted-foreground">
-                  {hasActiveFilters ? "You are viewing filtered tasks." : "Tip: Use filters to focus on urgent work quickly."}
-                </div>
-              </div>
-
-              {activeFilters.length > 0 && (
-                <FilterChips filters={activeFilters} onRemove={handleRemoveFilter} onClearAll={handleClearAllFilters} />
-              )}
-            </div>
-
-            {/* Board/List */}
-            <div className="flex-1 overflow-hidden">
-              {loading ? (
-                <div className="space-y-2">
-                  {Array.from({ length: 8 }).map((_, i) => (
-                    <Skeleton key={i} className="h-20 w-full rounded-xl" />
-                  ))}
-                </div>
-              ) : errorMessage ? (
-                <div className="rounded-2xl border border-red-500/30 bg-red-500/5 p-6 text-center">
-                  <div className="mx-auto mb-3 w-10 h-10 rounded-full bg-red-500/10 flex items-center justify-center">
-                    <AlertTriangle className="w-5 h-5 text-red-500" />
-                  </div>
-                  <p className="text-sm font-semibold text-foreground">Couldn’t load tasks workspace</p>
-                  <p className="mt-1 text-xs text-muted-foreground">{errorMessage}</p>
-                  <Button className="mt-4" variant="outline" onClick={() => loadData(true)}>
-                    <RefreshCw className="w-4 h-4 mr-2" />
-                    Try again
-                  </Button>
-                </div>
-              ) : visibleTasks.length === 0 ? (
-                hasActiveFilters ? (
-                  <EmptyState type="no-results" onClearFilters={handleClearAllFilters} />
-                ) : (
-                  <EmptyState type="no-tasks" onCreateTask={() => setCreateDialogOpen(true)} />
+          ) : visibleTasks.length === 0 ? (
+            hasActiveFilters ? (
+              <EmptyState type="no-results" onClearFilters={handleClearAllFilters} />
+            ) : (
+              <EmptyState type="no-tasks" onCreateTask={() => setCreateDialogOpen(true)} />
+            )
+          ) : activeView === "board" ? (
+            <TaskBoard
+              tasks={visibleTasks}
+              onTaskClick={handleTaskClick}
+              onTaskMoved={(taskId, _from, targetStatus) =>
+                setTasks((prev) =>
+                  prev.map((t) => (String(t.id) === String(taskId) ? { ...t, status: targetStatus } : t))
                 )
-              ) : activeView === "board" ? (
-                <TaskBoard
-                  tasks={visibleTasks}
-                  onTaskClick={handleTaskClick}
-                  onTaskMoved={(taskId, _from, targetStatus) =>
-                    setTasks((prev) => prev.map((t) => (String(t.id) === String(taskId) ? { ...t, status: targetStatus } : t)))
-                  }
-                  onCreateTask={() => setCreateDialogOpen(true)}
-                  onTaskCreated={handleTaskCreated}
-                  teamId={selectedTeamId !== "all" ? selectedTeamId : undefined}
-                />
-              ) : (
-                <TaskList tasks={visibleTasks} onTaskClick={handleTaskClick} onCreateTask={() => setCreateDialogOpen(true)} />
-              )}
-            </div>
-          </div>
+              }
+              onCreateTask={() => setCreateDialogOpen(true)}
+              onTaskCreated={handleTaskCreated}
+              teamId={selectedTeamId !== "all" ? selectedTeamId : undefined}
+            />
+          ) : (
+            <TaskList
+              tasks={visibleTasks}
+              onTaskClick={handleTaskClick}
+              onCreateTask={() => setCreateDialogOpen(true)}
+            />
+          )}
         </div>
 
+        {/* ═══════════════════════════════════════════════════
+            OVERLAYS — filter drawer · detail panel · create
+        ═══════════════════════════════════════════════════ */}
         <FilterDrawer
           open={filterDrawerOpen}
           onOpenChange={setFilterDrawerOpen}
@@ -565,7 +609,11 @@ export default function Tasks() {
           }}
         />
 
-        <CreateTaskDialog open={createDialogOpen} onOpenChange={setCreateDialogOpen} onCreated={handleTaskCreated} />
+        <CreateTaskDialog
+          open={createDialogOpen}
+          onOpenChange={setCreateDialogOpen}
+          onCreated={handleTaskCreated}
+        />
       </div>
     </TooltipProvider>
   );
