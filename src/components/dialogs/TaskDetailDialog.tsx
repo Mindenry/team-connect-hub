@@ -51,7 +51,7 @@ import {
   Link2,
 } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { apiGet, apiPost, apiPatch, apiDelete } from "@/lib/api";
+import { apiGet, apiPost, apiPatch, apiDelete, apiFetch } from "@/lib/api";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import type { Task, Subtask, TaskComment, TaskActivityLog, TaskAttachment, TaskWatcher } from "@/components/tasks/types";
@@ -182,6 +182,7 @@ export default function TaskDetailDialog({
   // Comment
   const [commentText, setCommentText] = useState("");
   const [sendingComment, setSendingComment] = useState(false);
+  const [uploadingAttachment, setUploadingAttachment] = useState(false);
 
   // Bottom panel tabs
   const [bottomTab, setBottomTab] = useState<"comments" | "activity">("comments");
@@ -302,11 +303,51 @@ export default function TaskDetailDialog({
     } catch { toast.error("Failed to toggle subtask"); }
   };
 
-  const deleteSubtask = async (subtaskId: string) => {
+  const deleteSubtask = async (subId: string) => {
     try {
-      await apiDelete(`/tasks/subtasks/${subtaskId}`);
-      setFullTask({ ...fullTask!, subtasks: subtasks.filter((s) => s.id !== subtaskId) });
-    } catch { toast.error("Failed to delete subtask"); }
+      await apiDelete(`/tasks/subtasks/${subId}`);
+      setFullTask({ ...fullTask!, subtasks: subtasks.filter((s) => s.id !== subId) });
+    } catch {}
+  };
+
+  const uploadAttachment = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !fullTask || !currentUser) return;
+    
+    if (file.size > 50 * 1024 * 1024) {
+      toast.error("File size exceeds 50MB limit");
+      return;
+    }
+
+    setUploadingAttachment(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      
+      const uploadRes = await apiFetch(`/upload?folder=tasks/${fullTask.id}`, {
+        method: "POST",
+        body: formData,
+      });
+      if (!uploadRes.ok) throw new Error("Upload failed");
+      const uploadedData = await uploadRes.json();
+      
+      const newAtt = await apiPost<any>(`/tasks/${fullTask.id}/attachments`, {
+        userId: currentUser.id,
+        name: uploadedData.name,
+        url: uploadedData.url,
+        mimeType: uploadedData.mimetype,
+        size: uploadedData.size,
+      });
+
+      setFullTask((prev) => prev ? { ...prev, attachments: [...(prev.attachments || []), newAtt] } : prev);
+      toast.success("Attachment uploaded");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to upload attachment");
+    } finally {
+      setUploadingAttachment(false);
+      // reset file input
+      if (e.target) e.target.value = '';
+    }
   };
 
   // Comment handlers
@@ -516,9 +557,18 @@ export default function TaskDetailDialog({
                         ))}
                       </div>
                     )}
-                    <div className="flex items-center gap-2 px-3 py-2.5 border border-dashed border-border/50 rounded-lg text-xs text-muted-foreground hover:border-border/80 cursor-pointer transition-colors">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                      Upload file
+                    <div className="relative flex items-center gap-2 px-3 py-2.5 border border-dashed border-border/50 rounded-lg text-xs text-muted-foreground hover:border-border/80 cursor-pointer transition-colors overflow-hidden">
+                      {uploadingAttachment ? (
+                        <div className="flex items-center gap-2 m-auto text-primary">
+                          <Loader2 className="w-4 h-4 animate-spin" /> Uploading...
+                        </div>
+                      ) : (
+                        <>
+                          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                          Upload file
+                          <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" onChange={uploadAttachment} disabled={uploadingAttachment} />
+                        </>
+                      )}
                     </div>
                   </div>
 
@@ -592,8 +642,20 @@ export default function TaskDetailDialog({
                               <p className="text-xs text-foreground/80 leading-relaxed">
                                 <span className="font-semibold">{a.user?.name || "System"}</span>{" "}
                                 <span className="text-muted-foreground">{formatAction(a.action)}</span>
-                                {a.oldValue && a.newValue && (
-                                  <> <span className="line-through text-muted-foreground/60 text-[11px]">{resolveValue(a.oldValue)}</span>{" → "}<span className="font-medium text-foreground text-[11px]">{resolveValue(a.newValue)}</span></>
+                                {(a.oldValue || a.newValue) && (
+                                  <>
+                                    {" "}
+                                    {a.oldValue ? (
+                                      <><span className="line-through text-muted-foreground/60 text-[11px]">{resolveValue(a.oldValue)}</span>{" → "}</>
+                                    ) : (
+                                      <span className="text-muted-foreground/60 text-[11px]"> </span>
+                                    )}
+                                    {a.newValue ? (
+                                      <span className="font-medium text-foreground text-[11px]">{resolveValue(a.newValue)}</span>
+                                    ) : (
+                                      <span className="italic text-muted-foreground/60 text-[11px]">none</span>
+                                    )}
+                                  </>
                                 )}
                               </p>
                               <span className="text-[10px] text-muted-foreground">{formatFullDateTime(a.createdAt)}</span>
