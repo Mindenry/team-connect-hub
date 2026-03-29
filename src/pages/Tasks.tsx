@@ -1,27 +1,25 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { useLocation } from "react-router-dom";
+import { useIsMobile } from "@/hooks/use-mobile";
 import {
-  CheckSquare,
   Plus,
   Search,
-  X,
+  CheckSquare,
+  Filter,
   LayoutGrid,
   List,
+  Calendar,
   RefreshCw,
-  Users,
-  ArrowUpDown,
-  AlertTriangle,
-  Clock,
-  CircleCheck,
-  SlidersHorizontal,
+  X,
+  Sparkles,
   ChevronDown,
+  FolderKanban,
+  Layers,
 } from "lucide-react";
-import { apiGet, clearApiCache } from "@/lib/api";
-import { getSocket } from "@/lib/websocket";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Tooltip,
   TooltipContent,
@@ -35,589 +33,520 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
-import { useAuth } from "@/lib/auth";
+import { apiGet, apiPost, apiPatch, apiDelete } from "@/lib/api";
+import { auth } from "@/lib/auth";
+import { toast } from "sonner";
 
-import FilterChips, { type ActiveFilter } from "@/components/tasks-v2/FilterChips";
-import FilterDrawer, { type FilterValues } from "@/components/tasks-v2/FilterDrawer";
-import TaskBoard from "@/components/tasks-v2/TaskBoard";
-import TaskList from "@/components/tasks-v2/TaskList";
-import TaskDetailDrawer from "@/components/tasks-v2/TaskDetailDrawer";
-import EmptyState from "@/components/tasks-v2/EmptyState";
+import TaskBoard from "@/components/tasks/TaskBoard";
+import TaskList from "@/components/tasks/TaskList";
+import TaskCalendarView from "@/components/tasks/TaskCalendarView";
 import CreateTaskDialog from "@/components/dialogs/CreateTaskDialog";
-import type { TaskCardData } from "@/components/tasks-v2/TaskCard";
+import TaskDetailDrawer from "@/components/tasks/TaskDetailDrawer";
+import TaskFilters from "@/components/tasks/TaskFilters";
+import {
+  Task,
+  User,
+  Team,
+  Subtask,
+  Attachment,
+  TaskActivity,
+  TaskComment,
+  FilterState,
+} from "@/components/tasks/types";
 
-type ViewMode = "board" | "list";
-type SortMode = "updated_desc" | "due_asc" | "priority_desc" | "status_asc";
+type ViewMode = "board" | "list" | "calendar";
 
-const EMPTY_FILTERS: FilterValues = {
-  priority: "",
-  assigneeId: "",
-  status: "",
-  dueDateFrom: "",
-  dueDateTo: "",
-};
-
-const priorityRank: Record<string, number> = {
-  urgent: 4,
-  high: 3,
-  medium: 2,
-  low: 1,
-};
-
-const statusRank: Record<string, number> = {
-  todo: 1,
-  in_progress: 2,
-  in_review: 3,
-  done: 4,
-  canceled: 5,
-};
-
-/* ════════════════════════════════════════════════════════════════════════════
-   TASKS PAGE - Premium Professional Design (Linear/Notion-inspired)
-   ════════════════════════════════════════════════════════════════════════════ */
 export default function Tasks() {
-  const location = useLocation();
-  const { user } = useAuth();
-
-  const [activeView, setActiveView] = useState<ViewMode>("board");
-  const [sortMode, setSortMode] = useState<SortMode>("updated_desc");
-  const [filters, setFilters] = useState<FilterValues>({ ...EMPTY_FILTERS });
-  const [search, setSearch] = useState("");
-  const [filterDrawerOpen, setFilterDrawerOpen] = useState(false);
-  const [createDialogOpen, setCreateDialogOpen] = useState(false);
-  const [selectedTask, setSelectedTask] = useState<TaskCardData | null>(null);
-  const [detailOpen, setDetailOpen] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
-  const [selectedTeamId, setSelectedTeamId] = useState<string>("all");
-
-  const [tasks, setTasks] = useState<TaskCardData[]>([]);
-  const [users, setUsers] = useState<any[]>([]);
-  const [teams, setTeams] = useState<any[]>([]);
+  const isMobile = useIsMobile();
+  const currentUser = auth.getUser();
+  
+  // State
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [teamsInitialized, setTeamsInitialized] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>("board");
+  const [showFilters, setShowFilters] = useState(false);
+  const [showCreateTask, setShowCreateTask] = useState(false);
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [showDetailDrawer, setShowDetailDrawer] = useState(false);
+  
+  // Filters
+  const [filters, setFilters] = useState<FilterState>({
+    status: [],
+    priority: [],
+    assigneeId: null,
+    teamId: null,
+    search: "",
+    dueDateFrom: null,
+    dueDateTo: null,
+  });
 
-  const normalizeTask = useCallback((task: any): TaskCardData => {
-    if (!task) return task;
-    return {
-      ...(task as TaskCardData),
-      id: String(task.id),
-      assignee: task.assignee
-        ? {
-            ...task.assignee,
-            id: task.assignee.id ? String(task.assignee.id) : task.assignee.id,
-          }
-        : task.assignee,
-    };
-  }, []);
-
-  useEffect(() => {
-    const params = new URLSearchParams(location.search);
-    const assigneeId = params.get("assigneeId") || "";
-    if (assigneeId && assigneeId !== filters.assigneeId) {
-      setFilters((prev) => ({ ...prev, assigneeId }));
-    }
-  }, [location.search, filters.assigneeId]);
-
-  const loadData = useCallback(
-    async (showRefresh = false) => {
-      if (showRefresh) {
-        setRefreshing(true);
-        clearApiCache();
-      }
-      setLoading(true);
-      setErrorMessage(null);
-
-      try {
-        const params = new URLSearchParams();
-        if (filters.status) params.set("status", filters.status);
-        if (filters.assigneeId) params.set("assigneeId", filters.assigneeId);
-        if (filters.priority) params.set("priority", filters.priority);
-        if (filters.dueDateFrom) params.set("dueDateFrom", filters.dueDateFrom);
-        if (filters.dueDateTo) params.set("dueDateTo", filters.dueDateTo);
-        if (search) params.set("search", search);
-        if (selectedTeamId !== "all") params.set("teamId", selectedTeamId);
-        const qs = params.toString() ? `?${params.toString()}` : "";
-
-        const [tasksData, usersData, teamsData] = await Promise.all([
-          apiGet<any[]>(`/tasks${qs}`).catch(() => []),
-          apiGet<any[]>("/users").catch(() => []),
-          apiGet<any[]>("/teams").catch(() => []),
-        ]);
-
-        const loadedTeams = Array.isArray(teamsData) ? teamsData : [];
-        setTeams(loadedTeams);
-
-        if (!teamsInitialized && loadedTeams.length > 0) {
-          const myTeams = loadedTeams.filter((t: any) =>
-            t.members?.some((m: any) => m.userId === user?.id || m.user?.id === user?.id),
-          );
-          setSelectedTeamId(myTeams[0]?.id || loadedTeams[0].id);
-          setTeamsInitialized(true);
-        }
-
-        let filteredTasksData = Array.isArray(tasksData) ? tasksData : [];
-        if (selectedTeamId === "all" && loadedTeams.length > 0) {
-          const myTeamIds = new Set(
-            loadedTeams
-              .filter((t: any) =>
-                t.members?.some((m: any) => m.userId === user?.id || m.user?.id === user?.id),
-              )
-              .map((t: any) => t.id),
-          );
-          if (myTeamIds.size > 0) {
-            filteredTasksData = filteredTasksData.filter((t: any) => myTeamIds.has(t.teamId));
-          }
-        }
-
-        setTasks(filteredTasksData.map((t) => normalizeTask(t)));
-        setUsers(Array.isArray(usersData) ? usersData : []);
-      } catch (error) {
-        console.error("Failed to load tasks workspace data:", error);
-        setErrorMessage("Unable to load tasks right now. Please try again.");
-      } finally {
-        setLoading(false);
-        setRefreshing(false);
-      }
-    },
-    [filters.status, filters.assigneeId, filters.priority, search, selectedTeamId, normalizeTask, user?.id, teamsInitialized],
-  );
-
+  // Load initial data
   useEffect(() => {
     loadData();
-  }, [loadData]);
+  }, []);
 
-  useEffect(() => {
-    const socket = getSocket();
-    if (!socket) return;
+  const loadData = async (showRefresh = false) => {
+    try {
+      if (showRefresh) {
+        setRefreshing(true);
+      } else {
+        setLoading(true);
+      }
 
-    const handleTaskCreated = (task: any) => {
-      if (!task?.id) return;
-      setTasks((prev) => (prev.some((t) => String(t.id) === String(task.id)) ? prev : [...prev, normalizeTask(task)]));
-    };
+      const [tasksRes, teamsRes, usersRes] = await Promise.all([
+        apiGet<Task[]>("/tasks").catch(() => []),
+        apiGet<Team[]>("/teams").catch(() => []),
+        apiGet<User[]>("/users").catch(() => []),
+      ]);
 
-    const handleTaskUpdated = (task: any) => {
-      if (!task?.id) return;
-      setTasks((prev) => prev.map((t) => (String(t.id) === String(task.id) ? { ...t, ...normalizeTask(task) } : t)));
-    };
+      setTasks(Array.isArray(tasksRes) ? tasksRes : []);
+      setTeams(Array.isArray(teamsRes) ? teamsRes : []);
+      setUsers(Array.isArray(usersRes) ? usersRes : []);
+    } catch (err) {
+      console.error("Failed to load tasks:", err);
+      toast.error("ไม่สามารถโหลดข้อมูลงานได้");
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
 
-    const handleTaskDeleted = (id: string) => {
-      if (!id) return;
-      setTasks((prev) => prev.filter((t) => String(t.id) !== String(id)));
-    };
-
-    socket.on("task:created", handleTaskCreated);
-    socket.on("task:updated", handleTaskUpdated);
-    socket.on("task:deleted", handleTaskDeleted);
-
-    return () => {
-      socket.off("task:created", handleTaskCreated);
-      socket.off("task:updated", handleTaskUpdated);
-      socket.off("task:deleted", handleTaskDeleted);
-    };
-  }, [normalizeTask]);
-
-  const myTeams = useMemo(() => {
-    if (!user?.id) return teams;
-    const filtered = teams.filter((t: any) => t.members?.some((m: any) => m.userId === user.id || m.user?.id === user.id));
-    return filtered.length > 0 ? filtered : teams;
-  }, [teams, user?.id]);
-
-  const visibleTasks = useMemo(() => {
+  // Filtered tasks
+  const filteredTasks = useMemo(() => {
     let result = [...tasks];
 
-    if (!filters.status) {
-      result = result.filter((t) => t.status !== "canceled");
+    // Search filter
+    if (filters.search.trim()) {
+      const query = filters.search.toLowerCase();
+      result = result.filter(
+        (task) =>
+          task.title.toLowerCase().includes(query) ||
+          task.description?.toLowerCase().includes(query) ||
+          task.tags?.some((tag) => tag.toLowerCase().includes(query))
+      );
     }
 
-    switch (sortMode) {
-      case "due_asc":
-        result.sort((a, b) => {
-          const ad = a.dueDate ? new Date(a.dueDate).getTime() : Number.MAX_SAFE_INTEGER;
-          const bd = b.dueDate ? new Date(b.dueDate).getTime() : Number.MAX_SAFE_INTEGER;
-          return ad - bd;
-        });
-        break;
-      case "priority_desc":
-        result.sort((a, b) => (priorityRank[b.priority || "low"] || 0) - (priorityRank[a.priority || "low"] || 0));
-        break;
-      case "status_asc":
-        result.sort((a, b) => (statusRank[a.status || "todo"] || 999) - (statusRank[b.status || "todo"] || 999));
-        break;
-      default:
-        result.sort((a, b) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime());
-        break;
+    // Status filter
+    if (filters.status.length > 0) {
+      result = result.filter((task) => filters.status.includes(task.status));
+    }
+
+    // Priority filter
+    if (filters.priority.length > 0) {
+      result = result.filter((task) => filters.priority.includes(task.priority));
+    }
+
+    // Assignee filter
+    if (filters.assigneeId) {
+      result = result.filter(
+        (task) =>
+          task.assignee?.id === filters.assigneeId ||
+          task.assignees?.some((a) => a.id === filters.assigneeId)
+      );
+    }
+
+    // Team filter
+    if (filters.teamId) {
+      result = result.filter((task) => task.teamId === filters.teamId);
+    }
+
+    // Due date filter
+    if (filters.dueDateFrom) {
+      result = result.filter(
+        (task) => task.dueDate && new Date(task.dueDate) >= new Date(filters.dueDateFrom!)
+      );
+    }
+    if (filters.dueDateTo) {
+      result = result.filter(
+        (task) => task.dueDate && new Date(task.dueDate) <= new Date(filters.dueDateTo!)
+      );
     }
 
     return result;
-  }, [tasks, filters.status, sortMode]);
+  }, [tasks, filters]);
 
-  const activeFilters = useMemo<ActiveFilter[]>(() => {
-    const chips: ActiveFilter[] = [];
-    if (filters.status) chips.push({ key: "status", label: "Status", value: filters.status, displayValue: filters.status });
-    if (filters.priority) chips.push({ key: "priority", label: "Priority", value: filters.priority, displayValue: filters.priority });
-    if (filters.assigneeId) {
-      const found = users.find((u) => u.id === filters.assigneeId);
-      chips.push({ key: "assigneeId", label: "Assignee", value: filters.assigneeId, displayValue: found?.name || "User" });
-    }
-    if (filters.dueDateFrom || filters.dueDateTo) {
-      const from = filters.dueDateFrom ? new Date(filters.dueDateFrom).toLocaleDateString() : "";
-      const to = filters.dueDateTo ? new Date(filters.dueDateTo).toLocaleDateString() : "";
-      const display = from && to ? `${from} – ${to}` : from || to;
-      chips.push({ key: "dueDateFrom", label: "Due Date", value: `${filters.dueDateFrom}|${filters.dueDateTo}`, displayValue: display });
-    }
-    return chips;
-  }, [filters, users]);
+  // Stats
+  const stats = useMemo(() => {
+    const total = tasks.length;
+    const todo = tasks.filter((t) => t.status === "todo").length;
+    const inProgress = tasks.filter((t) => t.status === "in_progress").length;
+    const review = tasks.filter((t) => t.status === "review").length;
+    const done = tasks.filter((t) => t.status === "done").length;
+    const overdue = tasks.filter(
+      (t) => t.dueDate && new Date(t.dueDate) < new Date() && t.status !== "done"
+    ).length;
 
-  const taskStats = useMemo(
-    () => ({
-      total: visibleTasks.length,
-      todo: visibleTasks.filter((t) => t.status === "todo").length,
-      inProgress: visibleTasks.filter((t) => t.status === "in_progress").length,
-      inReview: visibleTasks.filter((t) => t.status === "in_review").length,
-      done: visibleTasks.filter((t) => t.status === "done").length,
-      overdue: visibleTasks.filter((t) => t.dueDate && new Date(t.dueDate) < new Date() && t.status !== "done").length,
-      highPriority: visibleTasks.filter((t) => t.priority === "urgent" || t.priority === "high").length,
-    }),
-    [visibleTasks],
-  );
+    return { total, todo, inProgress, review, done, overdue };
+  }, [tasks]);
 
-  const handleFilterChange = (key: keyof FilterValues, value: string) =>
-    setFilters((prev) => ({ ...prev, [key]: value }));
-  const handleRemoveFilter = (key: string) => {
-    if (key === "dueDateFrom") {
-      setFilters((prev) => ({ ...prev, dueDateFrom: "", dueDateTo: "" }));
-    } else {
-      setFilters((prev) => ({ ...prev, [key]: "" }));
+  // Handlers
+  const handleCreateTask = async (data: Partial<Task>) => {
+    try {
+      const newTask = await apiPost<Task>("/tasks", {
+        ...data,
+        createdBy: currentUser?.id,
+      });
+      setTasks((prev) => [...prev, newTask]);
+      toast.success("สร้างงานสำเร็จ");
+      setShowCreateTask(false);
+    } catch (err: any) {
+      console.error("Failed to create task:", err);
+      toast.error(err.message || "ไม่สามารถสร้างงานได้");
     }
   };
-  const handleClearAllFilters = () => {
-    setFilters({ ...EMPTY_FILTERS });
-    setSearch("");
+
+  const handleUpdateTask = async (taskId: string, data: Partial<Task>) => {
+    try {
+      const updatedTask = await apiPatch<Task>(`/tasks/${taskId}`, {
+        ...data,
+        userId: currentUser?.id,
+      });
+      setTasks((prev) =>
+        prev.map((t) => (t.id === taskId ? { ...t, ...updatedTask } : t))
+      );
+      toast.success("อัปเดตงานสำเร็จ");
+    } catch (err: any) {
+      console.error("Failed to update task:", err);
+      toast.error(err.message || "ไม่สามารถอัปเดตงานได้");
+    }
   };
-  const handleTaskClick = (task: TaskCardData) => {
+
+  const handleDeleteTask = async (taskId: string) => {
+    if (!confirm("คุณแน่ใจหรือไม่ที่จะลบงานนี้?")) return;
+    
+    try {
+      await apiDelete(`/tasks/${taskId}`);
+      setTasks((prev) => prev.filter((t) => t.id !== taskId));
+      toast.success("ลบงานสำเร็จ");
+      setShowDetailDrawer(false);
+      setSelectedTask(null);
+    } catch (err: any) {
+      console.error("Failed to delete task:", err);
+      toast.error(err.message || "ไม่สามารถลบงานได้");
+    }
+  };
+
+  const handleTaskClick = (task: Task) => {
     setSelectedTask(task);
-    setDetailOpen(true);
+    setShowDetailDrawer(true);
   };
 
-  const handleTaskCreated = (task: any) => {
-    if (!task?.id) return loadData(true);
-    const normalized = normalizeTask(task);
-    setTasks((prev) => {
-      const exists = prev.some((t) => String(t.id) === String(normalized.id));
-      if (exists) return prev.map((t) => (String(t.id) === String(normalized.id) ? { ...t, ...normalized } : t));
-      return [...prev, normalized];
+  const clearFilters = () => {
+    setFilters({
+      status: [],
+      priority: [],
+      assigneeId: null,
+      teamId: null,
+      search: "",
+      dueDateFrom: null,
+      dueDateTo: null,
     });
-    setSelectedTask(normalized);
-    setDetailOpen(true);
   };
 
-  const hasActiveFilters = activeFilters.length > 0 || search;
-  const completionRate = taskStats.total > 0 ? Math.round((taskStats.done / taskStats.total) * 100) : 0;
-  const selectedSortLabel =
-    {
-      updated_desc: "Last updated",
-      due_asc: "Due date",
-      priority_desc: "Priority",
-      status_asc: "Status",
-    }[sortMode] || "Sort";
-  const selectedTeamName =
-    selectedTeamId === "all" ? "All teams" : myTeams.find((t: any) => t.id === selectedTeamId)?.name || "Team";
+  const activeFiltersCount = useMemo(() => {
+    let count = 0;
+    if (filters.status.length > 0) count++;
+    if (filters.priority.length > 0) count++;
+    if (filters.assigneeId) count++;
+    if (filters.teamId) count++;
+    if (filters.dueDateFrom || filters.dueDateTo) count++;
+    return count;
+  }, [filters]);
 
   return (
     <TooltipProvider>
-      <div className="flex h-screen flex-col bg-muted/20">
-        <div className="shrink-0 border-b border-border/70 bg-background">
-          <div className="mx-auto flex max-w-[1400px] flex-col gap-3 px-4 py-4 sm:px-6 lg:px-8">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex min-w-0 items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-border bg-muted/40 shadow-sm">
-                  <CheckSquare className="h-4 w-4 text-foreground" />
-                </div>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <h1 className="truncate text-lg font-semibold text-foreground">Task Workspace</h1>
-                    <Badge variant="outline" className="h-5 rounded-md px-2 text-[10px] font-medium">
-                      {taskStats.total} issues
-                    </Badge>
+      <div className="flex flex-col h-screen bg-gradient-to-br from-background via-background to-muted/20">
+        {/* Header */}
+        <div className="border-b border-border/40 bg-background/95 backdrop-blur-xl supports-[backdrop-filter]:bg-background/80">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="h-16 flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3 min-w-0 flex-1">
+                <div className="relative">
+                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500/25 via-amber-500/10 to-amber-500/5 flex items-center justify-center shadow-md shadow-amber-500/10 ring-1 ring-amber-500/20">
+                    <CheckSquare className="w-5 h-5 text-amber-600" />
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    Plan, prioritize, and deliver work with a structured professional flow
+                  <div className="absolute -top-1 -right-1 flex items-center justify-center w-4 h-4 rounded-full bg-amber-500 text-[9px] text-white border border-background shadow-sm">
+                    <Sparkles className="w-2.5 h-2.5" />
+                  </div>
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h1 className="text-lg font-semibold tracking-tight text-foreground">
+                    Task Manager
+                  </h1>
+                  <p className="text-xs text-muted-foreground truncate">
+                    {stats.total} งาน · {stats.done} เสร็จแล้ว · {stats.overdue} เลยกำหนด
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
+
+              <div className="flex items-center gap-2 shrink-0">
+                {/* Stats badges */}
+                <div className="hidden md:flex items-center gap-2 rounded-lg border border-border/60 bg-background/60 px-2.5 py-1.5 text-[11px] text-muted-foreground">
+                  <span className="inline-flex items-center gap-1">
+                    <div className="w-2 h-2 rounded-full bg-slate-500" />
+                    {stats.todo}
+                  </span>
+                  <span className="inline-flex items-center gap-1">
+                    <div className="w-2 h-2 rounded-full bg-blue-500" />
+                    {stats.inProgress}
+                  </span>
+                  <span className="inline-flex items-center gap-1">
+                    <div className="w-2 h-2 rounded-full bg-amber-500" />
+                    {stats.review}
+                  </span>
+                  <span className="inline-flex items-center gap-1">
+                    <div className="w-2 h-2 rounded-full bg-green-500" />
+                    {stats.done}
+                  </span>
+                </div>
+
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button
                       variant="outline"
                       size="icon"
-                      className="h-8 w-8 rounded-md"
+                      className="h-8 w-8 border-border/60 bg-background/60 hover:bg-accent"
                       onClick={() => loadData(true)}
-                      disabled={refreshing}
                     >
-                      <RefreshCw className={cn("h-4 w-4", refreshing && "animate-spin")} />
+                      <RefreshCw className={cn("w-4 h-4", refreshing && "animate-spin")} />
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent>Refresh tasks</TooltipContent>
+                  <TooltipContent>รีเฟรช</TooltipContent>
                 </Tooltip>
-                <Button size="sm" className="h-8 gap-2 rounded-md px-3 font-medium" onClick={() => setCreateDialogOpen(true)}>
-                  <Plus className="h-4 w-4" />
-                  Create task
-                </Button>
-              </div>
-            </div>
 
-            <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-6">
-              <div className="rounded-md border border-border bg-card px-3 py-2">
-                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Total</p>
-                <p className="mt-1 text-sm font-semibold">{taskStats.total}</p>
-              </div>
-              <div className="rounded-md border border-border bg-card px-3 py-2">
-                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Todo</p>
-                <p className="mt-1 text-sm font-semibold">{taskStats.todo}</p>
-              </div>
-              <div className="rounded-md border border-border bg-card px-3 py-2">
-                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">In Progress</p>
-                <p className="mt-1 text-sm font-semibold">{taskStats.inProgress}</p>
-              </div>
-              <div className="rounded-md border border-border bg-card px-3 py-2">
-                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">In Review</p>
-                <p className="mt-1 text-sm font-semibold">{taskStats.inReview}</p>
-              </div>
-              <div className="rounded-md border border-border bg-card px-3 py-2">
-                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Done</p>
-                <p className="mt-1 text-sm font-semibold">{taskStats.done}</p>
-              </div>
-              <div className="rounded-md border border-border bg-card px-3 py-2">
-                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Completion</p>
-                <p className="mt-1 text-sm font-semibold">{completionRate}%</p>
+                <Button
+                  size="sm"
+                  className="h-8 gap-1.5 px-3 font-medium bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600"
+                  onClick={() => setShowCreateTask(true)}
+                >
+                  <Plus className="w-4 h-4" />
+                  <span className="hidden sm:inline">สร้างงาน</span>
+                </Button>
               </div>
             </div>
           </div>
         </div>
 
-        <div className="shrink-0 border-b border-border/70 bg-background/95">
-          <div className="mx-auto flex max-w-[1400px] flex-wrap items-center gap-2 px-4 py-2 sm:px-6 lg:px-8">
-            <div className="flex h-8 items-center rounded-md border border-border bg-muted/30 p-0.5">
-              {([
-                { key: "board" as ViewMode, label: "Board", icon: LayoutGrid },
-                { key: "list" as ViewMode, label: "List", icon: List },
-              ]).map(({ key, label, icon: Icon }) => (
-                <button
-                  key={key}
-                  onClick={() => setActiveView(key)}
-                  className={cn(
-                    "flex h-6 items-center gap-1.5 rounded px-2.5 text-xs font-medium transition-colors",
-                    activeView === key ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  <Icon className="h-3.5 w-3.5" />
-                  {label}
-                </button>
-              ))}
-            </div>
-
-            {myTeams.length > 0 && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button className="flex h-8 items-center gap-1.5 rounded-md border border-border bg-background px-2.5 text-xs font-medium text-foreground hover:bg-muted/40">
-                    <Users className="h-3.5 w-3.5 text-muted-foreground" />
-                    <span className="max-w-[140px] truncate">{selectedTeamName}</span>
-                    <ChevronDown className="h-3 w-3 text-muted-foreground" />
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="min-w-[170px]">
-                  {myTeams.length > 1 && (
-                    <DropdownMenuItem
-                      onClick={() => setSelectedTeamId("all")}
-                      className={cn("text-xs", selectedTeamId === "all" && "bg-accent font-medium")}
-                    >
-                      All teams
-                    </DropdownMenuItem>
-                  )}
-                  <DropdownMenuSeparator />
-                  {myTeams.map((team: any) => (
-                    <DropdownMenuItem
-                      key={team.id}
-                      onClick={() => setSelectedTeamId(team.id)}
-                      className={cn("text-xs", selectedTeamId === team.id && "bg-accent font-medium")}
-                    >
-                      {team.name}
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
-
-            <div className="relative min-w-[240px] flex-1">
-              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="Search tasks, assignees, status..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="h-8 rounded-md border-border bg-background pl-8 pr-8 text-xs"
-              />
-              {search && (
-                <button
-                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground hover:bg-muted"
-                  onClick={() => setSearch("")}
-                >
-                  <X className="h-3 w-3" />
-                </button>
-              )}
-            </div>
-
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button className="flex h-8 items-center gap-1.5 rounded-md border border-border bg-background px-2.5 text-xs font-medium text-foreground hover:bg-muted/40">
-                  <ArrowUpDown className="h-3.5 w-3.5 text-muted-foreground" />
-                  {selectedSortLabel}
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-44">
-                {[
-                  { value: "updated_desc", label: "Last updated" },
-                  { value: "due_asc", label: "Due date" },
-                  { value: "priority_desc", label: "Priority" },
-                  { value: "status_asc", label: "Status" },
-                ].map((opt) => (
-                  <DropdownMenuItem
-                    key={opt.value}
-                    onClick={() => setSortMode(opt.value as SortMode)}
-                    className={cn("text-xs", sortMode === opt.value && "bg-accent font-medium")}
+        {/* Toolbar */}
+        <div className="border-b border-border/40 bg-background/50 backdrop-blur-sm">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Search */}
+              <div className="relative flex-1 min-w-[200px] max-w-md">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  placeholder="ค้นหางาน..."
+                  value={filters.search}
+                  onChange={(e) => setFilters((f) => ({ ...f, search: e.target.value }))}
+                  className="pl-9 h-9 text-sm bg-background/60 border-border/60"
+                />
+                {filters.search && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-1 top-1/2 -translate-y-1/2 h-6 w-6"
+                    onClick={() => setFilters((f) => ({ ...f, search: "" }))}
                   >
-                    {opt.label}
-                    {sortMode === opt.value && <span className="ml-auto">✓</span>}
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-
-            <button
-              onClick={() => setFilterDrawerOpen(true)}
-              className={cn(
-                "flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition-colors",
-                hasActiveFilters ? "border-foreground/30 bg-foreground/5 text-foreground" : "border-border bg-background text-foreground hover:bg-muted/40"
-              )}
-            >
-              <SlidersHorizontal className="h-3.5 w-3.5 text-muted-foreground" />
-              Filters
-              {activeFilters.length > 0 && (
-                <span className="rounded bg-foreground px-1.5 py-0.5 text-[10px] font-semibold text-background">{activeFilters.length}</span>
-              )}
-            </button>
-          </div>
-        </div>
-
-        {/* Active filter chips */}
-        {activeFilters.length > 0 && (
-          <div className="shrink-0 border-b border-border/60 bg-background">
-            <div className="mx-auto max-w-[1400px] px-4 py-2 sm:px-6 lg:px-8">
-              <FilterChips
-                filters={activeFilters}
-                onRemove={handleRemoveFilter}
-                onClearAll={handleClearAllFilters}
-              />
-            </div>
-          </div>
-        )}
-
-        {/* ══════════════════════════════════════════════════════════════════
-            MAIN CONTENT AREA
-        ══════════════════════════════════════════════════════════════════ */}
-        <div className="flex-1 overflow-hidden">
-          {loading ? (
-            <div className="mx-auto max-w-[1400px] p-4 sm:px-6 lg:p-6">
-              <div className="flex gap-4">
-                {Array.from({ length: 4 }).map((_, i) => (
-                  <div key={i} className="w-72 shrink-0 rounded-lg border border-border bg-card p-3">
-                    <Skeleton className="h-8 w-24 mb-3 rounded-lg" />
-                    <div className="space-y-2">
-                      {Array.from({ length: 3 }).map((_, j) => (
-                        <Skeleton key={j} className="h-28 rounded-xl" />
-                      ))}
-                    </div>
-                  </div>
-                ))}
+                    <X className="w-3 h-3" />
+                  </Button>
+                )}
               </div>
-            </div>
-          ) : errorMessage ? (
-            <div className="flex h-full items-center justify-center p-6">
-              <div className="max-w-sm space-y-4 rounded-xl border border-border bg-card p-6 text-center">
-                <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-xl bg-red-50 ring-1 ring-red-200 dark:bg-red-950/30 dark:ring-red-800">
-                  <AlertTriangle className="w-7 h-7 text-red-500" />
-                </div>
-                <div>
-                  <p className="text-base font-semibold">Couldn't load tasks</p>
-                  <p className="mt-1 text-sm text-muted-foreground">{errorMessage}</p>
-                </div>
-                <Button variant="outline" size="sm" onClick={() => loadData(true)} className="gap-2 rounded-lg">
-                  <RefreshCw className="w-4 h-4" />
-                  Try again
+
+              {/* Filter button */}
+              <Button
+                variant="outline"
+                size="sm"
+                className={cn(
+                  "h-9 gap-1.5",
+                  activeFiltersCount > 0 && "border-primary/60 bg-primary/5"
+                )}
+                onClick={() => setShowFilters(!showFilters)}
+              >
+                <Filter className="w-4 h-4" />
+                <span className="hidden sm:inline">ตัวกรอง</span>
+                {activeFiltersCount > 0 && (
+                  <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">
+                    {activeFiltersCount}
+                  </Badge>
+                )}
+              </Button>
+
+              {activeFiltersCount > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-9 text-xs text-muted-foreground"
+                  onClick={clearFilters}
+                >
+                  ล้างตัวกรอง
                 </Button>
+              )}
+
+              {/* View switcher */}
+              <div className="flex items-center gap-0.5 rounded-lg border border-border/60 bg-background/60 p-0.5 ml-auto">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      onClick={() => setViewMode("board")}
+                      className={cn(
+                        "flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors",
+                        viewMode === "board"
+                          ? "bg-primary/10 text-primary"
+                          : "text-muted-foreground hover:text-foreground hover:bg-background/50"
+                      )}
+                    >
+                      <LayoutGrid className="w-4 h-4" />
+                      <span className="hidden sm:inline">Board</span>
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent>Kanban Board</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      onClick={() => setViewMode("list")}
+                      className={cn(
+                        "flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors",
+                        viewMode === "list"
+                          ? "bg-primary/10 text-primary"
+                          : "text-muted-foreground hover:text-foreground hover:bg-background/50"
+                      )}
+                    >
+                      <List className="w-4 h-4" />
+                      <span className="hidden sm:inline">List</span>
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent>รายการ</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      onClick={() => setViewMode("calendar")}
+                      className={cn(
+                        "flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors",
+                        viewMode === "calendar"
+                          ? "bg-primary/10 text-primary"
+                          : "text-muted-foreground hover:text-foreground hover:bg-background/50"
+                      )}
+                    >
+                      <Calendar className="w-4 h-4" />
+                      <span className="hidden sm:inline">Calendar</span>
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent>ปฏิทิน</TooltipContent>
+                </Tooltip>
               </div>
             </div>
-          ) : visibleTasks.length === 0 ? (
-            hasActiveFilters ? (
-              <EmptyState type="no-results" onClearFilters={handleClearAllFilters} />
-            ) : (
-              <EmptyState type="no-tasks" onCreateTask={() => setCreateDialogOpen(true)} />
-            )
-          ) : activeView === "board" ? (
-            <TaskBoard
-              tasks={visibleTasks}
-              onTaskClick={handleTaskClick}
-              onTaskMoved={(taskId, _from, targetStatus) =>
-                setTasks((prev) =>
-                  prev.map((t) => (String(t.id) === String(taskId) ? { ...t, status: targetStatus } : t))
-                )
-              }
-              onCreateTask={() => setCreateDialogOpen(true)}
-              onTaskCreated={handleTaskCreated}
-              teamId={selectedTeamId !== "all" ? selectedTeamId : undefined}
-            />
-          ) : (
-            <TaskList
-              tasks={visibleTasks}
-              onTaskClick={handleTaskClick}
-              onCreateTask={() => setCreateDialogOpen(true)}
-            />
-          )}
+
+            {/* Filter panel */}
+            <AnimatePresence>
+              {showFilters && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: "auto", opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  className="overflow-hidden"
+                >
+                  <TaskFilters
+                    filters={filters}
+                    onFiltersChange={setFilters}
+                    teams={teams}
+                    users={users}
+                  />
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
         </div>
 
-        {/* ══════════════════════════════════════════════════════════════════
-            OVERLAYS
-        ══════════════════════════════════════════════════════════════════ */}
-        <FilterDrawer
-          open={filterDrawerOpen}
-          onOpenChange={setFilterDrawerOpen}
-          filters={filters}
-          onFilterChange={handleFilterChange}
-          onClearAll={handleClearAllFilters}
+        {/* Main content */}
+        <div className="flex-1 overflow-hidden">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-full">
+            {loading ? (
+              <div className="flex items-center justify-center h-full">
+                <div className="space-y-4">
+                  <Skeleton className="h-12 w-48" />
+                  <Skeleton className="h-64 w-full" />
+                </div>
+              </div>
+            ) : filteredTasks.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full text-center py-12">
+                <div className="w-16 h-16 rounded-2xl bg-muted/50 flex items-center justify-center mb-4">
+                  <FolderKanban className="w-8 h-8 text-muted-foreground" />
+                </div>
+                <h3 className="text-lg font-medium text-foreground mb-1">
+                  {filters.search || activeFiltersCount > 0
+                    ? "ไม่พบงานที่ตรงกับเงื่อนไข"
+                    : "ยังไม่มีงาน"}
+                </h3>
+                <p className="text-sm text-muted-foreground mb-4">
+                  {filters.search || activeFiltersCount > 0
+                    ? "ลองเปลี่ยนตัวกรองหรือคำค้นหา"
+                    : "เริ่มสร้างงานแรกของคุณ"}
+                </p>
+                {!filters.search && activeFiltersCount === 0 && (
+                  <Button onClick={() => setShowCreateTask(true)}>
+                    <Plus className="w-4 h-4 mr-2" />
+                    สร้างงานใหม่
+                  </Button>
+                )}
+              </div>
+            ) : (
+              <div className="h-full py-4">
+                {viewMode === "board" && (
+                  <TaskBoard
+                    tasks={filteredTasks}
+                    onTaskClick={handleTaskClick}
+                    onTaskUpdate={handleUpdateTask}
+                    onTaskCreate={() => setShowCreateTask(true)}
+                  />
+                )}
+                {viewMode === "list" && (
+                  <TaskList
+                    tasks={filteredTasks}
+                    onTaskClick={handleTaskClick}
+                    onTaskUpdate={handleUpdateTask}
+                  />
+                )}
+                {viewMode === "calendar" && (
+                  <TaskCalendarView
+                    tasks={filteredTasks}
+                    onTaskClick={handleTaskClick}
+                    onTaskUpdate={handleUpdateTask}
+                  />
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Dialogs & Drawers */}
+        <CreateTaskDialog
+          open={showCreateTask}
+          onOpenChange={setShowCreateTask}
+          teams={teams}
           users={users}
+          onCreated={(task) => {
+            setTasks((prev) => [...prev, task]);
+            setShowCreateTask(false);
+          }}
         />
 
         <TaskDetailDrawer
-          open={detailOpen}
+          open={showDetailDrawer}
           onOpenChange={(open) => {
-            setDetailOpen(open);
-            if (!open) loadData(true);
+            setShowDetailDrawer(open);
+            if (!open) setSelectedTask(null);
           }}
           task={selectedTask}
-          onTaskDeleted={(taskId) => {
-            setTasks((prev) => prev.filter((t) => String(t.id) !== String(taskId)));
-            setSelectedTask(null);
-            setDetailOpen(false);
-            loadData(true);
-          }}
-        />
-
-        <CreateTaskDialog
-          open={createDialogOpen}
-          onOpenChange={setCreateDialogOpen}
-          onCreated={handleTaskCreated}
+          onUpdate={(data) => selectedTask && handleUpdateTask(selectedTask.id, data)}
+          onDelete={() => selectedTask && handleDeleteTask(selectedTask.id)}
+          users={users}
         />
       </div>
     </TooltipProvider>
