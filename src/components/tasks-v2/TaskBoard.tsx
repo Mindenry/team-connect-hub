@@ -198,29 +198,28 @@ export default function TaskBoard({
   }
 
   return (
-    <div className="h-full w-full overflow-x-auto">
-      <div className="h-full flex gap-3 p-3 min-w-max">
-        {columns.map((column) => {
-          const columnTasks  = tasksByStatus[column.key] || [];
-          const isDragOver   = dragOverColumn === column.key;
-          const accentColor  = getColumnAccent(column);
+    <div className="h-full flex gap-3 overflow-x-auto p-4 pb-6">
+      {columns.map((column) => {
+        const columnTasks  = tasksByStatus[column.key] || [];
+        const isDragOver   = dragOverColumn === column.key;
+        const accentColor  = getColumnAccent(column);
 
-          return (
-            <div
-              key={column.key}
-              className={cn(
-                "flex flex-col h-full min-h-0",
-                "w-[300px] min-w-[280px] max-w-[360px] shrink-0",
-                "rounded-xl",
-                // Column panel: subtle bg, stronger border on drag-over
-                "bg-muted/20 border border-border/40",
-                "transition-all duration-150",
-                isDragOver && "border-primary/40 bg-primary/5 shadow-md"
-              )}
-              onDragOver={(e) => handleDragOver(e, column.key)}
-              onDragLeave={handleDragLeave}
-              onDrop={(e) => handleDrop(e, column.key)}
-            >
+        return (
+          <div
+            key={column.key}
+            className={cn(
+              "flex flex-col h-full min-h-0",
+              "w-[280px] sm:w-[300px] md:w-[316px] shrink-0",
+              "rounded-xl",
+              // Column panel: subtle bg, stronger border on drag-over
+              "bg-muted/20 border border-border/40",
+              "transition-all duration-150",
+              isDragOver && "border-primary/40 bg-primary/5 shadow-md"
+            )}
+            onDragOver={(e) => handleDragOver(e, column.key)}
+            onDragLeave={handleDragLeave}
+            onDrop={(e) => handleDrop(e, column.key)}
+          >
             {/* ── Column header ── */}
             <div
               className="shrink-0 rounded-t-xl border-t-[3px] px-3 pt-3 pb-2.5 flex items-center justify-between gap-2"
@@ -399,7 +398,6 @@ export default function TaskBoard({
           </button>
         )}
       </div>
-    </div>
     </div>
   );
 }

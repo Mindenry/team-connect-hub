@@ -316,7 +316,7 @@ export default function Tasks() {
         {/* ═══════════════════════════════════════════════════
             TOP HEADER — title · stats strip · actions
         ═══════════════════════════════════════════════════ */}
-        <header className="shrink-0 h-12 border-b border-border/60 bg-background/98 backdrop-blur-sm flex items-center px-3 gap-3 z-10">
+        <header className="shrink-0 h-12 border-b border-border/60 bg-background/98 backdrop-blur-sm flex items-center px-4 sm:px-6 gap-3 z-10">
           {/* Brand */}
           <div className="flex items-center gap-2 shrink-0">
             <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center">
@@ -379,7 +379,7 @@ export default function Tasks() {
         {/* ═══════════════════════════════════════════════════
             TOOLBAR — view · team · search · sort · filter
         ═══════════════════════════════════════════════════ */}
-        <div className="shrink-0 border-b border-border/40 bg-background px-3 h-11 flex items-center gap-2">
+        <div className="shrink-0 border-b border-border/40 bg-background px-4 sm:px-6 h-11 flex items-center gap-2">
 
           {/* View switcher */}
           <div className="flex items-center bg-muted/50 rounded-md p-0.5 gap-px border border-border/30">
@@ -519,7 +519,7 @@ export default function Tasks() {
             ACTIVE FILTER CHIPS
         ═══════════════════════════════════════════════════ */}
         {activeFilters.length > 0 && (
-          <div className="shrink-0 border-b border-border/30 px-3 py-1.5 bg-muted/15">
+          <div className="shrink-0 border-b border-border/30 px-4 sm:px-6 py-1.5 bg-muted/15">
             <FilterChips
               filters={activeFilters}
               onRemove={handleRemoveFilter}
@@ -531,7 +531,7 @@ export default function Tasks() {
         {/* ═══════════════════════════════════════════════════
             MAIN CONTENT
         ═══════════════════════════════════════════════════ */}
-        <div className="flex-1 overflow-hidden w-full">
+        <div className="flex-1 overflow-hidden">
           {loading ? (
             <div className="p-6 space-y-2">
               {Array.from({ length: 7 }).map((_, i) => (

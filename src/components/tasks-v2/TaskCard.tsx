@@ -153,17 +153,16 @@ function BoardCard({ task, onClick, draggable, onDragStart }: TaskCardProps) {
     <div
       className={cn(
         // Layout & shape
-        "relative bg-card rounded-lg cursor-pointer select-none group",
+        "relative bg-card rounded-lg cursor-pointer select-none",
         // Border: left accent by priority + outer border
-        "border border-border/40 border-l-[3px]",
+        "border border-border/50 border-l-[3px]",
         priority.border,
-        // Shadow & hover - more premium feel
-        "shadow-[0_1px_3px_rgba(0,0,0,0.04)]",
-        "hover:shadow-[0_4px_12px_rgba(0,0,0,0.08)] hover:-translate-y-0.5",
-        "transition-all duration-200 ease-out",
-        "hover:border-border/60",
+        // Shadow & hover
+        "shadow-sm hover:shadow-md hover:-translate-y-px",
+        "transition-all duration-150",
+        "hover:border-border/80",
         // Active press
-        "active:scale-[0.98] active:shadow-sm"
+        "active:scale-[0.99] active:shadow-sm"
       )}
       onClick={() => {
         if (hasDraggedRef.current) { hasDraggedRef.current = false; return; }
@@ -172,7 +171,7 @@ function BoardCard({ task, onClick, draggable, onDragStart }: TaskCardProps) {
       draggable={draggable}
       onDragStart={(e) => { hasDraggedRef.current = true; onDragStart?.(e, task); }}
     >
-      <div className="p-3 space-y-2">
+      <div className="p-3 space-y-2.5">
 
         {/* ── Row 1: Type icon + project key + priority ── */}
         <div className="flex items-center justify-between gap-2">
