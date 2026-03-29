@@ -329,7 +329,8 @@ export default function TaskDetailDialog({
         body: formData,
       });
       if (!uploadRes.ok) throw new Error("Upload failed");
-      const uploadedData = await uploadRes.json();
+      const _uploadedData = await uploadRes.json();
+      const uploadedData = _uploadedData && _uploadedData.data ? _uploadedData.data : _uploadedData;
       
       const newAtt = await apiPost<any>(`/tasks/${fullTask.id}/attachments`, {
         userId: currentUser.id,
