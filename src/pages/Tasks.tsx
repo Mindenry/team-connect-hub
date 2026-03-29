@@ -115,7 +115,7 @@ function KanbanColumn({
       {/* Column header */}
       <div className="px-3 py-2.5 border-b border-border/40 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className={cn("w-2.5 h-2.5 rounded-full", status === "todo" ? "bg-slate-500" : status === "in_progress" ? "bg-blue-500" : status === "review" ? "bg-purple-500" : "bg-emerald-500")} />
+          <div className={cn("w-2.5 h-2.5 rounded-full", cfg.dotColor)} />
           <span className="text-xs font-semibold">{cfg.label}</span>
           <span className="text-[10px] text-muted-foreground bg-muted/50 px-1.5 py-0.5 rounded-full">{tasks.length}</span>
         </div>
@@ -280,7 +280,7 @@ function TaskListView({
         <motion.div key={groupName} variants={itemVariants}>
           <div className="flex items-center gap-2 mb-2">
             {groupBy === "status" && (
-              <div className={cn("w-2.5 h-2.5 rounded-full", groupName === "todo" ? "bg-slate-500" : groupName === "in_progress" ? "bg-blue-500" : groupName === "review" ? "bg-purple-500" : "bg-emerald-500")} />
+              <div className={cn("w-2.5 h-2.5 rounded-full", STATUS_CONFIG[groupName]?.dotColor || "bg-slate-400")} />
             )}
             {groupBy === "priority" && (
               <div className={cn("w-2.5 h-2.5 rounded-full", PRIORITY_CONFIG[groupName as keyof typeof PRIORITY_CONFIG]?.dotColor || "bg-gray-400")} />
@@ -812,8 +812,8 @@ export default function Tasks() {
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-3 sm:gap-4 min-w-0">
                 <div className="relative shrink-0">
-                  <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-gradient-to-br from-amber-500/25 via-amber-500/10 to-amber-500/5 flex items-center justify-center shadow-lg shadow-amber-500/10 ring-1 ring-amber-500/20">
-                    <CheckSquare className="w-5 h-5 sm:w-6 sm:h-6 text-amber-600 dark:text-amber-400" />
+                  <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-gradient-to-br from-primary/25 via-primary/10 to-primary/5 flex items-center justify-center shadow-lg shadow-primary/10 ring-1 ring-primary/20">
+                    <CheckSquare className="w-5 h-5 sm:w-6 sm:h-6 text-primary" />
                   </div>
                   {stats.overdue > 0 && (
                     <div className="absolute -top-0.5 -right-0.5 w-3 h-3 sm:w-3.5 sm:h-3.5 bg-red-500 rounded-full border-2 border-background flex items-center justify-center">
@@ -850,21 +850,21 @@ export default function Tasks() {
                   <span className="text-[9px] sm:text-[10px] text-muted-foreground">tasks</span>
                 </div>
               </div>
-              <div className={cn("rounded-xl border px-2.5 sm:px-3 py-2 sm:py-2.5 flex flex-col justify-between", stats.inProgress > 0 ? "border-blue-500/40 bg-blue-500/5" : "border-border/60 bg-card/60")}>
+              <div className={cn("rounded-xl border px-2.5 sm:px-3 py-2 sm:py-2.5 flex flex-col justify-between", stats.inProgress > 0 ? "border-primary/30 bg-primary/5" : "border-border/60 bg-card/60")}>
                 <span className="text-[9px] sm:text-[10px] font-medium text-muted-foreground uppercase tracking-wide">กำลังทำ</span>
                 <div className="flex items-baseline gap-0.5 sm:gap-1 mt-1">
                   <span className="text-base sm:text-lg md:text-xl font-semibold tabular-nums">{stats.inProgress}</span>
                   <span className="text-[9px] sm:text-[10px] text-muted-foreground">in progress</span>
                 </div>
               </div>
-              <div className={cn("rounded-xl border px-2.5 sm:px-3 py-2 sm:py-2.5 flex flex-col justify-between", "border-emerald-500/40 bg-emerald-500/5")}>
+              <div className={cn("rounded-xl border px-2.5 sm:px-3 py-2 sm:py-2.5 flex flex-col justify-between", stats.done > 0 ? "border-emerald-500/30 bg-emerald-500/5" : "border-border/60 bg-card/60")}>
                 <span className="text-[9px] sm:text-[10px] font-medium text-muted-foreground uppercase tracking-wide">เสร็จแล้ว</span>
                 <div className="flex items-baseline gap-0.5 sm:gap-1 mt-1">
                   <span className="text-base sm:text-lg md:text-xl font-semibold tabular-nums">{stats.done}</span>
                   <span className="text-[9px] sm:text-[10px] text-muted-foreground">done</span>
                 </div>
               </div>
-              <div className={cn("rounded-xl border px-2.5 sm:px-3 py-2 sm:py-2.5 flex flex-col justify-between", stats.overdue > 0 ? "border-red-500/40 bg-red-500/5" : "border-border/60 bg-card/60")}>
+              <div className={cn("rounded-xl border px-2.5 sm:px-3 py-2 sm:py-2.5 flex flex-col justify-between", stats.overdue > 0 ? "border-red-500/30 bg-red-500/5" : "border-border/60 bg-card/60")}>
                 <span className="text-[9px] sm:text-[10px] font-medium text-muted-foreground uppercase tracking-wide">เลยกำหนด</span>
                 <div className="flex items-baseline gap-0.5 sm:gap-1 mt-1">
                   <span className={cn("text-base sm:text-lg md:text-xl font-semibold tabular-nums", stats.overdue > 0 && "text-red-500")}>{stats.overdue}</span>

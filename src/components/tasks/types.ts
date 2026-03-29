@@ -120,47 +120,51 @@ export type TaskStatus = "todo" | "in_progress" | "review" | "done";
 
 export const PRIORITY_CONFIG: Record<Priority, { color: string; label: string; dotColor: string }> = {
   urgent: {
-    color: "bg-gradient-to-br from-red-600/25 via-red-500/15 to-red-500/5 text-red-700 dark:text-red-400 border-red-600/40",
+    color: "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/25",
     label: "Urgent",
     dotColor: "bg-red-500",
   },
   high: {
-    color: "bg-gradient-to-br from-orange-500/20 via-orange-500/10 to-orange-500/5 text-orange-600 dark:text-orange-400 border-orange-500/30",
+    color: "bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-500/25",
     label: "High",
     dotColor: "bg-orange-500",
   },
   medium: {
-    color: "bg-gradient-to-br from-amber-500/20 via-amber-500/10 to-amber-500/5 text-amber-600 dark:text-amber-400 border-amber-500/30",
+    color: "bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/25",
     label: "Medium",
-    dotColor: "bg-amber-500",
+    dotColor: "bg-sky-500",
   },
   low: {
-    color: "bg-gradient-to-br from-blue-500/20 via-blue-500/10 to-blue-500/5 text-blue-600 dark:text-blue-400 border-blue-500/30",
+    color: "bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/25",
     label: "Low",
-    dotColor: "bg-blue-500",
+    dotColor: "bg-slate-400",
   },
 };
 
-export const STATUS_CONFIG: Record<string, { label: string; color: string; bgColor: string }> = {
+export const STATUS_CONFIG: Record<string, { label: string; color: string; bgColor: string; dotColor: string }> = {
   todo: {
     label: "To Do",
     color: "text-slate-600 dark:text-slate-400",
-    bgColor: "bg-slate-500/15 border-slate-500/30",
+    bgColor: "bg-slate-500/10 border-slate-500/25",
+    dotColor: "bg-slate-400",
   },
   in_progress: {
     label: "In Progress",
     color: "text-blue-600 dark:text-blue-400",
-    bgColor: "bg-blue-500/15 border-blue-500/30",
+    bgColor: "bg-blue-500/10 border-blue-500/25",
+    dotColor: "bg-blue-500",
   },
   review: {
     label: "Review",
-    color: "text-purple-600 dark:text-purple-400",
-    bgColor: "bg-purple-500/15 border-purple-500/30",
+    color: "text-violet-600 dark:text-violet-400",
+    bgColor: "bg-violet-500/10 border-violet-500/25",
+    dotColor: "bg-violet-500",
   },
   done: {
     label: "Done",
     color: "text-emerald-600 dark:text-emerald-400",
-    bgColor: "bg-emerald-500/15 border-emerald-500/30",
+    bgColor: "bg-emerald-500/10 border-emerald-500/25",
+    dotColor: "bg-emerald-500",
   },
 };
 
