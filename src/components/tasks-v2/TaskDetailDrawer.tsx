@@ -668,22 +668,21 @@ export default function TaskDetailDrawer({
           </div>
         </div>
 
-        {/* ═══════════════════════════════════════════════════════════════
-            SCROLLABLE CONTENT AREA
-        ═══════════════════════════════════════════════════════════════ */}
-        <ScrollArea className="flex-1 overflow-hidden">
-          <div className="px-5 py-4 space-y-1">
-            
-            {loading ? (
-              <div className="flex flex-col items-center justify-center py-16">
-                <div className="relative">
-                  <div className="w-10 h-10 border-2 border-primary/20 border-t-primary rounded-full animate-spin" />
-                  <div className="absolute inset-0 w-10 h-10 border-2 border-transparent border-t-primary/40 rounded-full animate-spin animate-reverse" style={{ animationDirection: 'reverse', animationDuration: '1.5s' }} />
-                </div>
-                <p className="mt-4 text-sm text-muted-foreground">Loading task details...</p>
-              </div>
-            ) : (
-              <>
+        <div className="flex-1 overflow-hidden">
+          <div className="grid h-full grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px]">
+            {/* Left: Main content */}
+            <ScrollArea className="h-full">
+              <div className="space-y-1 px-5 py-4">
+                {loading ? (
+                  <div className="flex flex-col items-center justify-center py-16">
+                    <div className="relative">
+                      <div className="w-10 h-10 border-2 border-primary/20 border-t-primary rounded-full animate-spin" />
+                      <div className="absolute inset-0 w-10 h-10 border-2 border-transparent border-t-primary/40 rounded-full animate-spin animate-reverse" style={{ animationDirection: 'reverse', animationDuration: '1.5s' }} />
+                    </div>
+                    <p className="mt-4 text-sm text-muted-foreground">Loading task details...</p>
+                  </div>
+                ) : (
+                  <>
                 {/* ─── DESCRIPTION SECTION ─── */}
                 <CollapsibleSection 
                   title="Description" 
@@ -978,156 +977,151 @@ Use this space to describe:
                     </div>
                   )}
                 </CollapsibleSection>
-              </>
-            )}
-          </div>
-        </ScrollArea>
+                  </>
+                )}
+              </div>
+            </ScrollArea>
 
-        {/* ═══════════════════════════════════════════════════════════════
-            PROPERTIES SIDEBAR - Bottom fixed panel
-        ═══════════════════════════════════════════════════════════════ */}
-        <div className="shrink-0 border-t border-border/60 bg-muted/20">
-          <div className="p-4 space-y-1">
-            {/* Assignees */}
-            <PropertyField label="Assignees" icon={Users}>
-              <div className="flex flex-wrap gap-1.5">
-                {assigneeIds.length > 0 ? (
-                  assigneeIds.map((id) => {
-                    const u = users.find((u) => u.id === id);
-                    return (
-                      <div 
-                        key={id} 
-                        className="group flex items-center gap-1.5 bg-background border border-border/40 rounded-full pl-0.5 pr-2 py-0.5 hover:border-border transition-colors"
-                      >
-                        <Avatar className="w-5 h-5">
-                          <AvatarImage src={u?.avatar} />
-                          <AvatarFallback className="text-[8px] bg-gradient-to-br from-primary/20 to-primary/10 text-primary font-semibold">
-                            {u?.name?.slice(0, 2).toUpperCase() || "??"}
-                          </AvatarFallback>
-                        </Avatar>
-                        <span className="text-xs font-medium">{u?.name || "Unknown"}</span>
-                        <button
-                          className="text-muted-foreground/40 hover:text-destructive transition-colors opacity-0 group-hover:opacity-100"
-                          onClick={() => {
-                            const newIds = assigneeIds.filter((aId) => aId !== id);
+            {/* Right: Properties sidebar */}
+            <div className="border-t border-border/60 bg-muted/20 lg:border-l lg:border-t-0">
+              <ScrollArea className="h-full">
+                <div className="space-y-1 p-4">
+                  <PropertyField label="Assignees" icon={Users}>
+                    <div className="flex flex-wrap gap-1.5">
+                      {assigneeIds.length > 0 ? (
+                        assigneeIds.map((id) => {
+                          const u = users.find((u) => u.id === id);
+                          return (
+                            <div
+                              key={id}
+                              className="group flex items-center gap-1.5 rounded-full border border-border/40 bg-background py-0.5 pl-0.5 pr-2 transition-colors hover:border-border"
+                            >
+                              <Avatar className="w-5 h-5">
+                                <AvatarImage src={u?.avatar} />
+                                <AvatarFallback className="text-[8px] bg-gradient-to-br from-primary/20 to-primary/10 text-primary font-semibold">
+                                  {u?.name?.slice(0, 2).toUpperCase() || "??"}
+                                </AvatarFallback>
+                              </Avatar>
+                              <span className="text-xs font-medium">{u?.name || "Unknown"}</span>
+                              <button
+                                className="text-muted-foreground/40 hover:text-destructive transition-colors opacity-0 group-hover:opacity-100"
+                                onClick={() => {
+                                  const newIds = assigneeIds.filter((aId) => aId !== id);
+                                  setAssigneeIds(newIds);
+                                  handleUpdateField("assigneeIds", newIds.length > 0 ? newIds : null);
+                                }}
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <span className="text-xs text-muted-foreground/50">Unassigned</span>
+                      )}
+                      <Select
+                        value=""
+                        onValueChange={(v) => {
+                          if (v && !assigneeIds.includes(v)) {
+                            const newIds = [...assigneeIds, v];
                             setAssigneeIds(newIds);
-                            handleUpdateField("assigneeIds", newIds.length > 0 ? newIds : null);
-                          }}
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </div>
-                    );
-                  })
-                ) : (
-                  <span className="text-xs text-muted-foreground/50">Unassigned</span>
-                )}
-                <Select 
-                  value="" 
-                  onValueChange={(v) => {
-                    if (v && !assigneeIds.includes(v)) {
-                      const newIds = [...assigneeIds, v];
-                      setAssigneeIds(newIds);
-                      handleUpdateField("assigneeIds", newIds);
-                    }
-                  }}
-                >
-                  <SelectTrigger className="h-6 w-auto bg-transparent text-[11px] border-border/30 border-dashed px-2 hover:border-primary/40 transition-colors">
-                    <SelectValue placeholder="+ Add" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {users.filter((u) => !assigneeIds.includes(u.id)).map((u) => (
-                      <SelectItem key={u.id} value={u.id}>
-                        <div className="flex items-center gap-2">
-                          <Avatar className="w-4 h-4">
-                            <AvatarImage src={u.avatar} />
-                            <AvatarFallback className="text-[7px] bg-primary/10 text-primary">
-                              {u.name?.slice(0, 2).toUpperCase()}
-                            </AvatarFallback>
-                          </Avatar>
-                          <span className="text-xs">{u.name}</span>
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </PropertyField>
+                            handleUpdateField("assigneeIds", newIds);
+                          }
+                        }}
+                      >
+                        <SelectTrigger className="h-6 w-auto border-border/30 border-dashed bg-transparent px-2 text-[11px] transition-colors hover:border-primary/40">
+                          <SelectValue placeholder="+ Add" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {users.filter((u) => !assigneeIds.includes(u.id)).map((u) => (
+                            <SelectItem key={u.id} value={u.id}>
+                              <div className="flex items-center gap-2">
+                                <Avatar className="w-4 h-4">
+                                  <AvatarImage src={u.avatar} />
+                                  <AvatarFallback className="text-[7px] bg-primary/10 text-primary">
+                                    {u.name?.slice(0, 2).toUpperCase()}
+                                  </AvatarFallback>
+                                </Avatar>
+                                <span className="text-xs">{u.name}</span>
+                              </div>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </PropertyField>
 
-            {/* Due Date + Team row */}
-            <div className="flex gap-4">
-              <PropertyField label="Due Date" icon={Calendar} highlight={isOverdue}>
-                <Input
-                  type="date"
-                  value={displayTask?.dueDate ? new Date(displayTask.dueDate).toISOString().slice(0, 10) : ""}
-                  onChange={(e) => handleUpdateField("dueDate", e.target.value ? new Date(e.target.value).toISOString() : null)}
-                  className={cn(
-                    "h-7 bg-background/50 text-xs border-border/40 focus:border-primary/50",
-                    isOverdue && "border-red-400 text-red-600 focus:border-red-500"
-                  )}
-                />
-              </PropertyField>
-              
-              <PropertyField label="Team" icon={Users}>
-                <Select
-                  value={displayTask?.teamId || "none"}
-                  onValueChange={(v) => handleUpdateField("teamId", v === "none" ? null : v)}
-                >
-                  <SelectTrigger className="h-7 bg-background/50 text-xs border-border/40">
-                    <SelectValue placeholder="No team" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">
-                      <span className="text-xs text-muted-foreground">No team</span>
-                    </SelectItem>
-                    {teams.map((t) => (
-                      <SelectItem key={t.id} value={t.id}>
-                        <span className="text-xs">{t.name}</span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </PropertyField>
-            </div>
+                  <PropertyField label="Due Date" icon={Calendar} highlight={isOverdue}>
+                    <Input
+                      type="date"
+                      value={displayTask?.dueDate ? new Date(displayTask.dueDate).toISOString().slice(0, 10) : ""}
+                      onChange={(e) => handleUpdateField("dueDate", e.target.value ? new Date(e.target.value).toISOString() : null)}
+                      className={cn(
+                        "h-8 border-border/40 bg-background/50 text-xs focus:border-primary/50",
+                        isOverdue && "border-red-400 text-red-600 focus:border-red-500"
+                      )}
+                    />
+                  </PropertyField>
 
-            {/* Attach file button */}
-            <label className="cursor-pointer block">
-              <input 
-                type="file" 
-                className="hidden" 
-                disabled={uploadingAttachment} 
-                onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadAttachment(f); }} 
-              />
-              <div className={cn(
-                "flex items-center justify-center gap-2 w-full h-8 rounded-lg",
-                "border border-dashed border-border/40 hover:border-primary/40",
-                "text-xs text-muted-foreground hover:text-primary",
-                "transition-all duration-200",
-                uploadingAttachment && "opacity-50 pointer-events-none"
-              )}>
-                {uploadingAttachment ? (
-                  <>
-                    <div className="w-3.5 h-3.5 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
-                    <span>Uploading...</span>
-                  </>
-                ) : (
-                  <>
-                    <Paperclip className="w-3.5 h-3.5" />
-                    <span>Attach file</span>
-                  </>
-                )}
-              </div>
-            </label>
+                  <PropertyField label="Team" icon={Users}>
+                    <Select
+                      value={displayTask?.teamId || "none"}
+                      onValueChange={(v) => handleUpdateField("teamId", v === "none" ? null : v)}
+                    >
+                      <SelectTrigger className="h-8 border-border/40 bg-background/50 text-xs">
+                        <SelectValue placeholder="No team" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">
+                          <span className="text-xs text-muted-foreground">No team</span>
+                        </SelectItem>
+                        {teams.map((t) => (
+                          <SelectItem key={t.id} value={t.id}>
+                            <span className="text-xs">{t.name}</span>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </PropertyField>
 
-            {/* Metadata */}
-            <div className="flex items-center justify-between text-[10px] text-muted-foreground/50 pt-2 border-t border-border/20">
-              <span className="flex items-center gap-1">
-                <Clock className="w-3 h-3" />
-                Created {displayTask?.createdAt ? new Date(displayTask.createdAt).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "—"}
-              </span>
-              <span>
-                Updated {displayTask?.updatedAt ? getTimeAgo(new Date(displayTask.updatedAt)) : "—"}
-              </span>
+                  <label className="block cursor-pointer px-3 pt-2">
+                    <input
+                      type="file"
+                      className="hidden"
+                      disabled={uploadingAttachment}
+                      onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadAttachment(f); }}
+                    />
+                    <div
+                      className={cn(
+                        "flex h-8 w-full items-center justify-center gap-2 rounded-lg border border-dashed border-border/40 text-xs text-muted-foreground transition-all duration-200 hover:border-primary/40 hover:text-primary",
+                        uploadingAttachment && "pointer-events-none opacity-50"
+                      )}
+                    >
+                      {uploadingAttachment ? (
+                        <>
+                          <div className="h-3.5 w-3.5 rounded-full border-2 border-primary/30 border-t-primary animate-spin" />
+                          <span>Uploading...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Paperclip className="w-3.5 h-3.5" />
+                          <span>Attach file</span>
+                        </>
+                      )}
+                    </div>
+                  </label>
+
+                  <div className="flex flex-col gap-1 border-t border-border/20 px-3 pt-3 text-[10px] text-muted-foreground/70">
+                    <span className="flex items-center gap-1">
+                      <Clock className="w-3 h-3" />
+                      Created {displayTask?.createdAt ? new Date(displayTask.createdAt).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "—"}
+                    </span>
+                    <span>
+                      Updated {displayTask?.updatedAt ? getTimeAgo(new Date(displayTask.updatedAt)) : "—"}
+                    </span>
+                  </div>
+                </div>
+              </ScrollArea>
             </div>
           </div>
         </div>

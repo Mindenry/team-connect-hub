@@ -329,7 +329,7 @@ export default function Tasks() {
     <TooltipProvider>
       <div className="flex h-screen flex-col bg-muted/20">
         <div className="shrink-0 border-b border-border/70 bg-background">
-          <div className="mx-auto flex max-w-[1800px] flex-col gap-3 px-4 py-4 lg:px-8">
+          <div className="mx-auto flex max-w-[1400px] flex-col gap-3 px-4 py-4 sm:px-6 lg:px-8">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex min-w-0 items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-border bg-muted/40 shadow-sm">
@@ -399,7 +399,7 @@ export default function Tasks() {
         </div>
 
         <div className="shrink-0 border-b border-border/70 bg-background/95">
-          <div className="mx-auto flex max-w-[1800px] flex-wrap items-center gap-2 px-4 py-2 lg:px-8">
+          <div className="mx-auto flex max-w-[1400px] flex-wrap items-center gap-2 px-4 py-2 sm:px-6 lg:px-8">
             <div className="flex h-8 items-center rounded-md border border-border bg-muted/30 p-0.5">
               {([
                 { key: "board" as ViewMode, label: "Board", icon: LayoutGrid },
@@ -514,7 +514,7 @@ export default function Tasks() {
         {/* Active filter chips */}
         {activeFilters.length > 0 && (
           <div className="shrink-0 border-b border-border/60 bg-background">
-            <div className="mx-auto max-w-[1800px] px-4 py-2 lg:px-8">
+            <div className="mx-auto max-w-[1400px] px-4 py-2 sm:px-6 lg:px-8">
               <FilterChips
                 filters={activeFilters}
                 onRemove={handleRemoveFilter}
@@ -529,7 +529,7 @@ export default function Tasks() {
         ══════════════════════════════════════════════════════════════════ */}
         <div className="flex-1 overflow-hidden">
           {loading ? (
-            <div className="mx-auto max-w-[1800px] p-4 lg:p-6">
+            <div className="mx-auto max-w-[1400px] p-4 sm:px-6 lg:p-6">
               <div className="flex gap-4">
                 {Array.from({ length: 4 }).map((_, i) => (
                   <div key={i} className="w-72 shrink-0 rounded-lg border border-border bg-card p-3">
