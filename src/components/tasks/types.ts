@@ -10,6 +10,58 @@ export interface TaskTeam {
   name: string;
 }
 
+export interface TaskSprint {
+  id: string;
+  name: string;
+  status?: string;
+}
+
+export interface TaskEpic {
+  id: string;
+  name: string;
+  color?: string | null;
+  status?: string;
+}
+
+export interface TaskProject {
+  id: string;
+  key: string;
+  name: string;
+  color?: string | null;
+}
+
+export interface TaskComponent {
+  id: string;
+  name: string;
+}
+
+export interface TaskVersion {
+  id: string;
+  name: string;
+  released?: boolean;
+  releaseDate?: string | null;
+}
+
+export interface IssueLink {
+  id: string;
+  type: string; // blocks, relates, duplicates, clones
+  sourceId: string;
+  targetId: string;
+  createdAt: string;
+  source?: { id: string; title: string; issueType?: string; status?: string };
+  target?: { id: string; title: string; issueType?: string; status?: string };
+}
+
+export interface TimeEntry {
+  id: string;
+  description?: string | null;
+  startTime: string;
+  endTime?: string | null;
+  duration?: number | null; // seconds
+  userId: string;
+  user?: TaskUser;
+}
+
 export interface Subtask {
   id: string;
   title: string;
@@ -80,21 +132,34 @@ export interface Task {
   sprintId?: string | null;
   epicId?: string | null;
   projectId?: string | null;
+  componentId?: string | null;
+  versionId?: string | null;
   parentTaskId?: string | null;
   assignee?: TaskUser | null;
   reporter?: TaskUser | null;
   team?: TaskTeam | null;
+  sprint?: TaskSprint | null;
+  epic?: TaskEpic | null;
+  project?: TaskProject | null;
+  component?: TaskComponent | null;
+  version?: TaskVersion | null;
   subtasks?: Subtask[];
   comments?: TaskComment[];
   activityLog?: TaskActivityLog[];
   attachments?: TaskAttachment[];
   watchers?: TaskWatcher[];
   childTasks?: Task[];
+  linkedIssues?: IssueLink[];
+  linkedFrom?: IssueLink[];
+  timeEntries?: TimeEntry[];
+  parentTask?: { id: string; title: string; status: string } | null;
   _count?: {
     subtasks?: number;
     comments?: number;
     attachments?: number;
     watchers?: number;
+    linkedIssues?: number;
+    timeEntries?: number;
   };
 }
 
