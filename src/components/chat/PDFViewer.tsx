@@ -12,6 +12,11 @@ export function PDFViewer({ url, name, variant = "default" }: PDFViewerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const isMeeting = variant === "meeting";
 
+  // Cloudinary trick: injecting fl_attachment forces a block-bypassing download for PDFs uploaded as images
+  const downloadUrl = url.includes("res.cloudinary.com") && url.includes("/upload/") && !url.includes("fl_attachment")
+    ? url.replace("/upload/", "/upload/fl_attachment/")
+    : url;
+
   const handleOpenPdf = (e: React.MouseEvent) => {
     e.preventDefault();
     setIsOpen(true);
@@ -67,11 +72,11 @@ export function PDFViewer({ url, name, variant = "default" }: PDFViewerProps) {
 
       {isOpen && (
         <div
-          className="fixed inset-0 z-[60] bg-black/80 flex items-center justify-center p-4 sm:p-6"
+          className="fixed inset-0 z-[100] bg-black/80 flex items-center justify-center p-4 sm:p-6 backdrop-blur-sm"
           onClick={() => setIsOpen(false)}
         >
           <div
-            className="relative w-full max-w-4xl h-[85vh] flex flex-col bg-white dark:bg-zinc-900 rounded-xl overflow-hidden shadow-2xl"
+            className="relative w-full max-w-3xl h-[75vh] flex flex-col bg-white dark:bg-zinc-900 rounded-xl overflow-hidden shadow-2xl ring-1 ring-white/10"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
@@ -82,7 +87,7 @@ export function PDFViewer({ url, name, variant = "default" }: PDFViewerProps) {
               </div>
               <div className="flex items-center gap-2">
                 <a
-                  href={url}
+                  href={downloadUrl}
                   download={name}
                   className="p-2 text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-md transition-colors"
                   title="Download PDF"
@@ -110,12 +115,19 @@ export function PDFViewer({ url, name, variant = "default" }: PDFViewerProps) {
             </div>
 
             {/* PDF Content */}
-            <div className="flex-1 w-full bg-gray-100 dark:bg-black">
+            <div className="flex-1 w-full bg-gray-100 dark:bg-black/95 relative">
               <iframe
                 src={`${url}#view=FitH`}
                 className="w-full h-full border-none"
                 title={name}
+                loading="lazy"
               />
+              {/* Optional overlay hint if PDF fails to load due to Cloudinary 401 */}
+              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none opacity-50 flex flex-col items-center">
+                <FileText className="w-10 h-10 mb-2" />
+                <span className="text-sm font-medium">Loading document...</span>
+                <span className="text-xs text-center mt-2 max-w-[250px]">If it doesn't load (401 Error), Cloudinary security settings may block PDF embedding. Please click the download button above.</span>
+              </div>
             </div>
           </div>
         </div>
