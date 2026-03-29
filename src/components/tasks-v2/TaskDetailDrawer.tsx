@@ -31,11 +31,11 @@ import {
   Archive,
 } from "lucide-react";
 import {
-  Sheet,
-  SheetContent,
-  SheetTitle,
-  SheetHeader,
-} from "@/components/ui/sheet";
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  DialogHeader,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -74,18 +74,18 @@ interface TaskDetailDrawerProps {
 }
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; dot: string; bg: string; icon: any }> = {
-  todo:        { label: "Open",        color: "text-slate-700 dark:text-slate-300",   dot: "bg-slate-400",   bg: "bg-slate-100 dark:bg-slate-800",    icon: CheckSquare },
-  in_progress: { label: "In Progress", color: "text-blue-700 dark:text-blue-400",     dot: "bg-blue-500",    bg: "bg-blue-50 dark:bg-blue-950",       icon: Clock },
-  in_review:   { label: "In Review",   color: "text-amber-700 dark:text-amber-400",   dot: "bg-amber-500",   bg: "bg-amber-50 dark:bg-amber-950",     icon: Eye },
-  done:        { label: "Done",        color: "text-emerald-700 dark:text-emerald-400",dot: "bg-emerald-500", bg: "bg-emerald-50 dark:bg-emerald-950", icon: Check },
-  canceled:    { label: "Canceled",    color: "text-slate-500",                        dot: "bg-slate-300",   bg: "bg-slate-100 dark:bg-slate-800",    icon: Archive },
+  todo:        { label: "Open",        color: "text-muted-foreground",   dot: "bg-muted-foreground",   bg: "bg-muted/50",    icon: CheckSquare },
+  in_progress: { label: "In Progress", color: "text-primary",             dot: "bg-primary",           bg: "bg-primary/10", icon: Clock },
+  in_review:   { label: "In Review",   color: "text-primary",             dot: "bg-primary",           bg: "bg-primary/10", icon: Eye },
+  done:        { label: "Done",        color: "text-primary",             dot: "bg-primary",            bg: "bg-primary/10", icon: Check },
+  canceled:    { label: "Canceled",    color: "text-muted-foreground",   dot: "bg-muted-foreground/50",   bg: "bg-muted/30",    icon: Archive },
 };
 
-const PRIORITY_CONFIG: Record<string, { label: string; Icon: any; color: string; bg: string; gradient: string }> = {
-  urgent: { label: "Urgent", Icon: ArrowUp,    color: "text-red-600",    bg: "bg-red-50 dark:bg-red-950",    gradient: "from-red-500 to-orange-500" },
-  high:   { label: "High",   Icon: ChevronUp,  color: "text-orange-500", bg: "bg-orange-50 dark:bg-orange-950", gradient: "from-orange-500 to-amber-500" },
-  medium: { label: "Medium", Icon: Minus,      color: "text-yellow-600", bg: "bg-yellow-50 dark:bg-yellow-950", gradient: "from-yellow-500 to-lime-500" },
-  low:    { label: "Low",    Icon: ChevronDown,color: "text-slate-400",  bg: "bg-slate-100 dark:bg-slate-800",  gradient: "from-slate-400 to-slate-500" },
+const PRIORITY_CONFIG: Record<string, { label: string; Icon: any; color: string; bg: string }> = {
+  urgent: { label: "Urgent", Icon: ArrowUp,    color: "text-destructive",    bg: "bg-destructive/10" },
+  high:   { label: "High",   Icon: ChevronUp,  color: "text-primary", bg: "bg-primary/10" },
+  medium: { label: "Medium", Icon: Minus,      color: "text-muted-foreground", bg: "bg-muted/50" },
+  low:    { label: "Low",    Icon: ChevronDown,color: "text-muted-foreground",  bg: "bg-muted/30" },
 };
 
 function getTimeAgo(date: Date): string {
@@ -512,31 +512,23 @@ export default function TaskDetailDrawer({
   const StatusIcon = status.icon;
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent 
-        side="right" 
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent 
         className={cn(
-          "w-[520px] sm:w-[580px] md:w-[640px] max-w-[100vw]",
-          "h-full p-0 gap-0 flex flex-col overflow-hidden",
-          "bg-gradient-to-b from-background via-background to-muted/20",
-          "border-l border-border/30",
-          "shadow-2xl shadow-black/10 dark:shadow-black/40",
-          "[&>button.absolute]:hidden"
+          "sm:max-w-3xl md:max-w-4xl lg:max-w-5xl",
+          "max-h-[90vh] p-0 gap-0 flex flex-col overflow-hidden",
+          "bg-background border-border/50",
+          "shadow-2xl"
         )}
       >
-        <SheetHeader className="sr-only">
-          <SheetTitle>{displayTask?.title || "Task Detail"}</SheetTitle>
-        </SheetHeader>
+        <DialogHeader className="sr-only">
+          <DialogTitle>{displayTask?.title || "Task Detail"}</DialogTitle>
+        </DialogHeader>
 
         {/* ═══════════════════════════════════════════════════════════════
-            PREMIUM HEADER - Glass morphism with gradient accent
+            HEADER
         ═══════════════════════════════════════════════════════════════ */}
-        <div className="shrink-0 relative">
-          {/* Gradient accent line */}
-          <div className={cn(
-            "absolute inset-x-0 top-0 h-1 bg-gradient-to-r",
-            priority.gradient
-          )} />
+        <div className="shrink-0 relative border-b border-border/30">
           
           {/* Header content */}
           <div className="px-5 pt-4 pb-3">
@@ -1140,7 +1132,7 @@ Use this space to describe:
             </div>
           </div>
         </div>
-      </SheetContent>
-    </Sheet>
+      </DialogContent>
+    </Dialog>
   );
 }

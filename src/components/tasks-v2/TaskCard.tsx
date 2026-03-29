@@ -11,62 +11,50 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
-/* ─── ISSUE TYPE CONFIG ─────────────────────────────────────────── */
-const issueTypeConfig: Record<string, { icon: any; color: string; bg: string; gradient: string }> = {
-  task:    { icon: SquareCheck, color: "#6366f1", bg: "bg-indigo-500/10", gradient: "from-indigo-500/20 to-indigo-500/5" },
-  bug:     { icon: Bug,         color: "#ef4444", bg: "bg-red-500/10",    gradient: "from-red-500/20 to-red-500/5" },
-  subtask: { icon: Layers,      color: "#8b5cf6", bg: "bg-violet-500/10", gradient: "from-violet-500/20 to-violet-500/5" },
+/* ─── ISSUE TYPE CONFIG (simplified) ─────────────────────────────────────────── */
+const issueTypeConfig: Record<string, { icon: any; color: string; bg: string }> = {
+  task:    { icon: SquareCheck, color: "hsl(var(--primary))", bg: "bg-primary/10" },
+  bug:     { icon: Bug,         color: "hsl(var(--destructive))", bg: "bg-destructive/10" },
+  subtask: { icon: Layers,      color: "hsl(var(--primary))", bg: "bg-primary/10" },
 };
 
-/* ─── PRIORITY CONFIG ───────────────────────────────────────────── */
+/* ─── PRIORITY CONFIG (simplified) ───────────────────────────────────────────── */
 const priorityConfig: Record<string, {
-  icon: any; color: string; bg: string; label: string; border: string; gradient: string; glow: string;
+  icon: any; color: string; bg: string; label: string;
 }> = {
   urgent: {
     icon: ArrowUp,
-    color: "#ef4444",
-    bg: "bg-red-500/10",
+    color: "hsl(var(--destructive))",
+    bg: "bg-destructive/10",
     label: "Urgent",
-    border: "border-l-red-500",
-    gradient: "from-red-500/30 via-red-500/10 to-transparent",
-    glow: "rgba(239, 68, 68, 0.15)"
   },
   high: {
     icon: ChevronUp,
-    color: "#f97316",
-    bg: "bg-orange-500/10",
+    color: "hsl(var(--primary))",
+    bg: "bg-primary/10",
     label: "High",
-    border: "border-l-orange-500",
-    gradient: "from-orange-500/25 via-orange-500/8 to-transparent",
-    glow: "rgba(249, 115, 22, 0.12)"
   },
   medium: {
     icon: Minus,
-    color: "#eab308",
-    bg: "bg-yellow-500/10",
+    color: "hsl(var(--muted-foreground))",
+    bg: "bg-muted/50",
     label: "Medium",
-    border: "border-l-yellow-500",
-    gradient: "from-yellow-500/20 via-yellow-500/5 to-transparent",
-    glow: "rgba(234, 179, 8, 0.08)"
   },
   low: {
     icon: ChevronDown,
-    color: "#64748b",
-    bg: "bg-slate-500/10",
+    color: "hsl(var(--muted-foreground))",
+    bg: "bg-muted/30",
     label: "Low",
-    border: "border-l-slate-400",
-    gradient: "from-slate-400/15 via-slate-400/5 to-transparent",
-    glow: "rgba(100, 116, 139, 0.05)"
   },
 };
 
-/* ─── STATUS CONFIG ─────────────────────────────────────────────── */
+/* ─── STATUS CONFIG (simplified) ─────────────────────────────────────────────── */
 const statusConfig: Record<string, { label: string; color: string; bg: string; dot: string }> = {
-  todo:        { label: "To Do",       color: "text-slate-600 dark:text-slate-400",     bg: "bg-slate-100 dark:bg-slate-800/60",    dot: "bg-slate-400" },
-  in_progress: { label: "In Progress", color: "text-blue-600 dark:text-blue-400",       bg: "bg-blue-50 dark:bg-blue-900/30",       dot: "bg-blue-500" },
-  in_review:   { label: "In Review",   color: "text-amber-600 dark:text-amber-400",     bg: "bg-amber-50 dark:bg-amber-900/30",     dot: "bg-amber-500" },
-  done:        { label: "Done",        color: "text-emerald-600 dark:text-emerald-400",  bg: "bg-emerald-50 dark:bg-emerald-900/30", dot: "bg-emerald-500" },
-  canceled:    { label: "Canceled",    color: "text-slate-400 dark:text-slate-500",      bg: "bg-slate-100/50 dark:bg-slate-800/30", dot: "bg-slate-300" },
+  todo:        { label: "To Do",       color: "text-muted-foreground",     bg: "bg-muted/50",    dot: "bg-muted-foreground/50" },
+  in_progress: { label: "In Progress", color: "text-primary",             bg: "bg-primary/10", dot: "bg-primary" },
+  in_review:   { label: "In Review",   color: "text-primary",             bg: "bg-primary/10", dot: "bg-primary" },
+  done:        { label: "Done",        color: "text-primary",             bg: "bg-primary/10", dot: "bg-primary" },
+  canceled:    { label: "Canceled",    color: "text-muted-foreground",     bg: "bg-muted/30",    dot: "bg-muted-foreground/30" },
 };
 
 /* ─── TYPES ─────────────────────────────────────────────────────── */
@@ -187,19 +175,15 @@ function BoardCard({ task, onClick, draggable, onDragStart }: TaskCardProps) {
     <div
       className={cn(
         "group relative bg-card rounded-xl cursor-pointer select-none",
-        "border border-border/30 border-l-[3px]",
-        priority.border,
+        "border border-border/40",
         "shadow-sm",
-        "hover:shadow-xl hover:shadow-black/[0.08] dark:hover:shadow-black/30",
-        "hover:-translate-y-0.5 hover:scale-[1.01]",
-        "transition-all duration-300 ease-out",
-        "hover:border-border/50",
-        "active:scale-[0.98] active:shadow-md",
+        "hover:shadow-lg",
+        "hover:-translate-y-0.5",
+        "transition-all duration-200",
+        "hover:border-border/60",
+        "active:scale-[0.98]",
         "overflow-hidden"
       )}
-      style={{
-        boxShadow: isHovered ? `0 8px 24px -8px ${priority.glow}` : undefined
-      }}
       onClick={() => {
         if (hasDraggedRef.current) { hasDraggedRef.current = false; return; }
         onClick(task);
@@ -209,25 +193,16 @@ function BoardCard({ task, onClick, draggable, onDragStart }: TaskCardProps) {
       draggable={draggable}
       onDragStart={(e) => { hasDraggedRef.current = true; onDragStart?.(e, task); }}
     >
-      {/* Priority gradient overlay */}
-      <div
-        className={cn(
-          "absolute inset-0 bg-gradient-to-r opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none",
-          priority.gradient
-        )}
-      />
-
-      <div className="relative p-3.5 space-y-3">
+      <div className="relative p-3 space-y-2.5">
         {/* Row 1: Type + project key + priority */}
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0">
             <Tooltip>
               <TooltipTrigger asChild>
                 <div
-                  className={cn("w-6 h-6 rounded-lg flex items-center justify-center shrink-0 transition-all duration-200 group-hover:scale-110", issueType.bg)}
-                  style={{ boxShadow: `0 2px 8px ${issueType.color}20` }}
+                  className={cn("w-5 h-5 rounded flex items-center justify-center shrink-0", issueType.bg)}
                 >
-                  <IssueIcon className="w-3.5 h-3.5" style={{ color: issueType.color }} />
+                  <IssueIcon className="w-3 h-3" style={{ color: issueType.color }} />
                 </div>
               </TooltipTrigger>
               <TooltipContent className="text-xs capitalize">{task.issueType || "Task"}</TooltipContent>
@@ -242,10 +217,9 @@ function BoardCard({ task, onClick, draggable, onDragStart }: TaskCardProps) {
           <Tooltip>
             <TooltipTrigger asChild>
               <div
-                className={cn("w-6 h-6 rounded-lg flex items-center justify-center shrink-0 transition-all duration-200 group-hover:scale-110", priority.bg)}
-                style={{ boxShadow: `0 2px 8px ${priority.color}15` }}
+                className={cn("w-5 h-5 rounded flex items-center justify-center shrink-0", priority.bg)}
               >
-                <PriorityIcon className="w-3.5 h-3.5" style={{ color: priority.color }} />
+                <PriorityIcon className="w-3 h-3" style={{ color: priority.color }} />
               </div>
             </TooltipTrigger>
             <TooltipContent className="text-xs">{priority.label} priority</TooltipContent>
@@ -253,7 +227,7 @@ function BoardCard({ task, onClick, draggable, onDragStart }: TaskCardProps) {
         </div>
 
         {/* Row 2: Title */}
-        <p className="text-[13px] font-semibold text-foreground leading-snug line-clamp-2 break-words group-hover:text-primary/90 transition-colors duration-200">
+        <p className="text-sm font-medium text-foreground leading-snug line-clamp-2 break-words">
           {task.title}
         </p>
 
@@ -263,7 +237,7 @@ function BoardCard({ task, onClick, draggable, onDragStart }: TaskCardProps) {
             {task.tags.slice(0, 2).map((tag) => (
               <span
                 key={tag}
-                className="text-[10px] bg-primary/8 text-primary/70 px-2 py-0.5 rounded-full leading-tight font-medium border border-primary/10"
+                className="text-[10px] bg-muted/50 text-muted-foreground px-1.5 py-0.5 rounded leading-tight font-medium"
               >
                 {tag}
               </span>
@@ -276,20 +250,17 @@ function BoardCard({ task, onClick, draggable, onDragStart }: TaskCardProps) {
 
         {/* Row 4: Subtask progress bar */}
         {subtaskCount > 0 && (
-          <div className="space-y-1.5">
+          <div className="space-y-1">
             <div className="flex items-center justify-between">
               <span className="text-[10px] text-muted-foreground flex items-center gap-1 font-medium">
                 <CheckSquare className="w-3 h-3" />
                 {completedSubtasks}/{subtaskCount}
               </span>
-              <span className="text-[10px] font-bold text-muted-foreground">{subtaskPct}%</span>
+              <span className="text-[10px] font-medium text-muted-foreground">{subtaskPct}%</span>
             </div>
-            <div className="h-1.5 bg-muted/60 rounded-full overflow-hidden">
+            <div className="h-1 bg-muted/60 rounded-full overflow-hidden">
               <div
-                className={cn(
-                  "h-full rounded-full transition-all duration-500 ease-out",
-                  subtaskPct === 100 ? "bg-gradient-to-r from-emerald-400 to-emerald-500" : "bg-gradient-to-r from-primary/70 to-primary"
-                )}
+                className="h-full rounded-full bg-primary transition-all duration-500"
                 style={{ width: `${subtaskPct}%` }}
               />
             </div>
@@ -297,9 +268,9 @@ function BoardCard({ task, onClick, draggable, onDragStart }: TaskCardProps) {
         )}
 
         {/* Footer: meta + due + assignee */}
-        <div className="flex items-center justify-between pt-2.5 border-t border-border/15 gap-2">
+        <div className="flex items-center justify-between pt-2 border-t border-border/20 gap-2">
           {/* Left meta */}
-          <div className="flex items-center gap-2.5 text-muted-foreground/60 min-w-0">
+          <div className="flex items-center gap-2 text-muted-foreground/60 min-w-0">
             {commentCount > 0 && (
               <span className="flex items-center gap-1 text-[10px] font-medium">
                 <MessageSquare className="w-3 h-3" />
@@ -321,9 +292,9 @@ function BoardCard({ task, onClick, draggable, onDragStart }: TaskCardProps) {
                 <TooltipTrigger asChild>
                   <span
                     className={cn(
-                      "inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-semibold transition-all duration-200",
+                      "inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-medium",
                       isOverdue
-                        ? "text-red-600 bg-red-50 dark:bg-red-950/50 dark:text-red-400 ring-1 ring-red-200 dark:ring-red-800"
+                        ? "text-destructive bg-destructive/10"
                         : "text-muted-foreground bg-muted/40"
                     )}
                   >
@@ -339,11 +310,11 @@ function BoardCard({ task, onClick, draggable, onDragStart }: TaskCardProps) {
 
             <Tooltip>
               <TooltipTrigger asChild>
-                <Avatar className="w-6 h-6 border-2 border-background shadow-sm shrink-0 ring-1 ring-border/20 transition-transform duration-200 group-hover:scale-110">
+                <Avatar className="w-5 h-5 border border-background shrink-0">
                   {task.assignee ? (
                     <>
                       <AvatarImage src={task.assignee.avatar} alt={task.assignee.name} />
-                      <AvatarFallback className="text-[9px] font-bold bg-primary/10 text-primary">
+                      <AvatarFallback className="text-[8px] font-bold bg-primary/10 text-primary">
                         {initials}
                       </AvatarFallback>
                     </>
@@ -361,13 +332,6 @@ function BoardCard({ task, onClick, draggable, onDragStart }: TaskCardProps) {
           </div>
         </div>
       </div>
-
-      {/* Drag handle indicator */}
-      {isHovered && draggable && (
-        <div className="absolute left-0 top-1/2 -translate-y-1/2 p-1 opacity-50">
-          <GripVertical className="w-3 h-3 text-muted-foreground" />
-        </div>
-      )}
     </div>
   );
 }

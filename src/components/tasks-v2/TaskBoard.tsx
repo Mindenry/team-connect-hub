@@ -49,20 +49,14 @@ export interface WorkflowStatus {
 /* ─── FALLBACK COLUMNS ──────────────────────────────────────────── */
 const FALLBACK_COLUMNS: WorkflowStatus[] = [
   { id: "fb-1", key: "todo",        name: "To Do",       color: "#64748b", category: "todo",  position: 0 },
-  { id: "fb-2", key: "in_progress", name: "In Progress", color: "#3b82f6", category: "doing", position: 1 },
-  { id: "fb-3", key: "in_review",   name: "In Review",   color: "#f59e0b", category: "doing", position: 2 },
-  { id: "fb-4", key: "done",        name: "Done",        color: "#10b981", category: "done",  position: 3 },
+  { id: "fb-2", key: "in_progress", name: "In Progress", color: "#64748b", category: "doing", position: 1 },
+  { id: "fb-3", key: "in_review",   name: "In Review",   color: "#64748b", category: "doing", position: 2 },
+  { id: "fb-4", key: "done",        name: "Done",        color: "#64748b", category: "done",  position: 3 },
 ];
 
-/* ─── STATUS → accent color map ─────────────────────────────────── */
+/* ─── STATUS → accent color map (simplified to project tone) ─── */
 function getColumnAccent(column: WorkflowStatus): string {
-  if (column.color && column.color !== "#737373") return column.color;
-  switch (column.category) {
-    case "done":  return "#10b981";
-    case "doing":
-      return column.key.includes("review") ? "#f59e0b" : "#3b82f6";
-    default:      return "#64748b";
-  }
+  return "hsl(var(--primary))";
 }
 
 /* ─── Column icon based on category ─────────────────────────────── */
@@ -224,235 +218,170 @@ export default function TaskBoard({
   }
 
   return (
-    <div className="h-full flex gap-4 overflow-x-auto px-6 py-5 pb-8">
-      {columns.map((column) => {
-        const columnTasks  = tasksByStatus[column.key] || [];
-        const isDragOver   = dragOverColumn === column.key;
-        const accentColor  = getColumnAccent(column);
-        const ColumnIcon   = getColumnIcon(column.category);
-        const isHovered    = hoveredColumn === column.key;
+    <div className="h-full flex flex-col px-6 py-4">
+      {/* Columns container - fills available width */}
+      <div className="flex-1 flex gap-3 min-h-0">
+        {columns.map((column) => {
+          const columnTasks  = tasksByStatus[column.key] || [];
+          const isDragOver   = dragOverColumn === column.key;
+          const ColumnIcon   = getColumnIcon(column.category);
+          const isHovered    = hoveredColumn === column.key;
 
-        return (
-          <div
-            key={column.key}
-            className={cn(
-              "flex flex-col h-full min-h-0",
-              "w-[300px] shrink-0",
-              "rounded-2xl",
-              "bg-gradient-to-b from-muted/30 via-muted/20 to-muted/10",
-              "border border-border/30",
-              "transition-all duration-300 ease-out",
-              isDragOver && "border-primary/50 bg-primary/[0.03] shadow-xl shadow-primary/10 scale-[1.01]",
-              isHovered && "border-border/50"
-            )}
-            onMouseEnter={() => setHoveredColumn(column.key)}
-            onMouseLeave={() => setHoveredColumn(null)}
-            onDragOver={(e) => handleDragOver(e, column.key)}
-            onDragLeave={handleDragLeave}
-            onDrop={(e) => handleDrop(e, column.key)}
-          >
-            {/* ── Column header ── */}
-            <div className="shrink-0 px-4 pt-4 pb-3">
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-3 min-w-0">
-                  {/* Icon with accent */}
-                  <div
-                    className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 shadow-sm transition-all duration-200"
-                    style={{
-                      backgroundColor: accentColor + "15",
-                      boxShadow: `0 2px 8px ${accentColor}20`
-                    }}
-                  >
-                    <ColumnIcon className="w-4 h-4" style={{ color: accentColor }} />
-                  </div>
-                  
-                  <div className="min-w-0">
-                    <h3 className="text-sm font-semibold text-foreground truncate tracking-tight">
+          return (
+            <div
+              key={column.key}
+              className={cn(
+                "flex flex-col h-full min-h-0 flex-1 min-w-[200px] max-w-[320px]",
+                "rounded-xl",
+                "bg-muted/30",
+                "border border-border/40",
+                "transition-all duration-200",
+                isDragOver && "border-primary/50 bg-primary/5"
+              )}
+              onMouseEnter={() => setHoveredColumn(column.key)}
+              onMouseLeave={() => setHoveredColumn(null)}
+              onDragOver={(e) => handleDragOver(e, column.key)}
+              onDragLeave={handleDragLeave}
+              onDrop={(e) => handleDrop(e, column.key)}
+            >
+              {/* ── Column header ── */}
+              <div className="shrink-0 px-3 pt-3 pb-2 border-b border-border/30">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <ColumnIcon className="w-4 h-4 text-muted-foreground shrink-0" />
+                    <h3 className="text-sm font-medium text-foreground truncate">
                       {column.name}
                     </h3>
-                  </div>
-                  
-                  {/* Task count pill */}
-                  <span
-                    className="text-[11px] font-bold px-2 py-0.5 rounded-md shrink-0 leading-tight transition-all duration-200"
-                    style={{
-                      backgroundColor: accentColor + "18",
-                      color: accentColor,
-                    }}
-                  >
-                    {columnTasks.length}
-                  </span>
-                </div>
-
-                {/* Column actions */}
-                <div className={cn(
-                  "flex items-center gap-1 transition-opacity duration-200",
-                  isHovered ? "opacity-100" : "opacity-0"
-                )}>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <button className="p-1.5 rounded-lg hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors">
-                        <MoreHorizontal className="w-4 h-4" />
-                      </button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-40">
-                      <DropdownMenuItem className="text-xs gap-2" onClick={onCreateTask}>
-                        <Plus className="w-3.5 h-3.5" />
-                        Add task
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem className="text-xs gap-2 text-muted-foreground">
-                        <Settings2 className="w-3.5 h-3.5" />
-                        Edit column
-                      </DropdownMenuItem>
-                      <DropdownMenuItem className="text-xs gap-2 text-red-600 dark:text-red-400">
-                        <Trash2 className="w-3.5 h-3.5" />
-                        Delete column
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-              </div>
-              
-              {/* Progress bar for done column */}
-              {column.category === "done" && columnTasks.length > 0 && (
-                <div className="mt-3 h-1 bg-muted/50 rounded-full overflow-hidden">
-                  <div
-                    className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-emerald-500 transition-all duration-500"
-                    style={{ width: `${Math.min(100, (columnTasks.length / tasks.length) * 100)}%` }}
-                  />
-                </div>
-              )}
-            </div>
-
-            {/* ── Cards container ── */}
-            <div
-              ref={(el) => { scrollRefs.current[column.key] = el; }}
-              className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-3 pb-3 space-y-2.5"
-            >
-              {columnTasks.map((task, index) => (
-                <div
-                  key={task.id}
-                  className={cn(
-                    "transition-all duration-200 ease-out",
-                    draggingTaskId === task.id && "opacity-30 scale-95 rotate-1"
-                  )}
-                  style={{ animationDelay: `${index * 30}ms` }}
-                >
-                  <TaskCard
-                    task={task}
-                    onClick={onTaskClick}
-                    variant="board"
-                    draggable
-                    onDragStart={(e) => handleDragStart(e, task)}
-                  />
-                </div>
-              ))}
-
-              {/* Empty column state */}
-              {columnTasks.length === 0 && !isDragOver && (
-                <div className="flex flex-col items-center justify-center py-10 px-4 text-center">
-                  <div
-                    className="w-12 h-12 rounded-2xl flex items-center justify-center mb-3"
-                    style={{ backgroundColor: accentColor + "10" }}
-                  >
-                    <Kanban className="w-6 h-6" style={{ color: accentColor + "60" }} />
-                  </div>
-                  <p className="text-xs text-muted-foreground/50 font-medium">No tasks yet</p>
-                  <p className="text-[10px] text-muted-foreground/30 mt-1">Drag tasks here</p>
-                </div>
-              )}
-
-              {/* Drop zone indicator */}
-              {isDragOver && (
-                <div
-                  className="flex items-center justify-center py-6 border-2 border-dashed rounded-xl my-2 transition-all duration-200"
-                  style={{
-                    borderColor: accentColor + "50",
-                    backgroundColor: accentColor + "08",
-                    boxShadow: `inset 0 0 20px ${accentColor}10`
-                  }}
-                >
-                  <div className="flex items-center gap-2">
-                    <div
-                      className="w-6 h-6 rounded-lg flex items-center justify-center"
-                      style={{ backgroundColor: accentColor + "20" }}
-                    >
-                      <Plus className="w-3.5 h-3.5" style={{ color: accentColor }} />
-                    </div>
-                    <span className="text-xs font-semibold" style={{ color: accentColor }}>
-                      Drop here
+                    <span className="text-xs text-muted-foreground font-medium shrink-0">
+                      {columnTasks.length}
                     </span>
                   </div>
+
+                  {/* Column actions */}
+                  {isHovered && (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button className="p-1 rounded hover:bg-muted/50 text-muted-foreground transition-colors">
+                          <MoreHorizontal className="w-3.5 h-3.5" />
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-36">
+                        <DropdownMenuItem className="text-xs gap-2" onClick={onCreateTask}>
+                          <Plus className="w-3.5 h-3.5" />
+                          Add task
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem className="text-xs gap-2 text-muted-foreground">
+                          <Settings2 className="w-3.5 h-3.5" />
+                          Edit column
+                        </DropdownMenuItem>
+                        <DropdownMenuItem className="text-xs gap-2 text-destructive">
+                          <Trash2 className="w-3.5 h-3.5" />
+                          Delete column
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )}
                 </div>
+              </div>
+
+              {/* ── Cards container ── */}
+              <div
+                ref={(el) => { scrollRefs.current[column.key] = el; }}
+                className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-2 py-2 space-y-2"
+              >
+                {columnTasks.map((task, index) => (
+                  <div
+                    key={task.id}
+                    className={cn(
+                      "transition-all duration-150",
+                      draggingTaskId === task.id && "opacity-30 scale-95"
+                    )}
+                  >
+                    <TaskCard
+                      task={task}
+                      onClick={onTaskClick}
+                      variant="board"
+                      draggable
+                      onDragStart={(e) => handleDragStart(e, task)}
+                    />
+                  </div>
+                ))}
+
+                {/* Empty column state */}
+                {columnTasks.length === 0 && !isDragOver && (
+                  <div className="flex flex-col items-center justify-center py-8 text-center">
+                    <Kanban className="w-8 h-8 text-muted-foreground/20 mb-2" />
+                    <p className="text-xs text-muted-foreground/40">No tasks</p>
+                  </div>
+                )}
+
+                {/* Drop zone indicator */}
+                {isDragOver && (
+                  <div className="flex items-center justify-center py-4 border-2 border-dashed border-primary/30 rounded-lg bg-primary/5 my-1">
+                    <span className="text-xs font-medium text-primary">Drop here</span>
+                  </div>
+                )}
+              </div>
+
+              {/* ── Inline create footer ── */}
+              <div className="shrink-0 px-2 pb-2 pt-1">
+                <InlineCreateCard onSubmit={(title) => handleInlineCreate(title, column.key)} />
+              </div>
+            </div>
+          );
+        })}
+
+        {/* ── Add column button ── */}
+        <div className="flex flex-col w-[200px] shrink-0">
+          {showAddColumn ? (
+            <div className="bg-muted/30 border border-border/40 rounded-xl p-3 space-y-2">
+              <Input
+                value={newColumnName}
+                onChange={(e) => setNewColumnName(e.target.value)}
+                placeholder="Column name..."
+                className="h-8 text-sm"
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleAddColumn();
+                  if (e.key === "Escape") { setShowAddColumn(false); setNewColumnName(""); }
+                }}
+              />
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  className="h-7 text-xs flex-1"
+                  onClick={handleAddColumn}
+                  disabled={creatingColumn || !newColumnName.trim()}
+                >
+                  {creatingColumn ? <Loader2 className="w-3 h-3 animate-spin" /> : "Add"}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 w-7 p-0"
+                  onClick={() => { setShowAddColumn(false); setNewColumnName(""); }}
+                >
+                  <X className="w-3.5 h-3.5" />
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={() => setShowAddColumn(true)}
+              className={cn(
+                "flex-1 flex flex-col items-center justify-center gap-2 min-h-[80px] rounded-xl",
+                "border border-dashed border-border/30",
+                "text-muted-foreground/40 hover:text-muted-foreground/70",
+                "hover:border-border/50 hover:bg-muted/20",
+                "transition-all duration-200"
               )}
-            </div>
-
-            {/* ── Inline create footer ── */}
-            <div className="shrink-0 px-3 pb-3 pt-1">
-              <InlineCreateCard onSubmit={(title) => handleInlineCreate(title, column.key)} />
-            </div>
-          </div>
-        );
-      })}
-
-      {/* ── Add column ── */}
-      <div className="flex flex-col w-[300px] shrink-0">
-        {showAddColumn ? (
-          <div className="bg-gradient-to-b from-muted/40 via-muted/30 to-muted/20 border border-border/40 rounded-2xl p-4 space-y-3 shadow-lg">
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <Sparkles className="w-4 h-4" />
-              <span className="text-xs font-medium">New Column</span>
-            </div>
-            <Input
-              value={newColumnName}
-              onChange={(e) => setNewColumnName(e.target.value)}
-              placeholder="Column name..."
-              className="h-9 text-sm rounded-xl bg-background/50 border-border/40"
-              autoFocus
-              onKeyDown={(e) => {
-                if (e.key === "Enter") handleAddColumn();
-                if (e.key === "Escape") { setShowAddColumn(false); setNewColumnName(""); }
-              }}
-            />
-            <div className="flex gap-2">
-              <Button
-                size="sm"
-                className="h-8 text-xs flex-1 rounded-xl font-semibold"
-                onClick={handleAddColumn}
-                disabled={creatingColumn || !newColumnName.trim()}
-              >
-                {creatingColumn ? (
-                  <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />Creating...</>
-                ) : "Create column"}
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-8 text-xs rounded-xl px-3"
-                onClick={() => { setShowAddColumn(false); setNewColumnName(""); }}
-              >
-                <X className="w-3.5 h-3.5" />
-              </Button>
-            </div>
-          </div>
-        ) : (
-          <button
-            onClick={() => setShowAddColumn(true)}
-            className={cn(
-              "flex-1 flex flex-col items-center justify-center gap-3 min-h-[120px] rounded-2xl",
-              "border-2 border-dashed border-border/25",
-              "text-muted-foreground/40 hover:text-muted-foreground/70",
-              "hover:border-border/40 hover:bg-muted/10",
-              "transition-all duration-300 group"
-            )}
-          >
-            <div className="w-10 h-10 rounded-xl bg-muted/20 flex items-center justify-center group-hover:bg-muted/30 group-hover:scale-110 transition-all duration-200">
-              <Plus className="w-5 h-5" />
-            </div>
-            <span className="text-xs font-medium">Add column</span>
-          </button>
-        )}
+            >
+              <Plus className="w-4 h-4" />
+              <span className="text-xs font-medium">Add column</span>
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
