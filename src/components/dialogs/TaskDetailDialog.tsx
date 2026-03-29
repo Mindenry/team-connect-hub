@@ -11,6 +11,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Progress } from "@/components/ui/progress";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { FilePreview } from "@/components/chat/FilePreview";
 import {
   Select,
   SelectContent,
@@ -541,17 +542,24 @@ export default function TaskDetailDialog({
                     </div>
                     <p className="text-xs text-muted-foreground">รองรับรูปภาพ, PDF, เอกสารทั่วไป (สูงสุด 50MB) — ชื่อไฟล์ภาษาไทยได้</p>
                     {attachments.length > 0 && (
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className="flex flex-wrap gap-3">
                         {attachments.map((att) => (
-                          <div key={att.id} className="flex items-center gap-2.5 p-2 rounded-lg border border-border/50 hover:border-border/80 transition-colors group text-sm">
-                            <div className="w-8 h-8 rounded-md bg-primary/10 flex items-center justify-center shrink-0">
-                              <Paperclip className="w-3.5 h-3.5 text-primary" />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <a href={att.url} target="_blank" rel="noopener noreferrer" className="text-xs font-medium hover:text-primary transition-colors truncate block">{att.name}</a>
-                              <span className="text-[10px] text-muted-foreground">{att.size ? `${(att.size / 1024).toFixed(0)} KB` : ""}</span>
-                            </div>
-                            <Button size="sm" variant="ghost" className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive" onClick={async () => { try { await apiDelete(`/tasks/attachments/${att.id}`); setFullTask({ ...fullTask!, attachments: attachments.filter((a) => a.id !== att.id) }); } catch { toast.error("Failed to delete"); } }}>
+                          <div key={att.id} className="relative group">
+                            <FilePreview url={att.url} name={att.name} />
+                            <Button 
+                              size="sm" 
+                              variant="destructive" 
+                              className="absolute -top-2 -right-2 h-6 w-6 p-0 rounded-full opacity-0 group-hover:opacity-100 shadow-md transition-all scale-90 group-hover:scale-100" 
+                              onClick={async (e) => { 
+                                e.preventDefault();
+                                try { 
+                                  await apiDelete(`/tasks/attachments/${att.id}`); 
+                                  setFullTask({ ...fullTask!, attachments: attachments.filter((a) => a.id !== att.id) }); 
+                                } catch { 
+                                  toast.error("Failed to delete"); 
+                                } 
+                              }}
+                            >
                               <Trash2 className="w-3 h-3" />
                             </Button>
                           </div>
