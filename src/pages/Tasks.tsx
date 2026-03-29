@@ -663,7 +663,6 @@ export default function Tasks() {
 
   const handleTaskUpdated = (updated: Task) => {
     setTasks((prev) => prev.map((t) => t.id === updated.id ? updated : t));
-    setSelectedTask(null);
   };
 
   const handleTaskDeleted = (taskId: string) => {

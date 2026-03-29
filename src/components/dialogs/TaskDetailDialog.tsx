@@ -717,7 +717,6 @@ export default function TaskDetailDialog({
                         )) : <span className="text-xs text-muted-foreground">No watchers</span>}
                       </div>
                     </div>
-                    </div>
 
                     {/* Reporter */}
                     <div className="rounded-lg border border-border/50 p-3 space-y-2 bg-background">
