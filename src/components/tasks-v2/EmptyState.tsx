@@ -1,6 +1,5 @@
-import { SearchX, Inbox, Plus, Sparkles } from "lucide-react";
+import { SearchX, Inbox, Plus, Sparkles, FolderOpen, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 
 interface EmptyStateProps {
   type: "no-tasks" | "no-results";
@@ -11,42 +10,61 @@ interface EmptyStateProps {
 export default function EmptyState({ type, onCreateTask, onClearFilters }: EmptyStateProps) {
   if (type === "no-results") {
     return (
-      <Card className="border-border/50 border-dashed bg-card/40 mx-6 my-10">
-        <CardContent className="flex flex-col items-center justify-center py-20 px-6">
-          <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-muted/60 to-muted/40 flex items-center justify-center mb-5 shadow-sm">
-            <SearchX className="w-10 h-10 text-muted-foreground" />
-          </div>
-          <h3 className="text-lg font-bold text-foreground mb-2">No matching tasks</h3>
-          <p className="text-sm text-muted-foreground text-center max-w-sm leading-relaxed mb-6">
-            Try adjusting your filters or search query to find what you're looking for.
-          </p>
-          {onClearFilters && (
-            <Button variant="outline" onClick={onClearFilters} className="gap-2">
-              Clear all filters
-            </Button>
-          )}
-        </CardContent>
-      </Card>
+      <div className="flex flex-col items-center justify-center py-16 px-6">
+        <div className="w-16 h-16 rounded-xl bg-muted/50 flex items-center justify-center mb-4">
+          <SearchX className="w-8 h-8 text-muted-foreground" />
+        </div>
+        <h3 className="text-lg font-semibold text-foreground mb-2">No matching results</h3>
+        <p className="text-sm text-muted-foreground text-center max-w-md mb-6">
+          We couldn't find any tasks matching your current filters. Try adjusting your search criteria.
+        </p>
+        {onClearFilters && (
+          <Button variant="outline" onClick={onClearFilters} className="gap-2">
+            <SearchX className="w-4 h-4" />
+            Clear all filters
+          </Button>
+        )}
+      </div>
     );
   }
 
   return (
-    <Card className="border-border/50 border-dashed bg-card/40 mx-6 my-10">
-      <CardContent className="flex flex-col items-center justify-center py-20 px-6">
-        <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-primary/20 via-primary/10 to-primary/5 flex items-center justify-center mb-5 shadow-sm ring-1 ring-primary/10">
-          <Sparkles className="w-10 h-10 text-primary" />
+    <div className="flex flex-col items-center justify-center py-16 px-6">
+      <div className="w-16 h-16 rounded-xl bg-primary/10 flex items-center justify-center mb-4">
+        <Sparkles className="w-8 h-8 text-primary" />
+      </div>
+      <h3 className="text-lg font-semibold text-foreground mb-2">Start your project</h3>
+      <p className="text-sm text-muted-foreground text-center max-w-md mb-6">
+        Create your first task and begin organizing your team's work. Track progress, assign owners, and meet deadlines.
+      </p>
+      {onCreateTask && (
+        <Button onClick={onCreateTask} className="gap-2">
+          <Plus className="w-4 h-4" />
+          Create your first task
+        </Button>
+      )}
+      
+      {/* Quick tips */}
+      <div className="mt-8 grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-2xl">
+        <div className="rounded-lg border border-border/50 bg-muted/30 p-3 text-center">
+          <div className="w-6 h-6 rounded bg-muted/50 flex items-center justify-center mx-auto mb-1.5">
+            <FolderOpen className="w-3.5 h-3.5 text-muted-foreground" />
+          </div>
+          <p className="text-xs text-muted-foreground">Organize with boards</p>
         </div>
-        <h3 className="text-lg font-bold text-foreground mb-2">No tasks yet</h3>
-        <p className="text-sm text-muted-foreground text-center max-w-sm leading-relaxed mb-6">
-          Get started by creating your first task. Track and organize your team's work in one place.
-        </p>
-        {onCreateTask && (
-          <Button onClick={onCreateTask} className="gap-2">
-            <Plus className="w-4 h-4" />
-            Create Task
-          </Button>
-        )}
-      </CardContent>
-    </Card>
+        <div className="rounded-lg border border-border/50 bg-muted/30 p-3 text-center">
+          <div className="w-6 h-6 rounded bg-muted/50 flex items-center justify-center mx-auto mb-1.5">
+            <Sparkles className="w-3.5 h-3.5 text-muted-foreground" />
+          </div>
+          <p className="text-xs text-muted-foreground">Track progress</p>
+        </div>
+        <div className="rounded-lg border border-border/50 bg-muted/30 p-3 text-center">
+          <div className="w-6 h-6 rounded bg-muted/50 flex items-center justify-center mx-auto mb-1.5">
+            <Inbox className="w-3.5 h-3.5 text-muted-foreground" />
+          </div>
+          <p className="text-xs text-muted-foreground">Collaborate easily</p>
+        </div>
+      </div>
+    </div>
   );
 }

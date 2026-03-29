@@ -351,36 +351,37 @@ export default function Tasks() {
         <div className="flex-1 overflow-hidden">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-full flex flex-col">
             <div className="py-4 space-y-4">
+              {/* Stats Cards */}
               <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
-                <div className="rounded-xl border border-border/60 bg-card/70 p-3">
+                <div className="rounded-xl border border-border/50 bg-card p-4">
                   <div className="flex items-center justify-between">
                     <p className="text-xs text-muted-foreground">Total Tasks</p>
-                    <ListTodo className="w-4 h-4 text-primary/80" />
+                    <ListTodo className="w-4 h-4 text-muted-foreground" />
                   </div>
-                  <p className="mt-1 text-2xl font-semibold tracking-tight">{taskStats.total}</p>
+                  <p className="mt-1 text-2xl font-semibold">{taskStats.total}</p>
                 </div>
-                <div className="rounded-xl border border-border/60 bg-card/70 p-3">
+                <div className="rounded-xl border border-border/50 bg-card p-4">
                   <div className="flex items-center justify-between">
                     <p className="text-xs text-muted-foreground">In Progress</p>
-                    <Clock3 className="w-4 h-4 text-amber-500" />
+                    <Clock3 className="w-4 h-4 text-primary" />
                   </div>
-                  <p className="mt-1 text-2xl font-semibold tracking-tight">{taskStats.inProgress}</p>
+                  <p className="mt-1 text-2xl font-semibold">{taskStats.inProgress}</p>
                 </div>
-                <div className="rounded-xl border border-border/60 bg-card/70 p-3">
+                <div className="rounded-xl border border-border/50 bg-card p-4">
                   <div className="flex items-center justify-between">
                     <p className="text-xs text-muted-foreground">Done</p>
-                    <CircleCheckBig className="w-4 h-4 text-emerald-500" />
+                    <CircleCheckBig className="w-4 h-4 text-muted-foreground" />
                   </div>
-                  <p className="mt-1 text-2xl font-semibold tracking-tight">{taskStats.done}</p>
+                  <p className="mt-1 text-2xl font-semibold">{taskStats.done}</p>
                 </div>
-                <div className="rounded-xl border border-primary/20 bg-gradient-to-br from-primary/10 via-primary/5 to-background p-3">
+                <div className="rounded-xl border border-border/50 bg-card p-4">
                   <div className="flex items-center justify-between">
                     <p className="text-xs text-muted-foreground">Focus</p>
                     <Sparkles className="w-4 h-4 text-primary" />
                   </div>
                   <p className="mt-1 text-sm font-medium">{search ? `Searching: "${search}"` : "No search keyword"}</p>
                   {taskStats.overdue > 0 && (
-                    <div className="mt-2 inline-flex items-center gap-1 rounded-md bg-red-500/10 text-red-600 px-2 py-1 text-[11px] font-medium">
+                    <div className="mt-2 inline-flex items-center gap-1 rounded bg-destructive/10 text-destructive px-2 py-1 text-[11px] font-medium">
                       <AlertTriangle className="w-3 h-3" />
                       {taskStats.overdue} overdue
                     </div>
@@ -388,18 +389,19 @@ export default function Tasks() {
                 </div>
               </div>
 
-              <div className="rounded-xl border border-border/60 bg-card/60 p-3 sm:p-4 space-y-3">
+              {/* Toolbar */}
+              <div className="rounded-xl border border-border/50 bg-card p-4 space-y-3">
                 <div className="flex flex-wrap items-center gap-3">
-                  <div className="flex items-center gap-1 p-1 bg-muted/40 rounded-lg border border-border/50">
+                  <div className="flex items-center gap-1 p-1 bg-muted/30 rounded-lg border border-border/30">
                     {viewConfig.map(({ key, label, icon: Icon }) => (
                       <button
                         key={key}
                         onClick={() => setActiveView(key)}
                         className={cn(
-                          "px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 flex items-center gap-1.5",
+                          "px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-1.5",
                           activeView === key
-                            ? "bg-background shadow-md ring-1 ring-border/50 text-foreground"
-                            : "text-muted-foreground hover:text-foreground hover:bg-muted/60",
+                            ? "bg-background shadow-sm text-foreground"
+                            : "text-muted-foreground hover:text-foreground hover:bg-muted/50",
                         )}
                       >
                         <Icon className={cn("w-3.5 h-3.5", activeView === key && "text-primary")} />
@@ -409,7 +411,7 @@ export default function Tasks() {
                   </div>
 
                   {myTeams.length > 0 && (
-                    <div className="flex items-center gap-1 p-1 bg-muted/40 rounded-lg border border-border/50">
+                    <div className="flex items-center gap-1 p-1 bg-muted/30 rounded-lg border border-border/30">
                       <span className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] text-muted-foreground">
                         <Users className="w-3 h-3" /> Team
                       </span>
@@ -418,7 +420,7 @@ export default function Tasks() {
                           onClick={() => setSelectedTeamId("all")}
                           className={cn(
                             "px-3 py-1.5 rounded-md text-xs font-medium",
-                            selectedTeamId === "all" ? "bg-background shadow-md ring-1 ring-border/50" : "text-muted-foreground",
+                            selectedTeamId === "all" ? "bg-background shadow-sm" : "text-muted-foreground",
                           )}
                         >
                           All
@@ -430,7 +432,7 @@ export default function Tasks() {
                           onClick={() => setSelectedTeamId(team.id)}
                           className={cn(
                             "px-3 py-1.5 rounded-md text-xs font-medium truncate max-w-[120px]",
-                            selectedTeamId === team.id ? "bg-background shadow-md ring-1 ring-border/50" : "text-muted-foreground",
+                            selectedTeamId === team.id ? "bg-background shadow-sm" : "text-muted-foreground",
                           )}
                         >
                           {team.name}

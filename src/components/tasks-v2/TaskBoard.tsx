@@ -4,6 +4,15 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import TaskCard, { InlineCreateCard, type TaskCardData } from "./TaskCard";
 import EmptyState from "./EmptyState";
 import { apiPost, apiPatch, apiGet } from "@/lib/api";
+import { Plus, MoreHorizontal, ListTodo, Loader2, CheckCircle2, Clock, Eye } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 /** Status column shape from API */
 export interface WorkflowStatus {
@@ -17,21 +26,26 @@ export interface WorkflowStatus {
 
 /** Fallback hardcoded columns — used while API loads or if call fails */
 const FALLBACK_COLUMNS: WorkflowStatus[] = [
-  { id: "fb-1", key: "todo",        name: "TO DO",        color: "#94a3b8", category: "todo",  position: 0 },
-  { id: "fb-2", key: "in_progress", name: "IN PROGRESS",  color: "#3b82f6", category: "doing", position: 1 },
-  { id: "fb-3", key: "in_review",   name: "IN REVIEW",    color: "#f59e0b", category: "doing", position: 2 },
-  { id: "fb-4", key: "done",        name: "DONE",         color: "#10b981", category: "done",  position: 3 },
+  { id: "fb-1", key: "todo",        name: "TO DO",        color: "hsl(var(--muted-foreground))", category: "todo",  position: 0 },
+  { id: "fb-2", key: "in_progress", name: "IN PROGRESS",  color: "hsl(var(--primary))", category: "doing", position: 1 },
+  { id: "fb-3", key: "in_review",   name: "IN REVIEW",    color: "hsl(var(--primary))", category: "doing", position: 2 },
+  { id: "fb-4", key: "done",        name: "DONE",         color: "hsl(var(--muted-foreground))", category: "done",  position: 3 },
 ];
 
-/** Map hex color to Tailwind-style classes for dot and ring */
-function colorToDotClasses(hex: string) {
-  return {
-    dot: `bg-[${hex}]`,
-    dotRing: `ring-[${hex}]/20`,
-    // Use inline style for reliable rendering
-    dotStyle: { backgroundColor: hex },
-    ringStyle: { boxShadow: `0 0 0 4px ${hex}33` },
-  };
+/** Category icons */
+const categoryIcons = {
+  todo: ListTodo,
+  doing: Loader2,
+  done: CheckCircle2,
+};
+
+/** Get contrasting text color */
+function getContrastColor(hex: string): string {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance > 0.5 ? '#000000' : '#ffffff';
 }
 
 interface TaskBoardProps {
@@ -56,6 +70,9 @@ export default function TaskBoard({
   const [dragOverColumn, setDragOverColumn] = useState<string | null>(null);
   const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
   const [columns, setColumns] = useState<WorkflowStatus[]>(propStatuses || FALLBACK_COLUMNS);
+
+  // Calculate total tasks for progress
+  const totalTasks = tasks.length;
 
   // Avoid doing `tasks.filter(...)` for every column on every render.
   const tasksByStatus = useMemo(() => {
@@ -147,97 +164,161 @@ export default function TaskBoard({
     }
   };
 
-  if (tasks.length === 0 && columns.length > 0) {
-    // Show empty columns with inline create
-  }
-
   if (tasks.length === 0 && columns.length === 0) {
     return <EmptyState type="no-tasks" onCreateTask={onCreateTask} />;
   }
 
   return (
-    <div
-      className={cn(
-        "flex-1 min-h-0 py-4",
-        "px-2 sm:px-4 lg:px-6",
-        "flex gap-3 sm:gap-4 overflow-x-auto pb-1",
-        "scrollbar-thin scrollbar-thumb-muted-foreground/15 scrollbar-track-transparent"
-      )}
-    >
-      {columns.map((column) => {
-        const columnTasks = tasksByStatus[column.key] || [];
-        const isDragOver = dragOverColumn === column.key;
+    <div className="flex-1 min-h-0 p-4 lg:p-6 overflow-hidden">
+      {/* Board Container with modern styling */}
+      <div className="h-full flex gap-4 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent">
+        {columns.map((column) => {
+          const columnTasks = tasksByStatus[column.key] || [];
+          const isDragOver = dragOverColumn === column.key;
+          const CategoryIcon = categoryIcons[column.category as keyof typeof categoryIcons] || ListTodo;
+          const progress = totalTasks > 0 ? Math.round((columnTasks.length / totalTasks) * 100) : 0;
 
-        return (
-          <div
-            key={column.key}
-            className={cn(
-              "flex flex-col rounded-2xl transition-all duration-200",
-              "w-[260px] sm:w-[280px] md:w-[320px] lg:w-[340px] xl:flex-1 xl:min-w-0",
-              "shrink-0",
-              "border bg-card/95 shadow-sm",
-              isDragOver && "border-primary/60 ring-2 ring-primary/25 ring-inset bg-primary/[0.02]"
-            )}
-            onDragOver={(e) => handleDragOver(e, column.key)}
-            onDragLeave={handleDragLeave}
-            onDrop={(e) => handleDrop(e, column.key)}
-          >
-            {/* ── Column header ── */}
-            <div className="flex items-center gap-2 px-3 py-3 shrink-0 select-none border-b border-border/30">
-              <div
-                className="w-2.5 h-2.5 rounded-full ring-2 shrink-0"
-                style={{
-                  backgroundColor: column.color,
-                  boxShadow: `0 0 0 4px ${column.color}33`,
-                }}
-              />
-              <span className="text-[11px] font-semibold tracking-[0.18em] text-muted-foreground uppercase">
-                {column.name}
-              </span>
-              <span className="ml-auto text-[11px] font-semibold text-muted-foreground/50 tabular-nums px-1.5 py-0.5 rounded-full bg-muted/50">
-                {columnTasks.length}
-              </span>
-            </div>
+          return (
+            <div
+              key={column.key}
+              className={cn(
+                "flex flex-col rounded-xl transition-all duration-200",
+                "w-[280px] sm:w-[300px] md:w-[320px] lg:w-[340px] shrink-0",
+                "bg-card border border-border/50",
+                "shadow-sm",
+                "hover:shadow-md hover:border-border",
+                isDragOver && "ring-2 ring-primary/30 border-primary/30"
+              )}
+              onDragOver={(e) => handleDragOver(e, column.key)}
+              onDragLeave={handleDragLeave}
+              onDrop={(e) => handleDrop(e, column.key)}
+            >
+              {/* ── Column Header ── */}
+              <div className="shrink-0 border-b border-border/30">
+                <div className="px-4 py-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      {/* Category icon */}
+                      <div className="w-7 h-7 rounded-lg bg-muted/50 flex items-center justify-center shrink-0">
+                        <CategoryIcon className="w-4 h-4 text-muted-foreground" />
+                      </div>
 
-            {/* ── Cards ── */}
-            <ScrollArea className="flex-1 min-h-0">
-              <div className="flex flex-col gap-2.5 px-2.5 pb-3 pt-2">
-                {columnTasks.map((task) => (
-                  <div
-                    key={task.id}
-                    className={cn(
-                      "transition-opacity duration-150",
-                      draggingTaskId === task.id && "opacity-20"
-                    )}
-                  >
-                    <TaskCard
-                      task={task}
-                      onClick={onTaskClick}
-                      variant="board"
-                      draggable
-                      onDragStart={handleDragStart}
-                    />
+                      {/* Column name */}
+                      <div className="min-w-0">
+                        <h3 className="text-sm font-semibold text-foreground truncate">
+                          {column.name}
+                        </h3>
+                        <p className="text-[11px] text-muted-foreground">
+                          {columnTasks.length} {columnTasks.length === 1 ? 'issue' : 'issues'}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Actions menu */}
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 shrink-0 text-muted-foreground/50 hover:text-foreground hover:bg-muted/50"
+                        >
+                          <MoreHorizontal className="w-4 h-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-48">
+                        <DropdownMenuItem className="text-xs">
+                          <Plus className="w-3.5 h-3.5 mr-2" />
+                          Add issue
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem className="text-xs">
+                          <Eye className="w-3.5 h-3.5 mr-2" />
+                          View column settings
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
-                ))}
-
-                {columnTasks.length === 0 && !isDragOver && (
-                  <div className="flex items-center justify-center min-h-[60px] rounded-lg border border-dashed border-border/25 text-[11px] text-muted-foreground/50 select-none">
-                    No tasks in this stage
-                  </div>
-                )}
-
-                {isDragOver && (
-                  <div className="flex items-center justify-center min-h-[60px] rounded-lg border-2 border-dashed border-primary/30 bg-primary/[0.02] text-[11px] text-primary/50 font-medium">
-                    Drop here
-                  </div>
-                )}
-
-                <InlineCreateCard onSubmit={(title) => handleInlineCreate(title, column.key)} />
+                </div>
               </div>
-            </ScrollArea>
-          </div>
-        );
-      })}
+
+              {/* ── Cards Container ── */}
+              <ScrollArea className="flex-1 min-h-0">
+                <div className="flex flex-col gap-3 px-3 pb-3 pt-1">
+                  {columnTasks.map((task, index) => (
+                    <div
+                      key={task.id}
+                      className={cn(
+                        "transition-all duration-200",
+                        draggingTaskId === task.id && "opacity-30 scale-95"
+                      )}
+                      style={{
+                        animationDelay: `${index * 50}ms`,
+                      }}
+                    >
+                      <TaskCard
+                        task={task}
+                        onClick={onTaskClick}
+                        variant="board"
+                        draggable
+                        onDragStart={handleDragStart}
+                      />
+                    </div>
+                  ))}
+
+                  {/* Empty state */}
+                  {columnTasks.length === 0 && !isDragOver && (
+                    <div className="flex flex-col items-center justify-center min-h-[100px] rounded-lg border border-dashed border-border/40 bg-muted/10 text-center px-4 py-4">
+                      <CategoryIcon className="w-5 h-5 text-muted-foreground/40 mb-2" />
+                      <p className="text-xs text-muted-foreground/60">
+                        No issues
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Drop zone indicator */}
+                  {isDragOver && (
+                    <div className="flex items-center justify-center min-h-[60px] rounded-lg border-2 border-dashed border-primary/30 bg-primary/5 text-xs text-primary font-medium">
+                      <Plus className="w-4 h-4 mr-1.5" />
+                      Drop here
+                    </div>
+                  )}
+
+                  {/* Inline create */}
+                  <InlineCreateCard onSubmit={(title) => handleInlineCreate(title, column.key)} />
+                </div>
+              </ScrollArea>
+
+              {/* Column footer with quick actions */}
+              <div className="shrink-0 px-3 pb-3 pt-1">
+                <button
+                  onClick={() => handleInlineCreate("", column.key)}
+                  className="flex items-center gap-2 w-full px-3 py-2 text-xs text-muted-foreground/60 hover:text-foreground hover:bg-muted/30 rounded-lg transition-colors group"
+                >
+                  <Plus className="w-3.5 h-3.5 group-hover:scale-110 transition-transform" />
+                  <span>Create issue</span>
+                  <kbd className="ml-auto text-[10px] text-muted-foreground/40 bg-muted/50 px-1.5 py-0.5 rounded font-mono">
+                    C
+                  </kbd>
+                </button>
+              </div>
+            </div>
+          );
+        })}
+
+        {/* Add Column button */}
+        <div className="flex flex-col w-[280px] sm:w-[300px] shrink-0">
+          <button
+            className="flex-1 flex flex-col items-center justify-center min-h-[160px] rounded-xl border border-dashed border-border/40 bg-muted/5 hover:bg-muted/10 hover:border-border/60 transition-all group"
+          >
+            <div className="w-10 h-10 rounded-lg bg-muted/30 flex items-center justify-center mb-2 group-hover:bg-muted/50 transition-colors">
+              <Plus className="w-5 h-5 text-muted-foreground" />
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Add column
+            </p>
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
