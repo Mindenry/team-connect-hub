@@ -73,7 +73,7 @@ import { Task, User, Subtask, TaskComment } from "./types";
 interface TaskDetailDrawerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  task: Task | null;
+  task: Partial<Task> & { id: string; title: string } | null;
   onUpdate: (data: Partial<Task>) => void;
   onDelete: () => void;
   users: User[];
@@ -114,7 +114,7 @@ export default function TaskDetailDrawer({
   const [newSubtask, setNewSubtask] = useState("");
   const [showSubtaskInput, setShowSubtaskInput] = useState(false);
   const [loadingDetails, setLoadingDetails] = useState(false);
-  const [fullTask, setFullTask] = useState<Task | null>(null);
+  const [fullTask, setFullTask] = useState<Partial<Task> & { id: string; title: string } | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showActivity, setShowActivity] = useState(true);
   const [showSubtasks, setShowSubtasks] = useState(true);
@@ -145,12 +145,12 @@ export default function TaskDetailDrawer({
         comments: comments || [],
         activities: activities || [],
         attachments: attachments || [],
-      });
+      } as Task);
       setTitle(taskDetails.title);
       setDescription(taskDetails.description || "");
     } catch (err) {
       console.error("Failed to load task details:", err);
-      setFullTask(task);
+      setFullTask(task as Partial<Task> & { id: string; title: string });
       setTitle(task.title);
       setDescription(task.description || "");
     } finally {

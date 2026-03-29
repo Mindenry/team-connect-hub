@@ -31,7 +31,8 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import StatusIndicator from "@/components/shared/StatusIndicator";
 import CreateMeetingDialog from "@/components/dialogs/CreateMeetingDialog";
 import CreateTaskDialog from "@/components/dialogs/CreateTaskDialog";
-import TaskDetailDialog from "@/components/dialogs/TaskDetailDialog";
+// import TaskDetailDialog from "@/components/dialogs/TaskDetailDialog";
+import TaskDetailDrawer from "@/components/tasks/TaskDetailDrawer";
 import JoinMeetingByCodeDialog from "@/components/dialogs/JoinMeetingByCodeDialog";
 
 import { auth } from "@/lib/auth";
@@ -602,28 +603,25 @@ export default function Dashboard() {
             }}
           />
           <JoinMeetingByCodeDialog open={showJoinByCode} onOpenChange={setShowJoinByCode} />
-          <TaskDetailDialog
+          <TaskDetailDrawer
             open={!!selectedTask}
             onOpenChange={(open) => {
               if (!open) {
                 setSelectedTask(null);
               }
             }}
-            task={
-              selectedTask
-                ? {
-                    id: selectedTask.id,
-                    title: selectedTask.title,
-                    priority: selectedTask.priority,
-                    assignee: selectedTask.assignee,
-                    dueDate: selectedTask.dueDate,
-                    tags: selectedTask.tags,
-                    linkedMeeting: undefined,
-                    sprint: undefined,
-                    epic: selectedTask.epic,
-                  }
-                : undefined
-            }
+            task={selectedTask as any}
+            onUpdate={async (data) => {
+              if (selectedTask) {
+                try {
+                  await apiPatch(`/tasks/${selectedTask.id}`, data);
+                } catch (err) {
+                  console.error("Failed to update task:", err);
+                }
+              }
+            }}
+            onDelete={() => setSelectedTask(null)}
+            users={[]}
           />
 
           {/* Compact Hero Header */}
