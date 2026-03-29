@@ -14,17 +14,15 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 const issueTypeConfig: Record<string, { icon: any; color: string; bg: string }> = {
   task:    { icon: SquareCheck, color: "hsl(var(--primary))", bg: "bg-primary/10" },
   bug:     { icon: Bug,        color: "hsl(var(--destructive))", bg: "bg-destructive/10" },
-  story:   { icon: BookOpen,   color: "hsl(var(--primary))", bg: "bg-primary/10" },
-  epic:    { icon: Zap,        color: "hsl(var(--primary))", bg: "bg-primary/10" },
   subtask: { icon: Layers,     color: "hsl(var(--muted-foreground))", bg: "bg-muted/50" },
 };
 
-/* ═══════ PRIORITY (muted tones with primary accent) ═══════ */
-const priorityConfig: Record<string, { icon: any; color: string; bg: string; label: string }> = {
-  urgent: { icon: AlertCircle, color: "hsl(var(--destructive))", bg: "bg-destructive/10", label: "Urgent" },
-  high:   { icon: ChevronUp,   color: "hsl(var(--primary))", bg: "bg-primary/10", label: "High" },
-  medium: { icon: Minus,       color: "hsl(var(--muted-foreground))", bg: "bg-muted/50", label: "Medium" },
-  low:    { icon: ChevronDown, color: "hsl(var(--muted-foreground))", bg: "bg-muted/50", label: "Low" },
+/* ═══════ PRIORITY (left border color indicator) ═══════ */
+const priorityConfig: Record<string, { icon: any; color: string; bg: string; label: string; border: string }> = {
+  urgent: { icon: AlertCircle, color: "text-red-500", bg: "bg-red-500/10", label: "Urgent", border: "border-l-red-500" },
+  high:   { icon: ChevronUp,   color: "text-orange-500", bg: "bg-orange-500/10", label: "High", border: "border-l-orange-500" },
+  medium: { icon: Minus,       color: "text-yellow-600", bg: "bg-yellow-500/10", label: "Medium", border: "border-l-yellow-500" },
+  low:    { icon: ChevronDown, color: "text-slate-400", bg: "bg-slate-100", label: "Low", border: "border-l-slate-300" },
 };
 
 /* ═══════ STATUS ═══════ */
@@ -45,10 +43,7 @@ export interface TaskCardData {
   assignee?: { id?: string; name: string; initials?: string; avatar?: string };
   dueDate?: string;
   tags?: string[];
-  storyPoints?: number;
   project?: { id: string; key: string; name: string; color?: string };
-  sprint?: { id: string; name: string };
-  epic?: { id: string; name: string; color?: string };
   _count?: { comments?: number; attachments?: number; subtasks?: number; childTasks?: number };
   subtasks?: any[];
   comments?: any[];
@@ -154,8 +149,10 @@ function BoardCard({ task, onClick, draggable, onDragStart }: TaskCardProps) {
         "group relative bg-card border border-border/50 rounded-lg cursor-pointer",
         "shadow-sm hover:shadow-md",
         "transition-all duration-200",
-        "hover:border-border hover:bg-muted/30",
-        "active:scale-[0.99]"
+        "hover:border-border hover:bg-muted/20",
+        "active:scale-[0.98]",
+        "border-l-2",
+        priority.border
       )}
       onClick={() => {
         if (hasDraggedRef.current) {
@@ -170,87 +167,34 @@ function BoardCard({ task, onClick, draggable, onDragStart }: TaskCardProps) {
         onDragStart?.(e, task);
       }}
     >
-      <div className="p-3 space-y-2">
-        {/* ── Header: issue type + project key + priority ── */}
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 min-w-0">
-            {/* Issue Type Icon */}
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <div className={cn("w-5 h-5 rounded flex items-center justify-center shrink-0", issueType.bg)}>
-                  <IssueIcon className="w-3 h-3 text-primary" />
-                </div>
-              </TooltipTrigger>
-              <TooltipContent className="text-xs capitalize">{task.issueType || "Task"}</TooltipContent>
-            </Tooltip>
-
-            {/* Project key */}
-            {task.project?.key && (
-              <span className="text-[11px] font-medium text-muted-foreground font-mono">
-                {task.project.key}
-              </span>
-            )}
-          </div>
-
-          {/* Priority badge */}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <div className={cn("w-5 h-5 rounded flex items-center justify-center shrink-0", priority.bg)}>
-                <PriorityIcon className="w-3 h-3 text-primary" />
-              </div>
-            </TooltipTrigger>
-            <TooltipContent className="text-xs">{priority.label}</TooltipContent>
-          </Tooltip>
-        </div>
-
-        {/* ── Title ── */}
-        <p className="text-[13px] font-medium text-foreground leading-[1.4] line-clamp-3">
+      <div className="p-2.5 space-y-1.5">
+        {/* ── Title (main focus) ── */}
+        <p className="text-[13px] font-medium text-foreground leading-[1.35] line-clamp-2">
           {task.title}
         </p>
 
-        {/* ── Epic label ── */}
-        {task.epic?.name && (
-          <div className="flex items-center gap-1.5">
-            <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground/50 shrink-0" />
-            <span className="text-[10px] text-muted-foreground truncate max-w-[180px]">
-              {task.epic.name}
-            </span>
-          </div>
-        )}
-
-        {/* ── Tags ── */}
+        {/* ── Tags (compact) ── */}
         {task.tags && task.tags.length > 0 && (
-          <div className="flex flex-wrap gap-1">
-            {task.tags.slice(0, 3).map(tag => (
+          <div className="flex flex-wrap gap-0.5">
+            {task.tags.slice(0, 2).map(tag => (
               <span
                 key={tag}
-                className="inline-flex text-[10px] text-muted-foreground bg-muted/50 px-1.5 py-[2px] rounded"
+                className="text-[9px] text-muted-foreground bg-muted/40 px-1 py-[1px] rounded"
               >
                 {tag}
               </span>
             ))}
-            {task.tags.length > 3 && (
-              <span className="text-[10px] text-muted-foreground/50">+{task.tags.length - 3}</span>
+            {task.tags.length > 2 && (
+              <span className="text-[9px] text-muted-foreground/50">+{task.tags.length - 2}</span>
             )}
           </div>
         )}
 
-        {/* ── Footer row ── */}
-        <div className="flex items-center justify-between gap-2 pt-1.5 border-t border-border/30 mt-2">
+        {/* ── Footer: metadata row ── */}
+
+        <div className="flex items-center justify-between gap-2 pt-1.5">
           {/* Left: metadata icons */}
           <div className="flex items-center gap-2 min-w-0">
-            {/* Story points */}
-            {task.storyPoints != null && task.storyPoints > 0 && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="text-[10px] font-semibold text-muted-foreground bg-muted/50 min-w-[20px] h-5 inline-flex items-center justify-center rounded font-mono">
-                    {task.storyPoints}
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent className="text-xs">Story Points</TooltipContent>
-              </Tooltip>
-            )}
-
             {/* Subtask progress */}
             {subtaskCount > 0 && (
               <Tooltip>
@@ -374,16 +318,6 @@ function BacklogRow({ task, onClick }: TaskCardProps) {
         {task.title}
       </p>
 
-      {/* Epic (medium screens) */}
-      {task.epic?.name && (
-        <div className="items-center gap-1.5 hidden lg:flex shrink-0">
-          <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground/50" />
-          <span className="text-[10px] text-muted-foreground truncate max-w-[90px]">
-            {task.epic.name}
-          </span>
-        </div>
-      )}
-
       {/* Status badge */}
       <span className={cn(
         "text-[9px] font-semibold tracking-wider uppercase px-2 py-[3px] rounded shrink-0",
@@ -401,13 +335,6 @@ function BacklogRow({ task, onClick }: TaskCardProps) {
         </TooltipTrigger>
         <TooltipContent className="text-xs">{priority.label}</TooltipContent>
       </Tooltip>
-
-      {/* Story points */}
-      {task.storyPoints != null && task.storyPoints > 0 && (
-        <span className="text-[10px] font-semibold text-muted-foreground bg-muted/50 min-w-[20px] h-5 inline-flex items-center justify-center rounded font-mono shrink-0 hidden md:inline-flex">
-          {task.storyPoints}
-        </span>
-      )}
 
       {/* Subtasks */}
       {subtaskCount > 0 && (

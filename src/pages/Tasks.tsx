@@ -316,10 +316,11 @@ export default function Tasks() {
 
   return (
     <TooltipProvider>
-      <div className="flex flex-col h-screen bg-gradient-to-br from-background via-background to-muted/20">
-        <div className="border-b border-border/50 bg-background/95 backdrop-blur-xl supports-[backdrop-filter]:bg-background/80">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="h-16 sm:h-20 flex items-center justify-between gap-4">
+      <div className="flex flex-col h-screen bg-background">
+        {/* Header */}
+        <div className="shrink-0 border-b border-border/50 bg-background/95 backdrop-blur-xl">
+          <div className="px-4 sm:px-6 lg:px-8">
+            <div className="h-14 sm:h-16 flex items-center justify-between gap-4">
               <div className="flex items-center gap-3 min-w-0 flex-1">
                 <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary/20 via-primary/10 to-primary/5 flex items-center justify-center">
                   <CheckSquare className="w-5 h-5 text-primary" />
@@ -364,9 +365,11 @@ export default function Tasks() {
           </div>
         </div>
 
+        {/* Main Content */}
         <div className="flex-1 overflow-hidden">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-full flex flex-col">
-            <div className="py-4 space-y-4">
+          <div className="h-full flex flex-col">
+            {/* Stats & Toolbar */}
+            <div className="shrink-0 px-4 sm:px-6 lg:px-8 py-4 space-y-4 border-b border-border/30">
               {/* Stats Cards */}
               <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
                 <div className="rounded-xl border border-border/50 bg-card p-4">
@@ -494,7 +497,8 @@ export default function Tasks() {
               )}
             </div>
 
-            <div className="flex-1 overflow-auto pb-6">
+            {/* Board/List */}
+            <div className="flex-1 overflow-hidden">
               {loading ? (
                 <div className="space-y-2">
                   {Array.from({ length: 8 }).map((_, i) => (

@@ -208,9 +208,9 @@ export default function TaskBoard({
   }
 
   return (
-    <div className="flex-1 min-h-0 p-4 overflow-hidden">
-      {/* GitLab-style Board: horizontal scroll for columns, each column has independent vertical scroll */}
-      <div className="h-full flex gap-3 overflow-x-auto pb-2">
+    <div className="flex-1 min-h-0 overflow-hidden">
+      {/* Professional Kanban Board */}
+      <div className="h-full flex gap-4 overflow-x-auto p-4">
         {columns.map((column) => {
           const columnTasks = tasksByStatus[column.key] || [];
           const isDragOver = dragOverColumn === column.key;
@@ -220,57 +220,55 @@ export default function TaskBoard({
               key={column.key}
               className={cn(
                 "flex flex-col h-full min-h-0",
-                "w-[280px] sm:w-[300px] md:w-[320px] shrink-0",
-                "bg-muted/30 rounded-lg",
-                "transition-shadow duration-150",
-                isDragOver && "ring-2 ring-primary/50"
+                "w-[260px] sm:w-[280px] shrink-0",
+                "bg-muted/20 rounded-xl",
+                "transition-all duration-200",
+                isDragOver && "ring-2 ring-primary/40 bg-primary/5"
               )}
               onDragOver={(e) => handleDragOver(e, column.key)}
               onDragLeave={handleDragLeave}
               onDrop={(e) => handleDrop(e, column.key)}
             >
-              {/* Column Header - Fixed */}
-              <div className="shrink-0 px-3 py-2.5 border-b border-border/30 flex items-center justify-between gap-2">
+              {/* Column Header */}
+              <div className="shrink-0 px-3 py-3 flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2 min-w-0">
+                  <div 
+                    className="w-2 h-2 rounded-full shrink-0"
+                    style={{ backgroundColor: column.color || '#737373' }}
+                  />
                   <span className="text-sm font-medium text-foreground truncate">
                     {column.name}
                   </span>
-                  <span className="text-xs text-muted-foreground bg-muted/50 px-1.5 py-0.5 rounded">
+                  <span className="text-xs text-muted-foreground bg-muted/50 px-1.5 py-0.5 rounded font-medium">
                     {columnTasks.length}
                   </span>
                 </div>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-foreground">
+                    <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100">
                       <MoreHorizontal className="w-4 h-4" />
                     </Button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-40">
+                  <DropdownMenuContent align="end" className="w-36">
                     <DropdownMenuItem onClick={() => onCreateTask()}>
                       <Plus className="w-3.5 h-3.5 mr-2" />
-                      New issue
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem>
-                      <Eye className="w-3.5 h-3.5 mr-2" />
-                      View details
+                      Add task
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
 
-              {/* Cards Container - Independent scroll per column (GitLab style) */}
+              {/* Cards Container */}
               <div
                 ref={(el) => { scrollRefs.current[column.key] = el; }}
-                className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-2 space-y-2"
-                style={{ contain: "strict" }}
+                className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-2 pb-2 space-y-2"
               >
                 {columnTasks.map((task) => (
                   <div
                     key={task.id}
                     className={cn(
                       "transition-opacity duration-150",
-                      draggingTaskId === task.id && "opacity-40"
+                      draggingTaskId === task.id && "opacity-30"
                     )}
                   >
                     <TaskCard
@@ -285,24 +283,24 @@ export default function TaskBoard({
 
                 {/* Empty state */}
                 {columnTasks.length === 0 && !isDragOver && (
-                  <div className="flex flex-col items-center justify-center py-8 text-center">
-                    <div className="w-10 h-10 rounded-lg bg-muted/50 flex items-center justify-center mb-2">
-                      <ListTodo className="w-5 h-5 text-muted-foreground/50" />
+                  <div className="flex flex-col items-center justify-center py-6 text-center">
+                    <div className="w-8 h-8 rounded-lg bg-muted/50 flex items-center justify-center mb-1.5">
+                      <ListTodo className="w-4 h-4 text-muted-foreground/40" />
                     </div>
-                    <p className="text-xs text-muted-foreground">No issues</p>
+                    <p className="text-[11px] text-muted-foreground">No tasks</p>
                   </div>
                 )}
 
                 {/* Drop indicator */}
                 {isDragOver && (
-                  <div className="flex items-center justify-center py-4 border-2 border-dashed border-primary/40 rounded-lg bg-primary/5">
-                    <span className="text-xs text-primary font-medium">Drop here</span>
+                  <div className="flex items-center justify-center py-3 border-2 border-dashed border-primary/30 rounded-lg bg-primary/5">
+                    <span className="text-xs text-primary/70 font-medium">Drop here</span>
                   </div>
                 )}
               </div>
 
-              {/* Footer - Add issue button */}
-              <div className="shrink-0 p-2 border-t border-border/30">
+              {/* Footer - Add task */}
+              <div className="shrink-0 px-2 pb-2">
                 <InlineCreateCard onSubmit={(title) => handleInlineCreate(title, column.key)} />
               </div>
             </div>
@@ -310,24 +308,25 @@ export default function TaskBoard({
         })}
 
         {/* Add Column Button */}
-        <div className="flex flex-col w-[280px] sm:w-[300px] shrink-0">
+        <div className="flex flex-col w-[260px] sm:w-[280px] shrink-0">
           {showAddColumn ? (
-            <div className="bg-muted/30 rounded-lg p-3 space-y-3">
+            <div className="bg-muted/20 rounded-xl p-3 space-y-2.5">
               <Input
                 value={newColumnName}
                 onChange={(e) => setNewColumnName(e.target.value)}
                 placeholder="Column name..."
                 autoFocus
+                className="h-9"
                 onKeyDown={(e) => {
                   if (e.key === "Enter") handleAddColumn();
                   if (e.key === "Escape") { setShowAddColumn(false); setNewColumnName(""); }
                 }}
               />
               <div className="flex gap-2">
-                <Button size="sm" onClick={handleAddColumn} disabled={creatingColumn || !newColumnName.trim()}>
+                <Button size="sm" onClick={handleAddColumn} disabled={creatingColumn || !newColumnName.trim()} className="h-8">
                   {creatingColumn ? "Creating..." : "Create"}
                 </Button>
-                <Button size="sm" variant="ghost" onClick={() => { setShowAddColumn(false); setNewColumnName(""); }}>
+                <Button size="sm" variant="ghost" onClick={() => { setShowAddColumn(false); setNewColumnName(""); }} className="h-8">
                   Cancel
                 </Button>
               </div>
@@ -335,10 +334,10 @@ export default function TaskBoard({
           ) : (
             <button
               onClick={() => setShowAddColumn(true)}
-              className="flex-1 flex items-center justify-center gap-2 min-h-[80px] rounded-lg border border-dashed border-border/40 hover:border-border/60 hover:bg-muted/20 transition-colors text-muted-foreground"
+              className="flex-1 flex items-center justify-center gap-2 min-h-[60px] rounded-xl border border-dashed border-border/30 hover:border-border/50 hover:bg-muted/10 transition-colors text-muted-foreground"
             >
               <Plus className="w-4 h-4" />
-              <span className="text-sm">Add column</span>
+              <span className="text-sm font-medium">Add column</span>
             </button>
           )}
         </div>
