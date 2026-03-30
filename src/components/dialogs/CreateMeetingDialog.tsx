@@ -198,8 +198,6 @@ export default function CreateMeetingDialog({ open, onOpenChange }: CreateMeetin
         description: description || null,
         startTime: startTime.toISOString(),
         endTime: endTime.toISOString(),
-        password: undefined,
-        waitingRoom: false,
         allowScreenShare,
         status: meetingType === "instant" ? "live" : "upcoming",
         isInstant: meetingType === "instant",

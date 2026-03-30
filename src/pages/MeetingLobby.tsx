@@ -104,8 +104,6 @@ export default function MeetingLobby() {
   const [selectedMic, setSelectedMic] = useState("");
   const [selectedCamera, setSelectedCamera] = useState("");
   const [selectedSpeaker, setSelectedSpeaker] = useState("");
-  const [password, setPassword] = useState("");
-  const [showPasswordInput, setShowPasswordInput] = useState(false);
   const [meetingData, setMeetingData] = useState<any>(null);
 
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -188,7 +186,6 @@ export default function MeetingLobby() {
           }
 
           setMeetingData(meeting);
-          setShowPasswordInput(!!meeting.password);
           if (meeting.title) {
             setMeetingTitle(meeting.title);
           } else {
@@ -1215,25 +1212,6 @@ export default function MeetingLobby() {
                   </div>
                 </div>
 
-                {showPasswordInput && (
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between px-1">
-                      <span className="text-sm font-medium text-white/80">
-                        Meeting Password
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-3 p-4 rounded-xl border bg-white/5 border-white/10">
-                      <Shield className="w-5 h-5 text-[#0E71EB]" />
-                      <Input
-                        type="password"
-                        placeholder="Enter room password"
-                        className="bg-transparent border-0 focus-visible:ring-0 text-white placeholder:text-white/20 p-0 h-auto"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                      />
-                    </div>
-                  </div>
-                )}
 
                 {/* Camera Control */}
                 <div className="space-y-2">

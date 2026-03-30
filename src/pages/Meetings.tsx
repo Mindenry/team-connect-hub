@@ -17,6 +17,8 @@ import {
   VideoOff,
   Play,
   Sparkles,
+  MoreVertical,
+  Pencil,
 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -30,6 +32,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -45,6 +53,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import CreateMeetingDialog from "@/components/dialogs/CreateMeetingDialog";
+import EditMeetingDialog from "@/components/dialogs/EditMeetingDialog";
 import JoinMeetingByCodeDialog from "@/components/dialogs/JoinMeetingByCodeDialog";
 import { getSocket } from "@/lib/websocket";
 import { auth } from "@/lib/auth";
@@ -148,10 +157,12 @@ function MeetingCardGrid({
   meeting,
   index,
   activeRooms = [],
+  onEdit,
 }: {
   meeting: Meeting;
   index: number;
   activeRooms?: ActiveRoom[];
+  onEdit?: (meetingId: string) => void;
 }) {
   const navigate = useNavigate();
   const currentUser = auth.getUser();
@@ -228,19 +239,46 @@ function MeetingCardGrid({
                   />
                 )}
               </div>
-              <span
-                className={cn(
-                  "text-[9px] sm:text-[10px] font-semibold uppercase tracking-wider px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-full",
-                  statusTone === "live" &&
-                    "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
-                  statusTone === "ended" && "bg-muted/60 text-muted-foreground",
-                  statusTone === "waiting" &&
-                    "bg-amber-500/15 text-amber-600 dark:text-amber-400",
-                  statusTone === "upcoming" && "bg-primary/10 text-primary",
+              <div className="flex items-center gap-1">
+                <span
+                  className={cn(
+                    "text-[9px] sm:text-[10px] font-semibold uppercase tracking-wider px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-full",
+                    statusTone === "live" &&
+                      "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
+                    statusTone === "ended" && "bg-muted/60 text-muted-foreground",
+                    statusTone === "waiting" &&
+                      "bg-amber-500/15 text-amber-600 dark:text-amber-400",
+                    statusTone === "upcoming" && "bg-primary/10 text-primary",
+                  )}
+                >
+                  {statusLabel}
+                </span>
+                {onEdit && !isEnded && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 sm:h-7 sm:w-7 rounded-full hover:bg-muted/80"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <MoreVertical className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-muted-foreground" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-36">
+                      <DropdownMenuItem
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onEdit(meeting.id);
+                        }}
+                      >
+                        <Pencil className="w-4 h-4 mr-2" />
+                        Edit Meeting
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 )}
-              >
-                {statusLabel}
-              </span>
+              </div>
             </div>
 
             {/* Content */}
@@ -351,10 +389,12 @@ function MeetingCardList({
   meeting,
   index,
   activeRooms = [],
+  onEdit,
 }: {
   meeting: Meeting;
   index: number;
   activeRooms?: ActiveRoom[];
+  onEdit?: (meetingId: string) => void;
 }) {
   const navigate = useNavigate();
   const currentUser = auth.getUser();
@@ -450,6 +490,31 @@ function MeetingCardList({
                 >
                   {statusLabel}
                 </span>
+                {onEdit && !isEnded && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-5 w-5 sm:h-6 sm:w-6 rounded-full hover:bg-muted/80"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <MoreVertical className="w-3 h-3 text-muted-foreground" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-36">
+                      <DropdownMenuItem
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onEdit(meeting.id);
+                        }}
+                      >
+                        <Pencil className="w-4 h-4 mr-2" />
+                        Edit Meeting
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
               </div>
               <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-[10px] sm:text-xs text-muted-foreground">
                 <span className="flex items-center gap-1">
@@ -639,6 +704,8 @@ export default function Meetings() {
   const isMobile = useIsMobile();
   const [searchQuery, setSearchQuery] = useState("");
   const [showCreateMeeting, setShowCreateMeeting] = useState(false);
+  const [showEditMeeting, setShowEditMeeting] = useState(false);
+  const [editMeetingId, setEditMeetingId] = useState<string | null>(null);
   const [showJoinByCode, setShowJoinByCode] = useState(false);
   const [showFilter, setShowFilter] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>("all");
@@ -793,6 +860,18 @@ export default function Meetings() {
         <CreateMeetingDialog
           open={showCreateMeeting}
           onOpenChange={setShowCreateMeeting}
+        />
+        <EditMeetingDialog
+          open={showEditMeeting}
+          onOpenChange={setShowEditMeeting}
+          meetingId={editMeetingId}
+          onSuccess={() => {
+            // Refresh meetings list
+            apiGet<any[]>("/meetings").then((data) => {
+              const mapped: Meeting[] = Array.isArray(data) ? data.map(mapMeeting) : [];
+              setItems(mapped);
+            });
+          }}
         />
         <JoinMeetingByCodeDialog
           open={showJoinByCode}
@@ -1222,6 +1301,10 @@ export default function Meetings() {
                               meeting={m}
                               index={i}
                               activeRooms={activeRooms}
+                              onEdit={(id) => {
+                                setEditMeetingId(id);
+                                setShowEditMeeting(true);
+                              }}
                             />
                           ))}
                         </div>
@@ -1233,6 +1316,10 @@ export default function Meetings() {
                               meeting={m}
                               index={i}
                               activeRooms={activeRooms}
+                              onEdit={(id) => {
+                                setEditMeetingId(id);
+                                setShowEditMeeting(true);
+                              }}
                             />
                           ))}
                         </div>
