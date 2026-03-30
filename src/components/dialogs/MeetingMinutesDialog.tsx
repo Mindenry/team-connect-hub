@@ -1,0 +1,523 @@
+import { useState, useEffect } from "react";
+import {
+  FileText,
+  Save,
+  X,
+  Plus,
+  Trash2,
+  Edit2,
+  CheckSquare,
+  GripVertical,
+  Calendar,
+  Users,
+  Loader2,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  AnimatedDialog as Dialog,
+  AnimatedDialogContent as DialogContent,
+  AnimatedDialogHeader as DialogHeader,
+  AnimatedDialogTitle as DialogTitle,
+  AnimatedDialogDescription as DialogDescription,
+} from "@/components/shared/AnimatedDialog";
+import { apiGet, apiPost, apiPatch, apiDelete } from "@/lib/api";
+import { auth } from "@/lib/auth";
+import { useToast } from "@/hooks/use-toast";
+
+interface MeetingMinutesDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  meetingId: string;
+  meetingTitle: string;
+}
+
+interface ActionItem {
+  id: string;
+  task: string;
+  assignee?: string;
+  dueDate?: string;
+  completed?: boolean;
+}
+
+interface Decision {
+  id: string;
+  decision: string;
+  date: string;
+}
+
+interface MinutesData {
+  id: string;
+  title: string;
+  content: string;
+  actionItems: ActionItem[];
+  decisions: Decision[];
+  attendees: string[];
+  creator: { id: string; name: string; email: string; avatar?: string };
+  createdAt: string;
+  updatedAt: string;
+}
+
+export default function MeetingMinutesDialog({
+  open,
+  onOpenChange,
+  meetingId,
+  meetingTitle,
+}: MeetingMinutesDialogProps) {
+  const { toast } = useToast();
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [existingMinutes, setExistingMinutes] = useState<MinutesData[]>([]);
+  const [currentMinutes, setCurrentMinutes] = useState<MinutesData | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+
+  // Form state
+  const [title, setTitle] = useState("");
+  const [content, setContent] = useState("");
+  const [actionItems, setActionItems] = useState<ActionItem[]>([]);
+  const [decisions, setDecisions] = useState<Decision[]>([]);
+  const [attendees, setAttendees] = useState<string[]>([]);
+
+  // New item inputs
+  const [newActionTask, setNewActionTask] = useState("");
+  const [newActionAssignee, setNewActionAssignee] = useState("");
+  const [newDecision, setNewDecision] = useState("");
+
+  useEffect(() => {
+    if (open && meetingId) {
+      loadMinutes();
+    }
+  }, [open, meetingId]);
+
+  const loadMinutes = async () => {
+    setLoading(true);
+    try {
+      const data = await apiGet<MinutesData[]>(`/meeting-minutes/meeting/${meetingId}`);
+      setExistingMinutes(data || []);
+      if (data && data.length > 0) {
+        setCurrentMinutes(data[0]);
+        populateForm(data[0]);
+      } else {
+        resetForm();
+      }
+    } catch (error) {
+      console.error("Failed to load minutes:", error);
+      setExistingMinutes([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const populateForm = (minutes: MinutesData) => {
+    setTitle(minutes.title);
+    setContent(minutes.content);
+    setActionItems(minutes.actionItems || []);
+    setDecisions(minutes.decisions || []);
+    setAttendees(minutes.attendees || []);
+    setIsEditing(false);
+  };
+
+  const resetForm = () => {
+    setTitle(`Minutes: ${meetingTitle}`);
+    setContent("");
+    setActionItems([]);
+    setDecisions([]);
+    setAttendees([]);
+    setIsEditing(true);
+    setCurrentMinutes(null);
+  };
+
+  const handleSave = async () => {
+    if (!title.trim()) {
+      toast({ title: "Error", description: "Please enter a title", variant: "destructive" });
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const user = auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+
+      const payload = {
+        meetingId,
+        title,
+        content,
+        actionItems,
+        decisions,
+        attendees,
+      };
+
+      if (currentMinutes) {
+        // Update existing
+        const updated = await apiPatch<MinutesData>(`/meeting-minutes/${currentMinutes.id}`, payload);
+        setCurrentMinutes(updated);
+        setExistingMinutes(prev => prev.map(m => m.id === updated.id ? updated : m));
+        toast({ title: "Success", description: "Meeting minutes updated" });
+      } else {
+        // Create new
+        const created = await apiPost<MinutesData>("/meeting-minutes", payload);
+        setCurrentMinutes(created);
+        setExistingMinutes(prev => [created, ...prev]);
+        toast({ title: "Success", description: "Meeting minutes saved" });
+      }
+      setIsEditing(false);
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message || "Failed to save minutes", variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!deleteId) return;
+    try {
+      await apiDelete(`/meeting-minutes/${deleteId}`);
+      setExistingMinutes(prev => prev.filter(m => m.id !== deleteId));
+      if (currentMinutes?.id === deleteId) {
+        resetForm();
+      }
+      toast({ title: "Success", description: "Meeting minutes deleted" });
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } finally {
+      setDeleteId(null);
+    }
+  };
+
+  const addActionItem = () => {
+    if (!newActionTask.trim()) return;
+    setActionItems(prev => [
+      ...prev,
+      { id: Date.now().toString(), task: newActionTask, assignee: newActionAssignee || undefined, completed: false },
+    ]);
+    setNewActionTask("");
+    setNewActionAssignee("");
+  };
+
+  const removeActionItem = (id: string) => {
+    setActionItems(prev => prev.filter(a => a.id !== id));
+  };
+
+  const toggleActionComplete = (id: string) => {
+    setActionItems(prev => prev.map(a => a.id === id ? { ...a, completed: !a.completed } : a));
+  };
+
+  const addDecision = () => {
+    if (!newDecision.trim()) return;
+    setDecisions(prev => [
+      ...prev,
+      { id: Date.now().toString(), decision: newDecision, date: new Date().toISOString() },
+    ]);
+    setNewDecision("");
+  };
+
+  const removeDecision = (id: string) => {
+    setDecisions(prev => prev.filter(d => d.id !== id));
+  };
+
+  const selectMinutes = (minutes: MinutesData) => {
+    setCurrentMinutes(minutes);
+    populateForm(minutes);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col p-0 gap-0">
+        {/* Header */}
+        <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-4 shrink-0">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-white/20 flex items-center justify-center">
+                <FileText className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <DialogTitle className="text-lg font-semibold text-white">
+                  Meeting Minutes
+                </DialogTitle>
+                <DialogDescription className="text-white/80 text-sm">
+                  {meetingTitle}
+                </DialogDescription>
+              </div>
+            </div>
+            <Button variant="ghost" size="icon" onClick={() => onOpenChange(false)} className="text-white hover:bg-white/20">
+              <X className="w-5 h-5" />
+            </Button>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 flex min-h-0">
+          {/* Sidebar - Existing Minutes List */}
+          {existingMinutes.length > 0 && (
+            <div className="w-64 border-r bg-muted/30 shrink-0">
+              <div className="p-3 border-b bg-muted/50">
+                <h3 className="text-sm font-medium">Saved Minutes</h3>
+              </div>
+              <ScrollArea className="h-[calc(90vh-180px)]">
+                <div className="p-2 space-y-1">
+                  {existingMinutes.map((m) => (
+                    <button
+                      key={m.id}
+                      onClick={() => selectMinutes(m)}
+                      className={`w-full text-left p-3 rounded-lg transition-colors ${
+                        currentMinutes?.id === m.id
+                          ? "bg-primary/10 border border-primary/30"
+                          : "hover:bg-muted"
+                      }`}
+                    >
+                      <div className="font-medium text-sm truncate">{m.title}</div>
+                      <div className="text-xs text-muted-foreground mt-1">
+                        {new Date(m.createdAt).toLocaleDateString()}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        by {m.creator?.name || "Unknown"}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </ScrollArea>
+            </div>
+          )}
+
+          {/* Main Editor */}
+          <div className="flex-1 flex flex-col min-h-0">
+            {loading ? (
+              <div className="flex-1 flex items-center justify-center">
+                <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+              </div>
+            ) : (
+              <ScrollArea className="flex-1">
+                <div className="p-6 space-y-6">
+                  {/* Title */}
+                  <div className="space-y-2">
+                    <Label htmlFor="title">Title</Label>
+                    <Input
+                      id="title"
+                      value={title}
+                      onChange={(e) => setTitle(e.target.value)}
+                      disabled={!isEditing && !!currentMinutes}
+                      placeholder="Meeting minutes title..."
+                    />
+                  </div>
+
+                  {/* Content / Notes */}
+                  <div className="space-y-2">
+                    <Label htmlFor="content">Meeting Notes</Label>
+                    <Textarea
+                      id="content"
+                      value={content}
+                      onChange={(e) => setContent(e.target.value)}
+                      disabled={!isEditing && !!currentMinutes}
+                      placeholder="Write your meeting notes here... (Markdown supported)"
+                      rows={10}
+                      className="font-mono text-sm"
+                    />
+                  </div>
+
+                  {/* Action Items */}
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <CheckSquare className="w-4 h-4 text-primary" />
+                      <Label>Action Items</Label>
+                    </div>
+                    {actionItems.length > 0 && (
+                      <div className="space-y-2">
+                        {actionItems.map((item) => (
+                          <div
+                            key={item.id}
+                            className={`flex items-center gap-3 p-3 rounded-lg border ${
+                              item.completed ? "bg-green-50 border-green-200" : "bg-background"
+                            }`}
+                          >
+                            {isEditing && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6 cursor-grab"
+                              >
+                                <GripVertical className="w-4 h-4 text-muted-foreground" />
+                              </Button>
+                            )}
+                            <input
+                              type="checkbox"
+                              checked={item.completed}
+                              onChange={() => toggleActionComplete(item.id)}
+                              className="h-4 w-4"
+                              disabled={!isEditing && !!currentMinutes}
+                            />
+                            <div className="flex-1">
+                              <span className={item.completed ? "line-through text-muted-foreground" : ""}>
+                                {item.task}
+                              </span>
+                              {item.assignee && (
+                                <Badge variant="secondary" className="ml-2 text-xs">
+                                  {item.assignee}
+                                </Badge>
+                              )}
+                            </div>
+                            {isEditing && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6 text-destructive hover:text-destructive"
+                                onClick={() => removeActionItem(item.id)}
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {isEditing && (
+                      <div className="flex gap-2">
+                        <Input
+                          value={newActionTask}
+                          onChange={(e) => setNewActionTask(e.target.value)}
+                          placeholder="Add action item..."
+                          className="flex-1"
+                          onKeyDown={(e) => e.key === "Enter" && addActionItem()}
+                        />
+                        <Input
+                          value={newActionAssignee}
+                          onChange={(e) => setNewActionAssignee(e.target.value)}
+                          placeholder="Assignee"
+                          className="w-32"
+                        />
+                        <Button onClick={addActionItem} size="icon">
+                          <Plus className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Decisions */}
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <Calendar className="w-4 h-4 text-primary" />
+                      <Label>Decisions Made</Label>
+                    </div>
+                    {decisions.length > 0 && (
+                      <div className="space-y-2">
+                        {decisions.map((d) => (
+                          <div
+                            key={d.id}
+                            className="flex items-center gap-3 p-3 rounded-lg border bg-background"
+                          >
+                            <div className="flex-1">{d.decision}</div>
+                            <span className="text-xs text-muted-foreground">
+                              {new Date(d.date).toLocaleDateString()}
+                            </span>
+                            {isEditing && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6 text-destructive hover:text-destructive"
+                                onClick={() => removeDecision(d.id)}
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {isEditing && (
+                      <div className="flex gap-2">
+                        <Input
+                          value={newDecision}
+                          onChange={(e) => setNewDecision(e.target.value)}
+                          placeholder="Add decision..."
+                          className="flex-1"
+                          onKeyDown={(e) => e.key === "Enter" && addDecision()}
+                        />
+                        <Button onClick={addDecision} size="icon">
+                          <Plus className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </ScrollArea>
+            )}
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="border-t px-6 py-4 bg-muted/30 shrink-0">
+          <div className="flex items-center justify-between">
+            <div className="flex gap-2">
+              {currentMinutes && !isEditing && (
+                <>
+                  <Button variant="outline" onClick={() => setIsEditing(true)}>
+                    <Edit2 className="w-4 h-4 mr-2" />
+                    Edit
+                  </Button>
+                  <Button variant="outline" onClick={() => setDeleteId(currentMinutes.id)} className="text-destructive">
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    Delete
+                  </Button>
+                </>
+              )}
+              {!currentMinutes && existingMinutes.length === 0 && (
+                <Button variant="outline" onClick={resetForm}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  New Minutes
+                </Button>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => onOpenChange(false)}>
+                Cancel
+              </Button>
+              {(isEditing || !currentMinutes) && (
+                <Button onClick={handleSave} disabled={saving}>
+                  {saving ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <Save className="w-4 h-4 mr-2" />
+                  )}
+                  Save Minutes
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>
+      </DialogContent>
+
+      {/* Delete Confirmation */}
+      <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Meeting Minutes?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. The meeting minutes will be permanently deleted.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </Dialog>
+  );
+}

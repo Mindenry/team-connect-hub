@@ -19,6 +19,7 @@ import {
   Sparkles,
   MoreVertical,
   Pencil,
+  FileText,
 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -38,6 +39,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import MeetingMinutesDialog from "@/components/dialogs/MeetingMinutesDialog";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -158,11 +160,13 @@ function MeetingCardGrid({
   index,
   activeRooms = [],
   onEdit,
+  onMinutes,
 }: {
   meeting: Meeting;
   index: number;
   activeRooms?: ActiveRoom[];
   onEdit?: (meetingId: string) => void;
+  onMinutes?: (meetingId: string, meetingTitle: string) => void;
 }) {
   const navigate = useNavigate();
   const currentUser = auth.getUser();
@@ -355,6 +359,20 @@ function MeetingCardGrid({
               </div>
               {isEnded ? (
                 <div className="flex gap-1">
+                  {onMinutes && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 sm:h-8 px-2 sm:px-3 text-[10px] sm:text-xs font-medium"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onMinutes(meeting.id, meeting.title);
+                      }}
+                    >
+                      <FileText className="w-3 h-3 sm:w-3.5 sm:h-3.5 mr-1" />
+                      Minutes
+                    </Button>
+                  )}
                   <Button
                     size="sm"
                     variant="ghost"
@@ -390,11 +408,13 @@ function MeetingCardList({
   index,
   activeRooms = [],
   onEdit,
+  onMinutes,
 }: {
   meeting: Meeting;
   index: number;
   activeRooms?: ActiveRoom[];
   onEdit?: (meetingId: string) => void;
+  onMinutes?: (meetingId: string, meetingTitle: string) => void;
 }) {
   const navigate = useNavigate();
   const currentUser = auth.getUser();
@@ -581,6 +601,20 @@ function MeetingCardList({
               )}
               {isEnded ? (
                 <div className="flex gap-1">
+                  {onMinutes && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 sm:h-8 px-2 sm:px-3 text-[10px] sm:text-xs font-medium"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onMinutes(meeting.id, meeting.title);
+                      }}
+                    >
+                      <FileText className="w-3 h-3 sm:w-3.5 sm:h-3.5 mr-1" />
+                      Minutes
+                    </Button>
+                  )}
                   <Button
                     size="sm"
                     variant="ghost"
@@ -706,6 +740,9 @@ export default function Meetings() {
   const [showCreateMeeting, setShowCreateMeeting] = useState(false);
   const [showEditMeeting, setShowEditMeeting] = useState(false);
   const [editMeetingId, setEditMeetingId] = useState<string | null>(null);
+  const [showMinutesDialog, setShowMinutesDialog] = useState(false);
+  const [minutesMeetingId, setMinutesMeetingId] = useState<string | null>(null);
+  const [minutesMeetingTitle, setMinutesMeetingTitle] = useState<string>("");
   const [showJoinByCode, setShowJoinByCode] = useState(false);
   const [showFilter, setShowFilter] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>("all");
@@ -852,6 +889,12 @@ export default function Meetings() {
 
   const hasActiveFilters = filterStatus !== "all" || filterTeam !== "all";
 
+  const handleOpenMinutes = (meetingId: string, meetingTitle: string) => {
+    setMinutesMeetingId(meetingId);
+    setMinutesMeetingTitle(meetingTitle);
+    setShowMinutesDialog(true);
+  };
+
   const MeetingCard = viewMode === "grid" ? MeetingCardGrid : MeetingCardList;
 
   return (
@@ -876,6 +919,12 @@ export default function Meetings() {
         <JoinMeetingByCodeDialog
           open={showJoinByCode}
           onOpenChange={setShowJoinByCode}
+        />
+        <MeetingMinutesDialog
+          open={showMinutesDialog}
+          onOpenChange={setShowMinutesDialog}
+          meetingId={minutesMeetingId || ""}
+          meetingTitle={minutesMeetingTitle}
         />
 
         {/* Filter Dialog */}
@@ -1305,6 +1354,7 @@ export default function Meetings() {
                                 setEditMeetingId(id);
                                 setShowEditMeeting(true);
                               }}
+                              onMinutes={handleOpenMinutes}
                             />
                           ))}
                         </div>
@@ -1320,6 +1370,7 @@ export default function Meetings() {
                                 setEditMeetingId(id);
                                 setShowEditMeeting(true);
                               }}
+                              onMinutes={handleOpenMinutes}
                             />
                           ))}
                         </div>
