@@ -333,9 +333,15 @@ export default function SharedDrive() {
   }, [selectedTeamId, currentPath]);
 
   const filteredEntries = useMemo(() => {
-    if (!searchQuery.trim()) return entries;
+    // Filter out "Personal Recordings" folder - it's personal, not for team drive
+    let filtered = entries.filter(
+      (entry) => !(entry.isFolder && entry.name.toLowerCase() === "personal recordings")
+    );
+    
+    // Apply search filter
+    if (!searchQuery.trim()) return filtered;
     const query = searchQuery.toLowerCase();
-    return entries.filter(
+    return filtered.filter(
       (entry) =>
         entry.name.toLowerCase().includes(query) ||
         entry.path.toLowerCase().includes(query),

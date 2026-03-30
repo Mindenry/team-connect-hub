@@ -5,14 +5,10 @@ import {
   Calendar,
   Clock,
   Users,
-  Shield,
   FileText,
-  X,
   Loader2,
-  Lock,
   Zap,
   Repeat,
-  MonitorUp,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,9 +25,8 @@ import {
   AnimatedDialogTitle as DialogTitle,
 } from "@/components/shared/AnimatedDialog";
 import { auth } from "@/lib/auth";
-import { apiGet, apiPost } from "@/lib/api";
+import { apiGet, apiPost, API_BASE } from "@/lib/api";
 
-const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
 
 interface CreateMeetingDialogProps {
   open: boolean;
@@ -56,7 +51,6 @@ export default function CreateMeetingDialog({ open, onOpenChange }: CreateMeetin
   const [allowScreenShare, setAllowScreenShare] = useState(true);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [password, setPassword] = useState("");
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
   const [duration, setDuration] = useState("60");
@@ -107,15 +101,10 @@ export default function CreateMeetingDialog({ open, onOpenChange }: CreateMeetin
     setCheckingAvailability(true);
     setError(null);
     try {
-      const [membersRes, meetingsRes] = await Promise.all([
-        fetch(`${API_BASE}/teams/${teamId}/members`),
-        fetch(`${API_BASE}/meetings?teamId=${teamId}`),
+      const [membersData, meetingsData] = await Promise.all([
+        apiGet<any[]>(`/teams/${teamId}/members`),
+        apiGet<any[]>(`/meetings?teamId=${teamId}`),
       ]);
-      if (!membersRes.ok || !meetingsRes.ok) {
-        throw new Error("Failed to load availability data");
-      }
-      const membersData = await membersRes.json();
-      const meetingsData = await meetingsRes.json();
 
       const members = (membersData || []).map((m: any) => m.user).filter(Boolean);
       const { start, end } = scheduledStartAndEnd;
@@ -166,7 +155,6 @@ export default function CreateMeetingDialog({ open, onOpenChange }: CreateMeetin
     setError(null);
     setTitle("");
     setDescription("");
-    setPassword("");
     setDate("");
     setTime("");
     setIsRecurring(false);
@@ -205,12 +193,12 @@ export default function CreateMeetingDialog({ open, onOpenChange }: CreateMeetin
         endTime = new Date(startTime.getTime() + parseInt(duration) * 60000);
       }
 
-      const result = await apiPost("/meetings", {
+      const result = await apiPost<{ id: string }>("/meetings", {
         title,
         description: description || null,
         startTime: startTime.toISOString(),
         endTime: endTime.toISOString(),
-        password: password.trim() ? password.trim() : undefined,
+        password: undefined,
         waitingRoom: false,
         allowScreenShare,
         status: meetingType === "instant" ? "live" : "upcoming",
@@ -542,23 +530,6 @@ export default function CreateMeetingDialog({ open, onOpenChange }: CreateMeetin
                 onChange={(e) => setDescription(e.target.value)}
               />
             </div>
-
-            {/* Password */}
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <Lock className="w-3.5 h-3.5 text-muted-foreground" />
-                <Label className="text-sm font-semibold text-foreground">Password <span className="text-xs font-normal text-muted-foreground">(optional)</span></Label>
-              </div>
-              <Input
-                type="password"
-                placeholder="Set a password for this meeting"
-                className="meeting-input h-10 rounded-lg"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-              <p className="text-[10px] text-muted-foreground pl-1">If set, participants must enter this password to join.</p>
-            </div>
-
 
           </div>
 
