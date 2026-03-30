@@ -208,11 +208,15 @@ export default function Reports() {
           apiGet<PersonalReportData>(`/reports?range=${dateRange}`).catch(() => ({} as PersonalReportData)),
         ]);
 
-        setTeams((teamsRes || []).map((t: any) => ({ id: t.id, name: t.name })));
+        // Filter out "Personal Recordings" - it's a personal folder, not a team
+        const filteredTeams = (teamsRes || [])
+          .filter((t: any) => t.name.toLowerCase() !== "personal recordings")
+          .map((t: any) => ({ id: t.id, name: t.name }));
+        setTeams(filteredTeams);
         setPersonalReport(personalRes && Object.keys(personalRes).length > 0 ? personalRes : null);
 
-        if (!selectedTeamId && (teamsRes || []).length > 0) {
-          setSelectedTeamId(teamsRes[0].id);
+        if (!selectedTeamId && filteredTeams.length > 0) {
+          setSelectedTeamId(filteredTeams[0].id);
         }
 
         // Preload for overview
@@ -337,9 +341,11 @@ export default function Reports() {
                 { metric: "Task Completion Rate", value: `${personalReport.taskCompletionRate ?? 0}%` },
               ];
               if (personalReport.teamMetrics) {
-                personalReport.teamMetrics.forEach(t => {
-                  data.push({ category: "Team", teamName: t.teamName, tasks: t.tasksCompleted ?? 0, meetings: t.meetingsAttended ?? 0, messages: t.messagesSent ?? 0 });
-                });
+                personalReport.teamMetrics
+                  .filter(t => t.teamName.toLowerCase() !== 'personal recordings')
+                  .forEach(t => {
+                    data.push({ category: "Team", teamName: t.teamName, tasks: t.tasksCompleted ?? 0, meetings: t.meetingsAttended ?? 0, messages: t.messagesSent ?? 0 });
+                  });
               }
             }
             exportData = personalReport;
@@ -635,7 +641,7 @@ export default function Reports() {
                     </div>
 
                     {/* Team Metrics */}
-                    {personalReport?.teamMetrics && personalReport.teamMetrics.length > 0 && (
+                    {personalReport?.teamMetrics && personalReport.teamMetrics.filter(t => t.teamName.toLowerCase() !== 'personal recordings').length > 0 && (
                       <Card className="border-border/50 bg-card/80 backdrop-blur-sm">
                         <CardHeader className="pb-3">
                           <CardTitle className="text-sm font-semibold flex items-center gap-2">
@@ -645,7 +651,7 @@ export default function Reports() {
                         </CardHeader>
                         <CardContent>
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                            {personalReport.teamMetrics.map((t) => (
+                            {personalReport.teamMetrics.filter(t => t.teamName.toLowerCase() !== 'personal recordings').map((t) => (
                               <div key={t.teamName} className="p-3 rounded-xl bg-muted/30 border border-border/40">
                                 <div className="font-medium text-xs mb-2">{t.teamName}</div>
                                 <div className="flex gap-4 text-[11px] text-muted-foreground">
@@ -803,7 +809,7 @@ export default function Reports() {
                         </div>
 
                         {/* Team Contributions */}
-                        {personalReport.teamMetrics && personalReport.teamMetrics.length > 0 && (
+                        {personalReport.teamMetrics && personalReport.teamMetrics.filter(t => t.teamName.toLowerCase() !== 'personal recordings').length > 0 && (
                           <Card className="border-border/50 bg-card/80 backdrop-blur-sm">
                             <CardHeader className="pb-3">
                               <CardTitle className="text-sm font-semibold flex items-center gap-2">
@@ -813,7 +819,7 @@ export default function Reports() {
                             </CardHeader>
                             <CardContent>
                               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                                {personalReport.teamMetrics.map((team) => (
+                                {personalReport.teamMetrics.filter(t => t.teamName.toLowerCase() !== 'personal recordings').map((team) => (
                                   <div key={team.teamId || team.teamName} className="p-4 rounded-xl bg-muted/20 border border-border/30">
                                     <div className="font-medium text-sm mb-3">{team.teamName}</div>
                                     <div className="space-y-2">
