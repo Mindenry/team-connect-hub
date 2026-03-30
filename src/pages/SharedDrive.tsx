@@ -196,7 +196,12 @@ const isTextLike = (mime?: string, name?: string) => {
 
   // Guard: some binary files may be mislabeled as text/plain by upstream.
   if (isVideoLike(mime, lowerName)) return false;
+  // Exclude common binary formats that might be mislabeled
   if ([".mp3", ".wav", ".ogg", ".m4a", ".aac", ".flac", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".pdf"].some((ext) => lowerName.endsWith(ext))) {
+    return false;
+  }
+  // Exclude Office documents - they are binary ZIP-based formats, not text
+  if ([".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx"].some((ext) => lowerName.endsWith(ext))) {
     return false;
   }
 
@@ -228,6 +233,11 @@ const isTextLike = (mime?: string, name?: string) => {
 
 const isOfficeLike = (mime?: string, name?: string) => {
   const lowerName = (name || "").toLowerCase();
+  // Check by extension first (most reliable)
+  if ([".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx"].some((ext) => lowerName.endsWith(ext))) {
+    return true;
+  }
+  // Also check MIME type
   if (!mime) return false;
   if (
     mime.includes("officedocument") ||
@@ -237,9 +247,7 @@ const isOfficeLike = (mime?: string, name?: string) => {
   ) {
     return true;
   }
-  return [".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx"].some((ext) =>
-    lowerName.endsWith(ext),
-  );
+  return false;
 };
 
 export default function SharedDrive() {
@@ -1404,6 +1412,52 @@ export default function SharedDrive() {
                       );
                     }
 
+                    // Check Office documents BEFORE text files (Office files are ZIP-based, not text)
+                    if (isOfficeLike(v.mimeType, previewEntry.name)) {
+                      // Determine file type for appropriate icon and label
+                      const isWord = previewEntry.name.toLowerCase().endsWith('.doc') || previewEntry.name.toLowerCase().endsWith('.docx');
+                      const isExcel = previewEntry.name.toLowerCase().endsWith('.xls') || previewEntry.name.toLowerCase().endsWith('.xlsx');
+                      const isPowerPoint = previewEntry.name.toLowerCase().endsWith('.ppt') || previewEntry.name.toLowerCase().endsWith('.pptx');
+                      
+                      const OfficeIcon = isExcel ? FileSpreadsheet : FileText;
+                      const officeColor = isExcel ? "text-emerald-600" : isPowerPoint ? "text-orange-500" : "text-blue-600";
+                      const officeLabel = isExcel ? "Excel Preview" : isPowerPoint ? "PowerPoint Preview" : "Word Preview";
+                      
+                      const officeViewerSrc = `https://docs.google.com/gview?embedded=1&url=${encodeURIComponent(src)}`;
+                      return (
+                        <div className="w-full h-full flex flex-col rounded-xl border border-border/60 bg-background shadow-xl overflow-hidden">
+                          <div className="px-5 py-3.5 border-b border-border/60 bg-gradient-to-r from-muted/50 to-muted/20 flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <OfficeIcon className={cn("w-4 h-4", officeColor)} />
+                              <span className="text-sm font-semibold text-foreground">{officeLabel}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => handleOpenExternal(v.url)}>
+                                <Eye className="w-3.5 h-3.5 mr-1" />
+                                เปิดไฟล์ตรง
+                              </Button>
+                              <Button size="sm" className="h-8 text-xs" onClick={() => handleDownload(v.url, previewEntry.name)}>
+                                <Download className="w-3.5 h-3.5 mr-1" />
+                                ดาวน์โหลด
+                              </Button>
+                            </div>
+                          </div>
+                          <div className="flex-1 bg-muted/20">
+                            <iframe
+                              src={officeViewerSrc}
+                              title={`${previewEntry.name} office preview`}
+                              className="w-full h-full border-0"
+                              style={{ minHeight: "500px" }}
+                            />
+                          </div>
+                          <div className="px-4 py-2.5 border-t border-border/50 bg-muted/20 text-xs text-muted-foreground">
+                            ถ้า preview ไม่ขึ้น อาจเป็นเพราะสิทธิ์ไฟล์หรือเครือข่าย ให้ใช้ปุ่ม "เปิดไฟล์ตรง" หรือดาวน์โหลดแทน
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    // Text preview comes AFTER Office check
                     if (isTextLike(v.mimeType, previewEntry.name)) {
                       if (textPreviewLoading) {
                         return (
@@ -1450,41 +1504,6 @@ export default function SharedDrive() {
                           <pre className="flex-1 overflow-auto p-4 text-xs leading-relaxed font-mono whitespace-pre-wrap break-words text-foreground bg-background">
 {textPreview || "(ไฟล์ว่าง)"}
                           </pre>
-                        </div>
-                      );
-                    }
-
-                    if (isOfficeLike(v.mimeType, previewEntry.name)) {
-                      const officeViewerSrc = `https://docs.google.com/gview?embedded=1&url=${encodeURIComponent(src)}`;
-                      return (
-                        <div className="w-full h-full flex flex-col rounded-xl border border-border/60 bg-background shadow-xl overflow-hidden">
-                          <div className="px-5 py-3.5 border-b border-border/60 bg-gradient-to-r from-muted/50 to-muted/20 flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
-                              <span className="text-sm font-semibold text-foreground">Office Preview</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => handleOpenExternal(v.url)}>
-                                <Eye className="w-3.5 h-3.5 mr-1" />
-                                เปิดไฟล์ตรง
-                              </Button>
-                              <Button size="sm" className="h-8 text-xs" onClick={() => handleDownload(v.url, previewEntry.name)}>
-                                <Download className="w-3.5 h-3.5 mr-1" />
-                                ดาวน์โหลด
-                              </Button>
-                            </div>
-                          </div>
-                          <div className="flex-1 bg-muted/20">
-                            <iframe
-                              src={officeViewerSrc}
-                              title={`${previewEntry.name} office preview`}
-                              className="w-full h-full border-0"
-                              style={{ minHeight: "500px" }}
-                            />
-                          </div>
-                          <div className="px-4 py-2.5 border-t border-border/50 bg-muted/20 text-xs text-muted-foreground">
-                            ถ้า preview ไม่ขึ้น อาจเป็นเพราะสิทธิ์ไฟล์หรือเครือข่าย ให้ใช้ปุ่ม "เปิดไฟล์ตรง" หรือดาวน์โหลดแทน
-                          </div>
                         </div>
                       );
                     }
