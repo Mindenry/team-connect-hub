@@ -33,6 +33,8 @@ import {
   Users,
   UserPlus,
 } from "lucide-react";
+import * as mammoth from "mammoth";
+import * as XLSX from "xlsx";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -281,6 +283,9 @@ export default function SharedDrive() {
   const [textPreview, setTextPreview] = useState<string>("");
   const [textPreviewLoading, setTextPreviewLoading] = useState(false);
   const [textPreviewError, setTextPreviewError] = useState<string | null>(null);
+  const [officePreview, setOfficePreview] = useState<string>("");
+  const [officePreviewLoading, setOfficePreviewLoading] = useState(false);
+  const [officePreviewError, setOfficePreviewError] = useState<string | null>(null);
   const teamIdFromQuery = searchParams.get("teamId") || "";
 
   const loadTeams = async () => {
@@ -467,6 +472,65 @@ export default function SharedDrive() {
     }
   }, []);
 
+  const loadOfficePreview = useCallback(async (entry: DriveEntry) => {
+    if (!entry.latestVersion) return;
+    
+    const lowerName = entry.name.toLowerCase();
+    const isWord = lowerName.endsWith('.doc') || lowerName.endsWith('.docx');
+    const isExcel = lowerName.endsWith('.xls') || lowerName.endsWith('.xlsx');
+    
+    if (!isWord && !isExcel) {
+      setOfficePreview("");
+      setOfficePreviewError(null);
+      setOfficePreviewLoading(false);
+      return;
+    }
+
+    try {
+      setOfficePreviewLoading(true);
+      setOfficePreviewError(null);
+      
+      const src = entry.latestVersion.url.startsWith("http")
+        ? entry.latestVersion.url
+        : `${API_BASE}${entry.latestVersion.url}`;
+      
+      const res = await fetch(src, {
+        headers: {
+          ...(auth.getToken() ? { Authorization: `Bearer ${auth.getToken()}` } : {}),
+        },
+      });
+      
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+
+      if (isWord) {
+        // DOCX preview using mammoth
+        const arrayBuffer = await res.arrayBuffer();
+        const result = await mammoth.convertToHtml({ arrayBuffer });
+        setOfficePreview(result.value);
+      } else if (isExcel) {
+        // XLSX preview using xlsx
+        const arrayBuffer = await res.arrayBuffer();
+        const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+        
+        // Get first sheet
+        const firstSheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[firstSheetName];
+        
+        // Convert to HTML table
+        const html = XLSX.utils.sheet_to_html(worksheet, { editable: false });
+        setOfficePreview(html);
+      }
+    } catch (err: any) {
+      console.error("Office preview error:", err);
+      setOfficePreview("");
+      setOfficePreviewError(err?.message || "Unable to preview this file");
+    } finally {
+      setOfficePreviewLoading(false);
+    }
+  }, []);
+
   const handleOpenEntry = (entry: DriveEntry) => {
     if (entry.isFolder) {
       setCurrentPath(entry.path === "/" ? `/${entry.name}` : `${entry.path}/${entry.name}`);
@@ -478,8 +542,12 @@ export default function SharedDrive() {
       setTextPreview("");
       setTextPreviewError(null);
       setTextPreviewLoading(false);
+      setOfficePreview("");
+      setOfficePreviewError(null);
+      setOfficePreviewLoading(false);
       void loadVersions(entry.id);
       void loadTextPreview(entry);
+      void loadOfficePreview(entry);
     }
   };
 
@@ -525,17 +593,35 @@ export default function SharedDrive() {
   const handleDownload = (url?: string, filename?: string) => {
     if (!url) return;
     const full = url.startsWith("http") ? url : `${API_BASE}${url}`;
-    const a = document.createElement("a");
-    a.href = full;
-    if (filename) {
-      a.download = filename;
-    } else {
-      const parts = full.split("/");
-      a.download = parts[parts.length - 1] || "download";
-    }
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    
+    // Use fetch to download with auth, then create blob for proper Thai filename support
+    fetch(full, {
+      headers: auth.getToken() ? { Authorization: `Bearer ${auth.getToken()}` } : {},
+    })
+      .then((res) => res.blob())
+      .then((blob) => {
+        const blobUrl = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = blobUrl;
+        // Decode and encode filename to support Thai characters
+        const decodedName = filename ? decodeURIComponent(filename) : full.split("/").pop() || "download";
+        a.download = decodedName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(blobUrl);
+      })
+      .catch(() => {
+        // Fallback to direct link if fetch fails
+        const a = document.createElement("a");
+        a.href = full;
+        if (filename) {
+          a.download = decodeURIComponent(filename);
+        }
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      });
   };
 
   const handleOpenExternal = (url?: string) => {
@@ -1421,15 +1507,59 @@ export default function SharedDrive() {
                       
                       const OfficeIcon = isExcel ? FileSpreadsheet : FileText;
                       const officeColor = isExcel ? "text-emerald-600" : isPowerPoint ? "text-orange-500" : "text-blue-600";
-                      const officeLabel = isExcel ? "Excel Preview" : isPowerPoint ? "PowerPoint Preview" : "Word Preview";
+                      const officeLabel = isExcel ? "Excel" : isPowerPoint ? "PowerPoint" : "Word";
+                      const officeDesc = isExcel ? "สเปรดชีต" : isPowerPoint ? "งานนำเสนอ" : "เอกสาร";
                       
-                      const officeViewerSrc = `https://docs.google.com/gview?embedded=1&url=${encodeURIComponent(src)}`;
+                      // PowerPoint - no frontend library available, show fallback
+                      if (isPowerPoint) {
+                        return (
+                          <div className="w-full h-full flex flex-col rounded-xl border border-border/60 bg-background shadow-xl overflow-hidden">
+                            <div className="px-5 py-3.5 border-b border-border/60 bg-gradient-to-r from-muted/50 to-muted/20 flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <OfficeIcon className={cn("w-4 h-4", officeColor)} />
+                                <span className="text-sm font-semibold text-foreground">{officeLabel} Preview</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => handleOpenExternal(v.url)}>
+                                  <Eye className="w-3.5 h-3.5 mr-1" />
+                                  เปิดไฟล์ตรง
+                                </Button>
+                                <Button size="sm" className="h-8 text-xs" onClick={() => handleDownload(v.url, previewEntry.name)}>
+                                  <Download className="w-3.5 h-3.5 mr-1" />
+                                  ดาวน์โหลด
+                                </Button>
+                              </div>
+                            </div>
+                            <div className="flex-1 flex flex-col items-center justify-center p-8 bg-muted/20">
+                              <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-muted/60 to-muted/40 flex items-center justify-center shadow-lg mb-4">
+                                <OfficeIcon className={cn("w-10 h-10", officeColor)} />
+                              </div>
+                              <p className="text-base font-semibold text-foreground mb-1">{officeDesc} - {previewEntry.name}</p>
+                              <p className="text-sm text-muted-foreground text-center max-w-md mb-6">
+                                ไฟล์ PowerPoint ต้องเปิดดูผ่านแอปพลิเคชัน ให้ใช้ปุ่ม "เปิดไฟล์ตรง" หรือ "ดาวน์โหลด"
+                              </p>
+                              <div className="flex items-center gap-3">
+                                <Button variant="outline" className="h-10 gap-2" onClick={() => handleOpenExternal(v.url)}>
+                                  <Eye className="w-4 h-4" />
+                                  เปิดไฟล์ตรง
+                                </Button>
+                                <Button className="h-10 gap-2" onClick={() => handleDownload(v.url, previewEntry.name)}>
+                                  <Download className="w-4 h-4" />
+                                  ดาวน์โหลดไฟล์
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      }
+                      
+                      // Word/Excel - show actual preview
                       return (
                         <div className="w-full h-full flex flex-col rounded-xl border border-border/60 bg-background shadow-xl overflow-hidden">
                           <div className="px-5 py-3.5 border-b border-border/60 bg-gradient-to-r from-muted/50 to-muted/20 flex items-center justify-between">
                             <div className="flex items-center gap-2">
                               <OfficeIcon className={cn("w-4 h-4", officeColor)} />
-                              <span className="text-sm font-semibold text-foreground">{officeLabel}</span>
+                              <span className="text-sm font-semibold text-foreground">{officeLabel} Preview</span>
                             </div>
                             <div className="flex items-center gap-2">
                               <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => handleOpenExternal(v.url)}>
@@ -1442,17 +1572,44 @@ export default function SharedDrive() {
                               </Button>
                             </div>
                           </div>
-                          <div className="flex-1 bg-muted/20">
-                            <iframe
-                              src={officeViewerSrc}
-                              title={`${previewEntry.name} office preview`}
-                              className="w-full h-full border-0"
-                              style={{ minHeight: "500px" }}
-                            />
-                          </div>
-                          <div className="px-4 py-2.5 border-t border-border/50 bg-muted/20 text-xs text-muted-foreground">
-                            ถ้า preview ไม่ขึ้น อาจเป็นเพราะสิทธิ์ไฟล์หรือเครือข่าย ให้ใช้ปุ่ม "เปิดไฟล์ตรง" หรือดาวน์โหลดแทน
-                          </div>
+                          
+                          {officePreviewLoading ? (
+                            <div className="flex-1 flex items-center justify-center bg-muted/20">
+                              <div className="flex flex-col items-center gap-3">
+                                <RefreshCw className="w-8 h-8 text-muted-foreground animate-spin" />
+                                <p className="text-sm text-muted-foreground">กำลังโหลดตัวอย่าง{officeDesc}...</p>
+                              </div>
+                            </div>
+                          ) : officePreviewError ? (
+                            <div className="flex-1 flex flex-col items-center justify-center p-8 bg-muted/20">
+                              <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-muted/60 to-muted/40 flex items-center justify-center shadow-lg mb-4">
+                                <OfficeIcon className={cn("w-10 h-10 text-muted-foreground")} />
+                              </div>
+                              <p className="text-base font-semibold text-foreground mb-1">ไม่สามารถแสดงตัวอย่างได้</p>
+                              <p className="text-sm text-muted-foreground mb-4">{officePreviewError}</p>
+                              <div className="flex items-center gap-3">
+                                <Button variant="outline" className="h-10 gap-2" onClick={() => handleOpenExternal(v.url)}>
+                                  <Eye className="w-4 h-4" />
+                                  เปิดไฟล์ตรง
+                                </Button>
+                                <Button className="h-10 gap-2" onClick={() => handleDownload(v.url, previewEntry.name)}>
+                                  <Download className="w-4 h-4" />
+                                  ดาวน์โหลดไฟล์
+                                </Button>
+                              </div>
+                            </div>
+                          ) : officePreview ? (
+                            <ScrollArea className="flex-1">
+                              <div 
+                                className="p-6 prose prose-sm dark:prose-invert max-w-none"
+                                dangerouslySetInnerHTML={{ __html: officePreview }}
+                              />
+                            </ScrollArea>
+                          ) : (
+                            <div className="flex-1 flex flex-col items-center justify-center p-8 bg-muted/20">
+                              <p className="text-sm text-muted-foreground">ไม่มีเนื้อหาแสดง</p>
+                            </div>
+                          )}
                         </div>
                       );
                     }
