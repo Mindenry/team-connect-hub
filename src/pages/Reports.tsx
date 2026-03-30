@@ -938,11 +938,9 @@ export default function Reports() {
                                       cx="50%"
                                       cy="50%"
                                       innerRadius={40}
-                                      outerRadius={70}
+                                      outerRadius={65}
                                       paddingAngle={3}
                                       dataKey="value"
-                                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                                      labelLine={false}
                                     >
                                       {[
                                         { color: CHART_COLORS.emerald },
@@ -952,8 +950,14 @@ export default function Reports() {
                                         <Cell key={`cell-${index}`} fill={entry.color} />
                                       ))}
                                     </Pie>
-                                    <RechartsTooltip />
-                                    <Legend />
+                                    <RechartsTooltip
+                                      formatter={(value: number, name: string) => [`${value} งาน`, name]}
+                                    />
+                                    <Legend
+                                      verticalAlign="bottom"
+                                      height={36}
+                                      formatter={(value, entry) => `${value} (${entry.payload?.value || 0})`}
+                                    />
                                   </RechartsPieChart>
                                 </ResponsiveContainer>
                               </div>
