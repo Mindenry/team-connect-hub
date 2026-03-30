@@ -7,7 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useIsMobile } from "@/hooks/use-mobile";
 import AppSidebar from "./AppSidebar";
 import { getSocket } from "@/lib/websocket";
-import { useAuth } from "@/lib/auth";
+import { useAuth, auth } from "@/lib/auth";
 import { apiGet } from "@/lib/api";
 import { notificationsSocket } from "@/lib/notifications-socket";
 import { getChatActive, getChatUnreadTotal, incrementChannelUnread, incrementDmUnread } from "@/lib/chat-unread";
@@ -26,8 +26,33 @@ export default function AppLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [chatUnreadCount, setChatUnreadCount] = useState(0);
   const [notificationsUnreadCount, setNotificationsUnreadCount] = useState(0);
+  const [orgData, setOrgData] = useState<{ name: string; logo: string | null } | null>(null);
   const { user: currentUser } = useAuth();
   const location = useLocation();
+
+  useEffect(() => {
+    if (!currentUser?.organizationId) return;
+    const fetchOrg = async () => {
+      try {
+        const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3000'}/api/organizations/${currentUser.organizationId}`, {
+          headers: {
+            Authorization: `Bearer ${auth.getToken()}`
+          }
+        });
+        if (response.ok) {
+          const data = await response.json();
+          const org = data.data || data;
+          setOrgData({
+            name: org.name || "Team Connect",
+            logo: org.logo || null
+          });
+        }
+      } catch (err) {
+        // Silently fail
+      }
+    };
+    fetchOrg();
+  }, [currentUser?.organizationId]);
 
   // Global chat notifications (DM + channel) with sound + optional desktop notification
   useEffect(() => {
@@ -306,8 +331,11 @@ export default function AppLayout() {
             <Button variant="ghost" size="icon" className="h-8 w-8 sm:h-9 sm:w-9" onClick={() => setSidebarOpen(true)}>
               <Menu className="w-4 h-4 sm:w-5 sm:h-5" />
             </Button>
+            {orgData?.logo ? (
+              <img src={orgData.logo} alt="Logo" className="w-6 h-6 sm:w-7 sm:h-7 rounded-md object-cover" />
+            ) : null}
             <div className="flex-1 min-w-0">
-              <h1 className="text-xs sm:text-sm font-bold text-foreground truncate">Team Connect</h1>
+              <h1 className="text-xs sm:text-sm font-bold text-foreground truncate">{orgData?.name || "Team Connect"}</h1>
               <p className="text-[9px] sm:text-[10px] text-muted-foreground truncate">Enterprise</p>
             </div>
           </div>

@@ -33,6 +33,7 @@ import {
   Upload,
   Briefcase,
   Image,
+  Plus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import InviteUserDialog from "@/components/dialogs/InviteUserDialog";
@@ -104,7 +105,7 @@ const roleColors: Record<string, string> = {
 };
 
 const adminSections = [
-  { id: "directory", label: "Directory", icon: Users, desc: "Employee directory" },
+  { id: "directory", label: "Directory", icon: Users, desc: "Member directory" },
   { id: "users", label: "Manage Users", icon: Settings, desc: "User management" },
   { id: "invites", label: "Invites", icon: Send, desc: "Invitation history" },
   { id: "roles", label: "Roles & Permissions", icon: Shield, desc: "Access control" },
@@ -140,12 +141,23 @@ export default function Directory() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [users, setUsers] = useState<UserRecord[]>([]);
   const [teams, setTeams] = useState<any[]>([]);
-  const [orgSettings, setOrgSettings] = useState({
+  const [orgSettings, setOrgSettings] = useState<{
+    name: string;
+    allowedDomains: string;
+    defaultTeam: string;
+    logo: string;
+    departments: string[];
+    positions: string[];
+  }>({
     name: "",
     allowedDomains: "",
     defaultTeam: "",
     logo: "",
+    departments: [],
+    positions: [],
   });
+  const [newDepartment, setNewDepartment] = useState("");
+  const [newPosition, setNewPosition] = useState("");
   const [logoUploading, setLogoUploading] = useState(false);
   const [orgId, setOrgId] = useState<string | null>(null);
   const [showInviteDialog, setShowInviteDialog] = useState(false);
@@ -328,7 +340,7 @@ export default function Directory() {
     org_owner: "Owner",
     admin: "Admin",
     manager: "Manager",
-    employee: "Employee"
+    employee: "Member"
   };
 
   useEffect(() => {
@@ -380,6 +392,8 @@ export default function Directory() {
             allowedDomains: Array.isArray(org.allowedDomains) ? org.allowedDomains.join(", ") : org.domain || "",
             defaultTeam: (org.settings?.defaultTeamId as string) || "",
             logo: org.logo || "",
+            departments: Array.isArray(org.settings?.departments) ? org.settings.departments : [],
+            positions: Array.isArray(org.settings?.positions) ? org.settings.positions : [],
           });
           // Hydrate security settings if present
           if (org.settings?.securityPolicy) {
@@ -489,6 +503,8 @@ export default function Directory() {
         settings: {
           ...(orgSettingsJson || {}),
           defaultTeamId: orgSettings.defaultTeam || null,
+          departments: orgSettings.departments,
+          positions: orgSettings.positions,
         },
       });
       toast.success("Organization settings saved");
@@ -778,7 +794,7 @@ export default function Directory() {
                           </p>
                         )}
                         <Badge variant="outline" className={cn("font-medium capitalize h-6 px-3 text-[11px] shadow-sm", roleColors[u.role] || roleColors.employee)}>
-                          {u.role === 'org_owner' ? 'Owner' : ROLE_LABELS[u.role] || u.role || 'Employee'}
+                          {u.role === 'org_owner' ? 'Owner' : ROLE_LABELS[u.role] || u.role || 'Member'}
                         </Badge>
                       </div>
                       <Separator className="my-2 opacity-50" />
@@ -804,7 +820,7 @@ export default function Directory() {
                 <div className="w-16 h-16 rounded-2xl bg-muted/50 flex items-center justify-center mx-auto mb-4">
                   <Users className="h-8 w-8 opacity-30" />
                 </div>
-                <p className="text-sm font-medium">No employees found</p>
+                <p className="text-sm font-medium">No members found</p>
                 <p className="text-xs text-muted-foreground/70 mt-1">Try adjusting your search query</p>
               </div>
             )}
@@ -1076,7 +1092,7 @@ export default function Directory() {
                               </td>
                               <td className="px-4 py-3">
                                 <Badge variant="outline" className={cn("text-xs font-medium", roleColors[inv.role] || roleColors.employee)}>
-                                  {ROLE_LABELS[inv.role] || inv.role || "Employee"}
+                                  {ROLE_LABELS[inv.role] || inv.role || "Member"}
                                 </Badge>
                               </td>
                               <td className="px-4 py-3">
@@ -1339,6 +1355,142 @@ export default function Directory() {
                     </SelectContent>
                   </Select>
                 </div>
+                <Separator className="opacity-50" />
+                
+                {/* Structure: Departments */}
+                <div className="space-y-3">
+                  <Label className="text-sm font-semibold flex items-center gap-2">
+                    <Building className="w-4 h-4 text-primary" />
+                    Departments
+                  </Label>
+                  <p className="text-[11px] text-muted-foreground">
+                    Define the departments available for users in your organization.
+                  </p>
+                  <div className="flex gap-2">
+                    <Input
+                      value={newDepartment}
+                      onChange={(e) => setNewDepartment(e.target.value)}
+                      placeholder="e.g. Engineering, HR, Sales"
+                      className="bg-background/60 border-border/60"
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && newDepartment.trim()) {
+                          e.preventDefault();
+                          if (!orgSettings.departments.includes(newDepartment.trim())) {
+                            setOrgSettings({
+                              ...orgSettings,
+                              departments: [...orgSettings.departments, newDepartment.trim()],
+                            });
+                          }
+                          setNewDepartment("");
+                        }
+                      }}
+                    />
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={() => {
+                        if (newDepartment.trim() && !orgSettings.departments.includes(newDepartment.trim())) {
+                          setOrgSettings({
+                            ...orgSettings,
+                            departments: [...orgSettings.departments, newDepartment.trim()],
+                          });
+                          setNewDepartment("");
+                        }
+                      }}
+                    >
+                      <Plus className="w-4 h-4 mr-1" /> Add
+                    </Button>
+                  </div>
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {orgSettings.departments.map((dept, idx) => (
+                      <Badge key={idx} variant="secondary" className="pl-3 pr-1 py-1 flex items-center gap-1 bg-muted/50 border-border/50">
+                        {dept}
+                        <button
+                          type="button"
+                          onClick={() => setOrgSettings({
+                            ...orgSettings,
+                            departments: orgSettings.departments.filter(d => d !== dept)
+                          })}
+                          className="hover:bg-destructive/10 hover:text-destructive rounded-full p-0.5 ml-1 transition-colors"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </Badge>
+                    ))}
+                    {orgSettings.departments.length === 0 && (
+                      <span className="text-xs text-muted-foreground italic">No departments configured</span>
+                    )}
+                  </div>
+                </div>
+
+                <Separator className="opacity-50" />
+
+                {/* Structure: Positions */}
+                <div className="space-y-3">
+                  <Label className="text-sm font-semibold flex items-center gap-2">
+                    <Briefcase className="w-4 h-4 text-primary" />
+                    Positions
+                  </Label>
+                  <p className="text-[11px] text-muted-foreground">
+                    Define the positions or titles available for users in your organization.
+                  </p>
+                  <div className="flex gap-2">
+                    <Input
+                      value={newPosition}
+                      onChange={(e) => setNewPosition(e.target.value)}
+                      placeholder="e.g. Manager, Senior Developer"
+                      className="bg-background/60 border-border/60"
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && newPosition.trim()) {
+                          e.preventDefault();
+                          if (!orgSettings.positions.includes(newPosition.trim())) {
+                            setOrgSettings({
+                              ...orgSettings,
+                              positions: [...orgSettings.positions, newPosition.trim()],
+                            });
+                          }
+                          setNewPosition("");
+                        }
+                      }}
+                    />
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={() => {
+                        if (newPosition.trim() && !orgSettings.positions.includes(newPosition.trim())) {
+                          setOrgSettings({
+                            ...orgSettings,
+                            positions: [...orgSettings.positions, newPosition.trim()],
+                          });
+                          setNewPosition("");
+                        }
+                      }}
+                    >
+                      <Plus className="w-4 h-4 mr-1" /> Add
+                    </Button>
+                  </div>
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {orgSettings.positions.map((pos, idx) => (
+                      <Badge key={idx} variant="secondary" className="pl-3 pr-1 py-1 flex items-center gap-1 bg-muted/50 border-border/50">
+                        {pos}
+                        <button
+                          type="button"
+                          onClick={() => setOrgSettings({
+                            ...orgSettings,
+                            positions: orgSettings.positions.filter(p => p !== pos)
+                          })}
+                          className="hover:bg-destructive/10 hover:text-destructive rounded-full p-0.5 ml-1 transition-colors"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </Badge>
+                    ))}
+                    {orgSettings.positions.length === 0 && (
+                      <span className="text-xs text-muted-foreground italic">No positions configured</span>
+                    )}
+                  </div>
+                </div>
+
                 <Separator className="opacity-50" />
                 <Button onClick={handleSaveOrgSettings} className="gap-2 bg-gradient-to-r from-primary to-blue-600 hover:from-primary/90 hover:to-blue-500 shadow-lg">
                   <Save className="w-4 h-4" />
@@ -1665,25 +1817,43 @@ export default function Directory() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label className="flex items-center gap-1.5"><Building className="w-3.5 h-3.5" />Department</Label>
-                  <Input
-                    value={editingUser.department || ""}
-                    onChange={(e) =>
-                      setEditingUser({ ...editingUser, department: e.target.value })
+                  <Select
+                    value={editingUser.department || "none"}
+                    onValueChange={(value) =>
+                      setEditingUser({ ...editingUser, department: value === "none" ? null : value })
                     }
-                    className="mt-1"
-                    placeholder="e.g. Engineering"
-                  />
+                    disabled={orgSettings.departments.length === 0}
+                  >
+                    <SelectTrigger className="mt-1">
+                      <SelectValue placeholder={orgSettings.departments.length === 0 ? "No departments configured" : "Select department"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">None</SelectItem>
+                      {orgSettings.departments.map((dept) => (
+                        <SelectItem key={dept} value={dept}>{dept}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div>
                   <Label className="flex items-center gap-1.5"><Briefcase className="w-3.5 h-3.5" />Position</Label>
-                  <Input
-                    value={editingUser.position || ""}
-                    onChange={(e) =>
-                      setEditingUser({ ...editingUser, position: e.target.value })
+                  <Select
+                    value={editingUser.position || "none"}
+                    onValueChange={(value) =>
+                      setEditingUser({ ...editingUser, position: value === "none" ? null : value })
                     }
-                    className="mt-1"
-                    placeholder="e.g. Full Stack Developer"
-                  />
+                    disabled={orgSettings.positions.length === 0}
+                  >
+                    <SelectTrigger className="mt-1">
+                      <SelectValue placeholder={orgSettings.positions.length === 0 ? "No positions configured" : "Select position"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">None</SelectItem>
+                      {orgSettings.positions.map((pos) => (
+                        <SelectItem key={pos} value={pos}>{pos}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
               <Separator className="opacity-50" />

@@ -152,6 +152,32 @@ export default function AppSidebar({
     .filter((r) => isQuickHuddleRoom(r.roomId))
     .flatMap((r) => r.participants);
 
+  const [orgData, setOrgData] = useState<{ name: string; logo: string | null } | null>(null);
+
+  useEffect(() => {
+    if (!currentUser?.organizationId) return;
+    const fetchOrg = async () => {
+      try {
+        const response = await fetch(`${API_BASE}/api/organizations/${currentUser.organizationId}`, {
+          headers: {
+            Authorization: `Bearer ${auth.getToken()}`
+          }
+        });
+        if (response.ok) {
+          const data = await response.json();
+          const org = data.data || data;
+          setOrgData({
+            name: org.name || "Team Connect",
+            logo: org.logo || null
+          });
+        }
+      } catch (err) {
+        // Silently fail, fallback to defaults
+      }
+    };
+    fetchOrg();
+  }, [currentUser?.organizationId]);
+
   // Derived current status
   const derivedCurrentStatus = useMemo(() => {
     const storedStatus = (currentUser as any)?.status as string | undefined;
@@ -275,17 +301,21 @@ export default function AppSidebar({
             className={cn(
               "w-8 h-8 rounded-xl",
               "bg-sidebar-primary",
-              "flex items-center justify-center",
+              "flex items-center justify-center overflow-hidden",
               "shadow-md shadow-sidebar-primary/25",
               "shrink-0"
             )}
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-sidebar-primary-foreground">
-              <path d="M16 8h-6a2 2 0 0 0 -2 2v6" />
-              <path d="M16 8v6a2 2 0 0 1 -2 2h-6" />
-              <circle cx="8" cy="8" r="2.5" fill="currentColor" stroke="none" />
-              <circle cx="16" cy="16" r="2.5" fill="currentColor" stroke="none" />
-            </svg>
+            {orgData?.logo ? (
+              <img src={orgData.logo} alt="Org Logo" className="w-full h-full object-cover" />
+            ) : (
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-sidebar-primary-foreground">
+                <path d="M16 8h-6a2 2 0 0 0 -2 2v6" />
+                <path d="M16 8v6a2 2 0 0 1 -2 2h-6" />
+                <circle cx="8" cy="8" r="2.5" fill="currentColor" stroke="none" />
+                <circle cx="16" cy="16" r="2.5" fill="currentColor" stroke="none" />
+              </svg>
+            )}
           </div>
           
           <AnimatePresence mode="wait">
@@ -299,7 +329,7 @@ export default function AppSidebar({
                 className="flex-1 min-w-0"
               >
                 <h1 className="text-sm font-bold text-sidebar-accent-foreground truncate tracking-tight">
-                  Team Connect
+                  {orgData?.name || "Team Connect"}
                 </h1>
                 <p className="text-[10px] text-sidebar-muted/70 truncate">
                   Enterprise
