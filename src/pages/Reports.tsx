@@ -1121,6 +1121,7 @@ export default function Reports() {
                     {performance ? (
                       <>
                         {/* Summary Stats */}
+                        {performance.summary && (
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                           <Card className="border-border/50 bg-card/80 backdrop-blur-sm">
                             <CardContent className="pt-4">
@@ -1130,8 +1131,8 @@ export default function Reports() {
                                 </div>
                                 <div>
                                   <div className="text-xs text-muted-foreground">Avg Completion Rate</div>
-                                  <div className={cn("text-xl font-bold", getProductivityColor(performance.summary.avgTaskCompletionRate))}>
-                                    {performance.summary.avgTaskCompletionRate.toFixed(1)}%
+                                  <div className={cn("text-xl font-bold", getProductivityColor(performance.summary.avgTaskCompletionRate ?? 0))}>
+                                    {(performance.summary.avgTaskCompletionRate ?? 0).toFixed(1)}%
                                   </div>
                                 </div>
                               </div>
@@ -1145,8 +1146,8 @@ export default function Reports() {
                                 </div>
                                 <div>
                                   <div className="text-xs text-muted-foreground">Avg Attendance Rate</div>
-                                  <div className={cn("text-xl font-bold", getProductivityColor(performance.summary.avgMeetingAttendanceRate))}>
-                                    {performance.summary.avgMeetingAttendanceRate.toFixed(1)}%
+                                  <div className={cn("text-xl font-bold", getProductivityColor(performance.summary.avgMeetingAttendanceRate ?? 0))}>
+                                    {(performance.summary.avgMeetingAttendanceRate ?? 0).toFixed(1)}%
                                   </div>
                                 </div>
                               </div>
@@ -1161,13 +1162,14 @@ export default function Reports() {
                                 <div>
                                   <div className="text-xs text-muted-foreground">Total Interactions</div>
                                   <div className="text-xl font-bold text-foreground">
-                                    {performance.summary.totalInteractions}
+                                    {performance.summary.totalInteractions ?? 0}
                                   </div>
                                 </div>
                               </div>
                             </CardContent>
                           </Card>
                         </div>
+                        )}
 
                         {/* Performance Trend Chart */}
                         {performance.trend && performance.trend.length > 0 && (
