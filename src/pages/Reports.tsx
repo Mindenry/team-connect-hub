@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import {
   FileBarChart,
   TrendingUp,
@@ -14,14 +14,30 @@ import {
   Trophy,
   Target,
   Zap,
+  Clock,
+  Filter,
+  PieChart,
+  LineChart,
+  ArrowUpRight,
+  ArrowDownRight,
+  Minus,
+  Sparkles,
+  FileSpreadsheet,
+  FileText,
+  FileJson,
+  FileType,
+  ChevronDown,
+  User,
+  BarChart2,
+  TrendingDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { TooltipProvider } from "@/components/ui/tooltip";
+import { TooltipProvider, Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/components/ui/use-toast";
 import { apiFetch, apiGet } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -32,162 +48,69 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuTrigger,
+  DropdownMenuSeparator,
+  DropdownMenuCheckboxItem,
 } from "@/components/ui/dropdown-menu";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as RechartsTooltip,
+  ResponsiveContainer,
+  PieChart as RechartsPieChart,
+  Pie,
+  Cell,
+  LineChart as RechartsLineChart,
+  Line,
+  Area,
+  AreaChart,
+  Legend,
+  RadialBarChart,
+  RadialBar,
+  ComposedChart,
+} from "recharts";
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+} from "@/components/ui/chart";
+import { reportsApi, exportUtils, reportTransformers, getDateRange, getDateRangeLabel, toIsoDate } from "@/lib/reports";
+import type { DateRangeKey, ExportFormat, PersonalReportData, TeamProductivityReport, MeetingReport, TaskReport, TeamWorkloadReport, PerformanceDashboard, TeamOption } from "@/lib/reports";
 
+type ReportTab = "overview" | "personal" | "team" | "performance";
 
-// ─── Types ───────────────────────────────────────────────────────────────────
+// ─── Chart Colors ─────────────────────────────────────────────────────────────
 
-type DateRangeKey = "week" | "month" | "quarter" | "year";
-type ExportFormat = "csv" | "json" | "xlsx" | "pdf";
+const CHART_COLORS = {
+  emerald: "#10b981",
+  blue: "#3b82f6",
+  violet: "#8b5cf6",
+  amber: "#f59e0b",
+  red: "#ef4444",
+  cyan: "#06b6d4",
+  pink: "#ec4899",
+  orange: "#f97316",
+  teal: "#14b8a6",
+  indigo: "#6366f1",
+};
 
-interface PersonalReportData {
-  tasksCompleted?: number;
-  meetingsAttended?: number;
-  messagesSent?: number;
-  productivityScore?: number;
-  teamMetrics?: {
-    teamName: string;
-    tasksCompleted?: number;
-    meetingsAttended?: number;
-    messagesSent?: number;
-  }[];
-}
+const STATUS_COLORS: Record<string, string> = {
+  done: CHART_COLORS.emerald,
+  in_progress: CHART_COLORS.blue,
+  review: CHART_COLORS.amber,
+  todo: "#94a3b8",
+};
 
-interface TeamProductivityReport {
-  period: { start: string | Date; end: string | Date };
-  team: { id: string; name: string };
-  summary: {
-    members: number;
-    tasks: {
-      total: number;
-      byStatus?: Record<string, number>;
-      byPriority?: Record<string, number>;
-      completed: number;
-      inProgress: number;
-    };
-    meetings: {
-      total: number;
-      completed: number;
-      scheduled: number;
-      totalDuration: number;
-    };
-  };
-  members: {
-    user: { id: string; name: string; email: string };
-    tasks: { total: number; completed: number; inProgress: number };
-    messagesSent: number;
-    meetingsAttended: number;
-  }[];
-}
-
-interface MeetingReport {
-  summary: {
-    totalMeetings: number;
-    totalDuration: number;
-    totalParticipants: number;
-    avgParticipants: number;
-    avgDuration: number;
-  };
-  meetingsByTeam: Record<string, number>;
-  meetings: {
-    id: string;
-    title: string;
-    startTime: string;
-    endTime: string | null;
-    duration: number;
-    host: string;
-    team?: string | null;
-    participants: number;
-  }[];
-}
-
-interface TaskReport {
-  summary: {
-    totalTasks: number;
-    overdueTasks: number;
-    completedTasks: number;
-    inProgressTasks: number;
-  };
-  tasksByStatus?: Record<string, number>;
-  tasksByPriority?: Record<string, number>;
-  overdueTasks: {
-    id: string;
-    title: string;
-    dueDate: string | null;
-    assignee?: string | null;
-    team?: string | null;
-    priority: string;
-  }[];
-}
-
-interface TeamWorkloadReport {
-  team: { id: string; name: string };
-  workload: {
-    userId: string;
-    userName: string;
-    totalTasks: number;
-    completed: number;
-    inProgress: number;
-    todo: number;
-    overdue: number;
-  }[];
-}
-
-interface PerformanceDashboard {
-  period: { startDate: string; endDate: string };
-  taskCompletionRates: {
-    userId: string;
-    userName: string;
-    totalTasks: number;
-    completedTasks: number;
-    completionRate: number;
-  }[];
-  meetingAttendanceRates?: {
-    userId: string;
-    userName: string;
-    totalMeetings: number;
-    attendedMeetings: number;
-    attendanceRate: number;
-  }[];
-  collaborationActivity: {
-    userId: string;
-    userName: string;
-    completedTasks: number;
-    attendedMeetings: number;
-    messagesSent: number;
-    totalInteractions: number;
-  }[];
-}
-
-interface TeamOption { id: string; name: string; }
-type ReportTab = "overview" | "team" | "performance";
+const PRIORITY_COLORS: Record<string, string> = {
+  urgent: CHART_COLORS.red,
+  high: CHART_COLORS.orange,
+  medium: CHART_COLORS.blue,
+  low: "#94a3b8",
+};
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function getDateRangeLabel(range: DateRangeKey): string {
-  switch (range) {
-    case "week": return "สัปดาห์ที่ผ่านมา";
-    case "month": return "เดือนที่ผ่านมา";
-    case "quarter": return "ไตรมาสที่ผ่านมา";
-    case "year": return "ปีที่ผ่านมา";
-  }
-}
-
-function getDateRange(range: DateRangeKey): { start: Date; end: Date } {
-  const end = new Date();
-  const start = new Date();
-  switch (range) {
-    case "week": start.setDate(start.getDate() - 7); break;
-    case "month": start.setMonth(start.getMonth() - 1); break;
-    case "quarter": start.setMonth(start.getMonth() - 3); break;
-    case "year": start.setFullYear(start.getFullYear() - 1); break;
-  }
-  return { start, end };
-}
-
-function toIsoDate(date: Date): string {
-  return date.toISOString();
-}
 
 function getProductivityColor(score: number) {
   if (score >= 80) return "text-emerald-500";
@@ -201,6 +124,18 @@ function getProductivityGradient(score: number) {
   if (score >= 50) return "from-blue-500 to-cyan-500";
   if (score >= 30) return "from-amber-500 to-yellow-500";
   return "from-red-500 to-rose-500";
+}
+
+function getTrendIcon(trend?: 'up' | 'down' | 'stable') {
+  if (trend === 'up') return ArrowUpRight;
+  if (trend === 'down') return ArrowDownRight;
+  return Minus;
+}
+
+function getTrendColor(trend?: 'up' | 'down' | 'stable') {
+  if (trend === 'up') return "text-emerald-500";
+  if (trend === 'down') return "text-red-500";
+  return "text-muted-foreground";
 }
 
 const priorityColor: Record<string, string> = {
@@ -338,57 +273,141 @@ export default function Reports() {
   }, [activeTab, selectedTeamId, dateRange]);
 
   // Export
-  const handleExport = async (format: ExportFormat) => {
+  const handleExport = useCallback(async (format: ExportFormat) => {
     try {
       const { start, end } = getDateRange(dateRange);
-      const startIso = encodeURIComponent(toIsoDate(start));
-      const endIso = encodeURIComponent(toIsoDate(end));
+      const filenameBase = `${activeTab}_report_${new Date().toISOString().slice(0, 10)}`;
 
-      let type: ReportTab = activeTab;
-      if (type === "team" && !selectedTeamId) {
-        toast({ title: "เลือกทีมก่อน", description: "กรุณาเลือกทีมเพื่อออกรายงาน" });
-        return;
-      }
-
-      const query = new URLSearchParams({
-        type,
-        range: dateRange,
-        format,
-      });
-
-      if (type === "team") {
-        query.set("teamId", selectedTeamId as string);
-        query.set("startDate", startIso);
-        query.set("endDate", endIso);
-      } else if (type === "performance") {
-        if (selectedTeamId) {
-          query.set("teamId", selectedTeamId);
+      // Try server-side export first
+      const tryServerExport = async () => {
+        const startIso = encodeURIComponent(toIsoDate(start));
+        const endIso = encodeURIComponent(toIsoDate(end));
+        
+        if (activeTab === "team" && !selectedTeamId) {
+          throw new Error("กรุณาเลือกทีมเพื่อออกรายงาน");
         }
-        query.set("startDate", startIso);
-        query.set("endDate", endIso);
-      }
 
-      const url = `/reports/export?${query.toString()}`;
-      const res = await apiFetch(url, { method: "GET" });
-      if (!res.ok) {
-        throw new Error("Download failed");
+        const query = new URLSearchParams({
+          type: activeTab,
+          range: dateRange,
+          format,
+        });
+
+        if (activeTab === "team" && selectedTeamId) {
+          query.set("teamId", selectedTeamId);
+          query.set("startDate", startIso);
+          query.set("endDate", endIso);
+        } else if (activeTab === "performance") {
+          if (selectedTeamId) query.set("teamId", selectedTeamId);
+          query.set("startDate", startIso);
+          query.set("endDate", endIso);
+        }
+
+        const url = `/reports/export?${query.toString()}`;
+        const res = await apiFetch(url, { method: "GET" });
+        if (!res.ok) throw new Error("Server export not available");
+        
+        const blob = await res.blob();
+        const extension = format === "xlsx" ? "xlsx" : format;
+        const fileUrl = window.URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = fileUrl;
+        link.download = `${filenameBase}.${extension}`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(fileUrl);
+      };
+
+      // Client-side export fallback
+      const clientExport = () => {
+        let data: Record<string, any>[] = [];
+        let exportData: any = null;
+
+        switch (activeTab) {
+          case "overview":
+          case "personal":
+            if (personalReport) {
+              data = [
+                { category: "Personal Report", period: currentRangeLabel },
+                { metric: "Tasks Completed", value: personalReport.tasksCompleted ?? 0 },
+                { metric: "Meetings Attended", value: personalReport.meetingsAttended ?? 0 },
+                { metric: "Messages Sent", value: personalReport.messagesSent ?? 0 },
+                { metric: "Productivity Score", value: personalReport.productivityScore ?? 0 },
+                { metric: "Task Completion Rate", value: `${personalReport.taskCompletionRate ?? 0}%` },
+              ];
+              if (personalReport.teamMetrics) {
+                personalReport.teamMetrics.forEach(t => {
+                  data.push({ category: "Team", teamName: t.teamName, tasks: t.tasksCompleted ?? 0, meetings: t.meetingsAttended ?? 0, messages: t.messagesSent ?? 0 });
+                });
+              }
+            }
+            exportData = personalReport;
+            break;
+
+          case "team":
+            if (teamReport && teamWorkload) {
+              data = reportTransformers.teamProductivityToRows(teamReport);
+              if (teamWorkload.workload.length > 0) {
+                data.push(...reportTransformers.workloadToRows(teamWorkload));
+              }
+            }
+            exportData = { teamReport, teamWorkload };
+            break;
+
+          case "performance":
+            if (performance) {
+              data = reportTransformers.performanceToRows(performance);
+            }
+            exportData = performance;
+            break;
+        }
+
+        if (data.length === 0 && !exportData) {
+          throw new Error("ไม่มีข้อมูลสำหรับส่งออก");
+        }
+
+        switch (format) {
+          case "csv":
+            exportUtils.toCSV(data.length > 0 ? data : [exportData], filenameBase);
+            break;
+          case "xlsx":
+            if (activeTab === "team" && teamReport && teamWorkload) {
+              exportUtils.toExcelMultiSheet([
+                { name: "Team Summary", data: reportTransformers.teamProductivityToRows(teamReport) },
+                { name: "Workload", data: reportTransformers.workloadToRows(teamWorkload) },
+              ], filenameBase);
+            } else {
+              exportUtils.toExcel(data, filenameBase, activeTab.charAt(0).toUpperCase() + activeTab.slice(1));
+            }
+            break;
+          case "json":
+            exportUtils.toJSON(exportData || data, filenameBase);
+            break;
+          case "pdf":
+            exportUtils.toPDF(data, filenameBase, {
+              title: `${activeTab.charAt(0).toUpperCase() + activeTab.slice(1)} Report`,
+              subtitle: `Generated on ${new Date().toLocaleDateString("th-TH")} | ${currentRangeLabel}`,
+              orientation: "landscape",
+            });
+            break;
+        }
+      };
+
+      // Try server export first, fallback to client
+      try {
+        await tryServerExport();
+        toast({ title: "ส่งออกสำเร็จ", description: `ดาวน์โหลด ${format.toUpperCase()} เรียบร้อยแล้ว` });
+      } catch {
+        // Fallback to client-side export
+        clientExport();
+        toast({ title: "ส่งออกสำเร็จ", description: `ดาวน์โหลด ${format.toUpperCase()} เรียบร้อยแล้ว (client-side)` });
       }
-      const blob = await res.blob();
-      const filenameBase = `${type}_report_${new Date().toISOString().slice(0, 10)}`;
-      const extension = format === "xlsx" ? "xlsx" : format;
-      const fileUrl = window.URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = fileUrl;
-      link.download = `${filenameBase}.${extension}`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(fileUrl);
     } catch (error: any) {
       console.error("Export failed", error);
       toast({ title: "เกิดข้อผิดพลาด", description: error?.message || "ส่งออกไฟล์ไม่สำเร็จ", variant: "destructive" });
     }
-  };
+  }, [activeTab, dateRange, selectedTeamId, personalReport, teamReport, teamWorkload, performance, currentRangeLabel, toast]);
 
   // ─── Render ──────────────────────────────────────────────────────────────
 
@@ -454,8 +473,11 @@ export default function Reports() {
                 <TabsTrigger value="overview" className="text-xs gap-1.5 px-4">
                   <BarChart3 className="w-3.5 h-3.5" /> ภาพรวม
                 </TabsTrigger>
+                <TabsTrigger value="personal" className="text-xs gap-1.5 px-4">
+                  <User className="w-3.5 h-3.5" /> ส่วนตัว
+                </TabsTrigger>
                 <TabsTrigger value="team" className="text-xs gap-1.5 px-4">
-                  <Users className="w-3.5 h-3.5" /> ทีม & งาน
+                  <Users className="w-3.5 h-3.5" /> ทีม
                 </TabsTrigger>
                 <TabsTrigger value="performance" className="text-xs gap-1.5 px-4">
                   <TrendingUp className="w-3.5 h-3.5" /> ประสิทธิภาพ
@@ -648,6 +670,222 @@ export default function Reports() {
                     )}
                   </TabsContent>
 
+                  {/* ─── Tab: รายงานส่วนตัว ─────────────────────────────────────── */}
+                  <TabsContent value="personal" className="mt-4 space-y-4">
+                    {personalReport ? (
+                      <>
+                        {/* Personal KPI Cards */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                          <KpiCard
+                            title="งานที่เสร็จแล้ว"
+                            value={personalReport.tasksCompleted ?? 0}
+                            suffix="งาน"
+                            icon={CheckSquare}
+                            gradient="from-emerald-500 to-teal-500"
+                            shadowColor="shadow-emerald-500/20"
+                          />
+                          <KpiCard
+                            title="การประชุมที่เข้าร่วม"
+                            value={personalReport.meetingsAttended ?? 0}
+                            suffix="ครั้ง"
+                            icon={Calendar}
+                            gradient="from-blue-500 to-cyan-500"
+                            shadowColor="shadow-blue-500/20"
+                          />
+                          <KpiCard
+                            title="ข้อความที่ส่ง"
+                            value={personalReport.messagesSent ?? 0}
+                            suffix="ข้อความ"
+                            icon={MessageSquare}
+                            gradient="from-violet-500 to-purple-500"
+                            shadowColor="shadow-violet-500/20"
+                          />
+                          <ProductivityScoreCard score={personalReport.productivityScore ?? 0} />
+                        </div>
+
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                          {/* Task Completion Rate Card */}
+                          <Card className="border-border/50 bg-card/80 backdrop-blur-sm">
+                            <CardHeader className="pb-3">
+                              <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                                <Target className="w-4 h-4 text-emerald-500" />
+                                อัตราการทำงานสำเร็จ
+                              </CardTitle>
+                              <CardDescription className="text-xs">
+                                เปรียบเทียบงานที่ได้รับมอบหมายกับงานที่ทำเสร็จ
+                              </CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                              <div className="flex items-center justify-center py-4">
+                                <div className="relative w-40 h-40">
+                                  <ResponsiveContainer width="100%" height="100%">
+                                    <RechartsPieChart>
+                                      <Pie
+                                        data={[
+                                          { name: 'เสร็จแล้ว', value: personalReport.tasksCompleted ?? 0, color: CHART_COLORS.emerald },
+                                          { name: 'ยังไม่เสร็จ', value: Math.max(0, (100 - (personalReport.taskCompletionRate ?? 0))), color: '#e5e7eb' },
+                                        ]}
+                                        cx="50%"
+                                        cy="50%"
+                                        innerRadius={50}
+                                        outerRadius={70}
+                                        paddingAngle={2}
+                                        dataKey="value"
+                                      >
+                                        <Cell fill={CHART_COLORS.emerald} />
+                                        <Cell fill="#e5e7eb" />
+                                      </Pie>
+                                    </RechartsPieChart>
+                                  </ResponsiveContainer>
+                                  <div className="absolute inset-0 flex items-center justify-center">
+                                    <div className="text-center">
+                                      <div className={cn("text-2xl font-bold", getProductivityColor(personalReport.taskCompletionRate ?? 0))}>
+                                        {Math.round(personalReport.taskCompletionRate ?? 0)}%
+                                      </div>
+                                      <div className="text-[10px] text-muted-foreground">Completion</div>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="flex justify-center gap-4 text-xs mt-2">
+                                <div className="flex items-center gap-1.5">
+                                  <div className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+                                  <span className="text-muted-foreground">เสร็จ {personalReport.tasksCompleted ?? 0} งาน</span>
+                                </div>
+                              </div>
+                            </CardContent>
+                          </Card>
+
+                          {/* Activity Stats */}
+                          <Card className="border-border/50 bg-card/80 backdrop-blur-sm">
+                            <CardHeader className="pb-3">
+                              <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                                <Activity className="w-4 h-4 text-blue-500" />
+                                สถิติการทำงาน
+                              </CardTitle>
+                              <CardDescription className="text-xs">
+                                ข้อมูลการทำงานใน{currentRangeLabel}
+                              </CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                              <div className="grid grid-cols-2 gap-3">
+                                <div className="p-3 rounded-lg bg-muted/30">
+                                  <div className="text-lg font-bold text-foreground">{personalReport.activeDays ?? '-'}</div>
+                                  <div className="text-[10px] text-muted-foreground">วันที่ทำงาน</div>
+                                </div>
+                                <div className="p-3 rounded-lg bg-muted/30">
+                                  <div className="text-lg font-bold text-foreground">
+                                    {personalReport.avgTaskCompletionTime ? `${personalReport.avgTaskCompletionTime} ชม.` : '-'}
+                                  </div>
+                                  <div className="text-[10px] text-muted-foreground">เวลาทำงานเฉลี่ย</div>
+                                </div>
+                              </div>
+                              <div className="space-y-2">
+                                <div className="flex items-center justify-between text-xs">
+                                  <span className="text-muted-foreground">งาน/วันเฉลี่ย</span>
+                                  <span className="font-medium">
+                                    {personalReport.activeDays && personalReport.activeDays > 0
+                                      ? ((personalReport.tasksCompleted ?? 0) / personalReport.activeDays).toFixed(1)
+                                      : '-'}
+                                  </span>
+                                </div>
+                                <div className="flex items-center justify-between text-xs">
+                                  <span className="text-muted-foreground">ข้อความ/วันเฉลี่ย</span>
+                                  <span className="font-medium">
+                                    {personalReport.activeDays && personalReport.activeDays > 0
+                                      ? ((personalReport.messagesSent ?? 0) / personalReport.activeDays).toFixed(1)
+                                      : '-'}
+                                  </span>
+                                </div>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        </div>
+
+                        {/* Team Contributions */}
+                        {personalReport.teamMetrics && personalReport.teamMetrics.length > 0 && (
+                          <Card className="border-border/50 bg-card/80 backdrop-blur-sm">
+                            <CardHeader className="pb-3">
+                              <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                                <Users className="w-4 h-4 text-primary" />
+                                การมีส่วนร่วมในทีม
+                              </CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                                {personalReport.teamMetrics.map((team) => (
+                                  <div key={team.teamId || team.teamName} className="p-4 rounded-xl bg-muted/20 border border-border/30">
+                                    <div className="font-medium text-sm mb-3">{team.teamName}</div>
+                                    <div className="space-y-2">
+                                      <div className="flex items-center justify-between text-xs">
+                                        <div className="flex items-center gap-1.5 text-muted-foreground">
+                                          <CheckSquare className="w-3 h-3 text-emerald-500" />
+                                          <span>งานที่ทำ</span>
+                                        </div>
+                                        <span className="font-medium">{team.tasksCompleted ?? 0}</span>
+                                      </div>
+                                      <div className="flex items-center justify-between text-xs">
+                                        <div className="flex items-center gap-1.5 text-muted-foreground">
+                                          <Calendar className="w-3 h-3 text-blue-500" />
+                                          <span>ประชุม</span>
+                                        </div>
+                                        <span className="font-medium">{team.meetingsAttended ?? 0}</span>
+                                      </div>
+                                      <div className="flex items-center justify-between text-xs">
+                                        <div className="flex items-center gap-1.5 text-muted-foreground">
+                                          <MessageSquare className="w-3 h-3 text-violet-500" />
+                                          <span>ข้อความ</span>
+                                        </div>
+                                        <span className="font-medium">{team.messagesSent ?? 0}</span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </CardContent>
+                          </Card>
+                        )}
+
+                        {/* Weekly Trend Chart */}
+                        {personalReport.weeklyTrend && personalReport.weeklyTrend.length > 0 && (
+                          <Card className="border-border/50 bg-card/80 backdrop-blur-sm">
+                            <CardHeader className="pb-3">
+                              <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                                <BarChart2 className="w-4 h-4 text-primary" />
+                                แนวโน้มการทำงานรายสัปดาห์
+                              </CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                              <div className="h-64">
+                                <ResponsiveContainer width="100%" height="100%">
+                                  <ComposedChart data={personalReport.weeklyTrend}>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                                    <XAxis dataKey="week" tick={{ fontSize: 10 }} stroke="#94a3b8" />
+                                    <YAxis tick={{ fontSize: 10 }} stroke="#94a3b8" />
+                                    <RechartsTooltip
+                                      contentStyle={{
+                                        backgroundColor: 'hsl(var(--card))',
+                                        border: '1px solid hsl(var(--border))',
+                                        borderRadius: '8px',
+                                        fontSize: '12px',
+                                      }}
+                                    />
+                                    <Legend wrapperStyle={{ fontSize: '11px' }} />
+                                    <Bar dataKey="tasks" name="งาน" fill={CHART_COLORS.emerald} radius={[4, 4, 0, 0]} />
+                                    <Bar dataKey="meetings" name="ประชุม" fill={CHART_COLORS.blue} radius={[4, 4, 0, 0]} />
+                                    <Line type="monotone" dataKey="messages" name="ข้อความ" stroke={CHART_COLORS.violet} strokeWidth={2} />
+                                  </ComposedChart>
+                                </ResponsiveContainer>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        )}
+                      </>
+                    ) : (
+                      <EmptyState message="ยังไม่มีข้อมูลรายงานส่วนตัวในช่วงเวลานี้" />
+                    )}
+                  </TabsContent>
+
                   {/* ─── Tab: ทีม & งาน ───────────────────────────────────────── */}
                   <TabsContent value="team" className="mt-4 space-y-4">
                     {/* Team Selector */}
@@ -675,6 +913,99 @@ export default function Reports() {
                           <KpiCard title="งานทั้งหมด" value={teamReport.summary.tasks.total} icon={CheckSquare} gradient="from-blue-500 to-cyan-500" shadowColor="shadow-blue-500/20" />
                           <KpiCard title="งานเสร็จแล้ว" value={teamReport.summary.tasks.completed} icon={Target} gradient="from-emerald-500 to-teal-500" shadowColor="shadow-emerald-500/20" />
                           <KpiCard title="จำนวนประชุม" value={teamReport.summary.meetings.total} icon={Calendar} gradient="from-violet-500 to-purple-500" shadowColor="shadow-violet-500/20" />
+                        </div>
+
+                        {/* Task Status Distribution & Trend Charts */}
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                          {/* Task Status Pie Chart */}
+                          <Card className="border-border/50 bg-card/80 backdrop-blur-sm">
+                            <CardHeader className="pb-3">
+                              <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                                <PieChart className="w-4 h-4 text-primary" />
+                                การกระจายสถานะงาน
+                              </CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                              <div className="h-48">
+                                <ResponsiveContainer width="100%" height="100%">
+                                  <RechartsPieChart>
+                                    <Pie
+                                      data={[
+                                        { name: 'เสร็จแล้ว', value: teamReport.summary.tasks.completed, color: CHART_COLORS.emerald },
+                                        { name: 'กำลังทำ', value: teamReport.summary.tasks.inProgress, color: CHART_COLORS.blue },
+                                        { name: 'ยังไม่เริ่ม', value: teamReport.summary.tasks.todo, color: '#94a3b8' },
+                                      ].filter(d => d.value > 0)}
+                                      cx="50%"
+                                      cy="50%"
+                                      innerRadius={40}
+                                      outerRadius={70}
+                                      paddingAngle={3}
+                                      dataKey="value"
+                                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                                      labelLine={false}
+                                    >
+                                      {[
+                                        { color: CHART_COLORS.emerald },
+                                        { color: CHART_COLORS.blue },
+                                        { color: '#94a3b8' },
+                                      ].map((entry, index) => (
+                                        <Cell key={`cell-${index}`} fill={entry.color} />
+                                      ))}
+                                    </Pie>
+                                    <RechartsTooltip />
+                                    <Legend />
+                                  </RechartsPieChart>
+                                </ResponsiveContainer>
+                              </div>
+                            </CardContent>
+                          </Card>
+
+                          {/* Task Trend Chart */}
+                          {teamReport.taskTrend && teamReport.taskTrend.length > 0 && (
+                            <Card className="border-border/50 bg-card/80 backdrop-blur-sm">
+                              <CardHeader className="pb-3">
+                                <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                                  <LineChart className="w-4 h-4 text-primary" />
+                                  แนวโน้มงาน
+                                </CardTitle>
+                              </CardHeader>
+                              <CardContent>
+                                <div className="h-48">
+                                  <ResponsiveContainer width="100%" height="100%">
+                                    <AreaChart data={teamReport.taskTrend}>
+                                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                                      <XAxis dataKey="date" tick={{ fontSize: 9 }} stroke="#94a3b8" />
+                                      <YAxis tick={{ fontSize: 9 }} stroke="#94a3b8" />
+                                      <RechartsTooltip
+                                        contentStyle={{
+                                          backgroundColor: 'hsl(var(--card))',
+                                          border: '1px solid hsl(var(--border))',
+                                          borderRadius: '8px',
+                                          fontSize: '11px',
+                                        }}
+                                      />
+                                      <Area
+                                        type="monotone"
+                                        dataKey="completed"
+                                        name="เสร็จแล้ว"
+                                        stroke={CHART_COLORS.emerald}
+                                        fill={CHART_COLORS.emerald}
+                                        fillOpacity={0.3}
+                                      />
+                                      <Area
+                                        type="monotone"
+                                        dataKey="created"
+                                        name="สร้างใหม่"
+                                        stroke={CHART_COLORS.blue}
+                                        fill={CHART_COLORS.blue}
+                                        fillOpacity={0.3}
+                                      />
+                                    </AreaChart>
+                                  </ResponsiveContainer>
+                                </div>
+                              </CardContent>
+                            </Card>
+                          )}
                         </div>
 
                         {/* Member Workload */}
@@ -788,42 +1119,135 @@ export default function Reports() {
                     )}
 
                     {performance ? (
-                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                        {/* Task Completion Rate */}
-                        <Card className="border-border/50 bg-card/80 backdrop-blur-sm">
-                          <CardHeader className="pb-3">
-                            <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                              <Target className="w-4 h-4 text-emerald-500" />
-                              อัตราสำเร็จงาน (Task Completion)
-                            </CardTitle>
-                          </CardHeader>
-                          <CardContent className="space-y-3">
-                            {performance.taskCompletionRates
-                              .slice()
-                              .sort((a, b) => b.completionRate - a.completionRate)
-                              .map((r) => (
-                                <div key={r.userId} className="space-y-1">
-                                  <div className="flex items-center justify-between text-xs">
-                                    <span className="font-medium truncate mr-2">{r.userName}</span>
-                                    <span className="text-muted-foreground">
-                                      {r.completedTasks}/{r.totalTasks} ({r.completionRate.toFixed(0)}%)
-                                    </span>
-                                  </div>
-                                  <div className="h-2 bg-muted rounded-full overflow-hidden">
-                                    <div
-                                      className={cn(
-                                        "h-full rounded-full transition-all duration-500",
-                                        r.completionRate >= 80 ? "bg-emerald-500" :
-                                        r.completionRate >= 50 ? "bg-blue-500" :
-                                        r.completionRate >= 30 ? "bg-amber-500" : "bg-red-500"
-                                      )}
-                                      style={{ width: `${r.completionRate}%` }}
-                                    />
+                      <>
+                        {/* Summary Stats */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          <Card className="border-border/50 bg-card/80 backdrop-blur-sm">
+                            <CardContent className="pt-4">
+                              <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center shadow-lg shadow-emerald-500/20">
+                                  <Target className="w-5 h-5 text-white" />
+                                </div>
+                                <div>
+                                  <div className="text-xs text-muted-foreground">Avg Completion Rate</div>
+                                  <div className={cn("text-xl font-bold", getProductivityColor(performance.summary.avgTaskCompletionRate))}>
+                                    {performance.summary.avgTaskCompletionRate.toFixed(1)}%
                                   </div>
                                 </div>
-                              ))}
-                          </CardContent>
-                        </Card>
+                              </div>
+                            </CardContent>
+                          </Card>
+                          <Card className="border-border/50 bg-card/80 backdrop-blur-sm">
+                            <CardContent className="pt-4">
+                              <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center shadow-lg shadow-blue-500/20">
+                                  <Calendar className="w-5 h-5 text-white" />
+                                </div>
+                                <div>
+                                  <div className="text-xs text-muted-foreground">Avg Attendance Rate</div>
+                                  <div className={cn("text-xl font-bold", getProductivityColor(performance.summary.avgMeetingAttendanceRate))}>
+                                    {performance.summary.avgMeetingAttendanceRate.toFixed(1)}%
+                                  </div>
+                                </div>
+                              </div>
+                            </CardContent>
+                          </Card>
+                          <Card className="border-border/50 bg-card/80 backdrop-blur-sm">
+                            <CardContent className="pt-4">
+                              <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-purple-500 flex items-center justify-center shadow-lg shadow-violet-500/20">
+                                  <Zap className="w-5 h-5 text-white" />
+                                </div>
+                                <div>
+                                  <div className="text-xs text-muted-foreground">Total Interactions</div>
+                                  <div className="text-xl font-bold text-foreground">
+                                    {performance.summary.totalInteractions}
+                                  </div>
+                                </div>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        </div>
+
+                        {/* Performance Trend Chart */}
+                        {performance.trend && performance.trend.length > 0 && (
+                          <Card className="border-border/50 bg-card/80 backdrop-blur-sm">
+                            <CardHeader className="pb-3">
+                              <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                                <TrendingUp className="w-4 h-4 text-primary" />
+                                แนวโน้มประสิทธิภาพ
+                              </CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                              <div className="h-64">
+                                <ResponsiveContainer width="100%" height="100%">
+                                  <ComposedChart data={performance.trend}>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                                    <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="#94a3b8" />
+                                    <YAxis tick={{ fontSize: 10 }} stroke="#94a3b8" />
+                                    <RechartsTooltip
+                                      contentStyle={{
+                                        backgroundColor: 'hsl(var(--card))',
+                                        border: '1px solid hsl(var(--border))',
+                                        borderRadius: '8px',
+                                        fontSize: '12px',
+                                      }}
+                                    />
+                                    <Legend wrapperStyle={{ fontSize: '11px' }} />
+                                    <Bar dataKey="completionRate" name="Completion %" fill={CHART_COLORS.emerald} radius={[4, 4, 0, 0]} />
+                                    <Bar dataKey="attendanceRate" name="Attendance %" fill={CHART_COLORS.blue} radius={[4, 4, 0, 0]} />
+                                    <Line type="monotone" dataKey="activityScore" name="Activity" stroke={CHART_COLORS.violet} strokeWidth={2} />
+                                  </ComposedChart>
+                                </ResponsiveContainer>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        )}
+
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                          {/* Task Completion Rate */}
+                          <Card className="border-border/50 bg-card/80 backdrop-blur-sm">
+                            <CardHeader className="pb-3">
+                              <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                                <Target className="w-4 h-4 text-emerald-500" />
+                                อัตราสำเร็จงาน (Task Completion)
+                              </CardTitle>
+                            </CardHeader>
+                            <CardContent className="space-y-3">
+                              {performance.taskCompletionRates
+                                .slice()
+                                .sort((a, b) => b.completionRate - a.completionRate)
+                                .map((r) => {
+                                  const TrendIcon = getTrendIcon(r.trend);
+                                  return (
+                                    <div key={r.userId} className="space-y-1">
+                                      <div className="flex items-center justify-between text-xs">
+                                        <span className="font-medium truncate mr-2">{r.userName}</span>
+                                        <div className="flex items-center gap-2">
+                                          {r.trend && (
+                                            <TrendIcon className={cn("w-3 h-3", getTrendColor(r.trend))} />
+                                          )}
+                                          <span className="text-muted-foreground">
+                                            {r.completedTasks}/{r.totalTasks} ({r.completionRate.toFixed(0)}%)
+                                          </span>
+                                        </div>
+                                      </div>
+                                      <div className="h-2 bg-muted rounded-full overflow-hidden">
+                                        <div
+                                          className={cn(
+                                            "h-full rounded-full transition-all duration-500",
+                                            r.completionRate >= 80 ? "bg-emerald-500" :
+                                            r.completionRate >= 50 ? "bg-blue-500" :
+                                            r.completionRate >= 30 ? "bg-amber-500" : "bg-red-500"
+                                          )}
+                                          style={{ width: `${r.completionRate}%` }}
+                                        />
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                            </CardContent>
+                          </Card>
 
                         {/* Collaboration Activity */}
                         <Card className="border-border/50 bg-card/80 backdrop-blur-sm">
@@ -895,7 +1319,8 @@ export default function Reports() {
                             </CardContent>
                           </Card>
                         )}
-                      </div>
+                        </div>
+                      </>
                     ) : (
                       <EmptyState message="ยังไม่มีข้อมูลประสิทธิภาพสำหรับช่วงเวลานี้" />
                     )}
