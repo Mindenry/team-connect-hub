@@ -354,7 +354,10 @@ export default function Directory() {
 
       const usersData: UserRecord[] = usersRes.map((u: any) => {
         const userTeams = teamsRes
-          .filter((t: any) => t.members?.some((m: any) => m.userId === u.id))
+          .filter((t: any) => 
+            t.members?.some((m: any) => m.userId === u.id) &&
+            t.name.toLowerCase() !== "personal recordings" // Exclude personal recordings folder
+          )
           .map((t: any) => t.name);
 
         return {
