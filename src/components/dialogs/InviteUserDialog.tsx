@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react";
-import { UserPlus, Mail, Plus, X, CheckCircle2 } from "lucide-react";
+import { UserPlus, Mail, Plus, X, CheckCircle2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { toast } from "sonner";
 import {
   AnimatedDialog as Dialog,
   AnimatedDialogContent as DialogContent,
@@ -28,6 +29,7 @@ export default function InviteUserDialog({ open, onOpenChange, teamId, onInviteS
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [allowedDomains, setAllowedDomains] = useState<string[]>([]);
   const { user: currentUser } = useAuth();
 
   useEffect(() => {
@@ -38,14 +40,37 @@ export default function InviteUserDialog({ open, onOpenChange, teamId, onInviteS
           if (teamId) setSelectedTeamId(teamId);
         })
         .catch(() => setTeams([]));
+      
+      // Fetch organization allowed domains
+      if (currentUser?.organizationId) {
+        apiGet<any>(`/organizations/${currentUser.organizationId}`)
+          .then((org) => {
+            const domains = Array.isArray(org?.allowedDomains) 
+              ? org.allowedDomains 
+              : org?.domain 
+                ? [org.domain] 
+                : [];
+            setAllowedDomains(domains);
+          })
+          .catch(() => setAllowedDomains([]));
+      }
     }
-  }, [open, teamId]);
+  }, [open, teamId, currentUser?.organizationId]);
 
   const addEmail = () => {
     const trimmed = emailInput.trim();
-    if (trimmed && trimmed.includes("@") && !emails.includes(trimmed)) { setEmails([...emails, trimmed]); setEmailInput(""); }
+    if (trimmed && trimmed.includes("@") && !emails.includes(trimmed)) { 
+      setEmails([...emails, trimmed]); 
+      setEmailInput(""); 
+    }
   };
   const removeEmail = (email: string) => setEmails(emails.filter((e) => e !== email));
+
+  const validateEmail = (email: string): boolean => {
+    if (allowedDomains.length === 0) return true; // No restriction if no domains set
+    const emailDomain = email.split("@")[1]?.toLowerCase();
+    return allowedDomains.some(d => emailDomain === d.toLowerCase());
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -60,18 +85,27 @@ export default function InviteUserDialog({ open, onOpenChange, teamId, onInviteS
               <div className="space-y-4">
                 <div><Label className="flex items-center gap-1"><Mail className="w-3 h-3" /> Email Addresses</Label>
                   <div className="flex gap-2 mt-1">
-                    <Input value={emailInput} onChange={(e) => setEmailInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addEmail())} placeholder="user@acme.com" className="flex-1" />
+                    <Input value={emailInput} onChange={(e) => setEmailInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addEmail())} placeholder="user@example.com" className="flex-1" />
                     <Button size="icon" onClick={addEmail} variant="outline"><Plus className="w-4 h-4" /></Button>
                   </div>
-                  <p className="text-xs text-muted-foreground mt-1">Only @acme.com emails allowed</p>
+                  {allowedDomains.length > 0 ? (
+                    <p className="text-xs text-muted-foreground mt-1">Allowed domains: {allowedDomains.join(", ")}</p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground mt-1">Enter email addresses to invite</p>
+                  )}
                 </div>
                 {emails.length > 0 && (
                   <div className="flex flex-wrap gap-1.5">
-                    {emails.map((email) => (
-                      <Badge key={email} variant="secondary" className="flex items-center gap-1 pr-1">
-                        {email}<button onClick={() => removeEmail(email)} className="ml-1 hover:text-destructive"><X className="w-3 h-3" /></button>
-                      </Badge>
-                    ))}
+                    {emails.map((email) => {
+                      const isValid = validateEmail(email);
+                      return (
+                        <Badge key={email} variant={isValid ? "secondary" : "destructive"} className="flex items-center gap-1 pr-1">
+                          {email}
+                          {!isValid && <span className="text-[9px] ml-1">(invalid domain)</span>}
+                          <button onClick={() => removeEmail(email)} className="ml-1 hover:text-destructive"><X className="w-3 h-3" /></button>
+                        </Badge>
+                      );
+                    })}
                   </div>
                 )}
                 <div className="grid grid-cols-2 gap-3">
@@ -114,6 +148,12 @@ export default function InviteUserDialog({ open, onOpenChange, teamId, onInviteS
                     setError("Please add at least one email");
                     return;
                   }
+                  // Validate all emails against allowed domains
+                  const invalidEmails = emails.filter(e => !validateEmail(e));
+                  if (invalidEmails.length > 0) {
+                    setError(`Invalid email domain(s): ${invalidEmails.join(", ")}. Allowed: ${allowedDomains.join(", ")}`);
+                    return;
+                  }
                   if (!currentUser?.organizationId || !currentUser.id) {
                     setError("Cannot create invites: missing organization or user context");
                     return;
@@ -136,6 +176,7 @@ export default function InviteUserDialog({ open, onOpenChange, teamId, onInviteS
                     setIsSuccess(true);
                     setEmails([]);
                     setEmailInput("");
+                    toast.success("Invites sent successfully!");
                     onInviteSuccess?.();
                   } catch (err: any) {
                     setError(err.message ?? "Failed to invite users");
@@ -143,7 +184,7 @@ export default function InviteUserDialog({ open, onOpenChange, teamId, onInviteS
                     setLoading(false);
                   }
                 }} disabled={emails.length === 0 || loading}>
-                  {loading ? "Inviting..." : `Send ${emails.length > 0 ? `${emails.length} Invite${emails.length > 1 ? "s" : ""}` : "Invites"}`}
+                  {loading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Sending...</> : `Send ${emails.length} Invite${emails.length !== 1 ? "s" : ""}`}
                 </Button>
               </DialogFooter>
             </>

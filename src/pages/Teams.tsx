@@ -30,6 +30,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import StatusIndicator from "@/components/shared/StatusIndicator";
 import AddTeamMemberDialog from "@/components/dialogs/AddTeamMemberDialog";
 import CreateChannelDialog from "@/components/dialogs/CreateChannelDialog";
+import InviteUserDialog from "@/components/dialogs/InviteUserDialog";
 import { apiGet, apiPost, apiPatch, apiDelete } from "@/lib/api";
 import {
   Dialog,
@@ -130,6 +131,7 @@ export default function Teams() {
   const [showAddMember, setShowAddMember] = useState(false);
   const [showCreateChannel, setShowCreateChannel] = useState(false);
   const [showCreateTeam, setShowCreateTeam] = useState(false);
+  const [showInviteUser, setShowInviteUser] = useState(false);
   const [teams, setTeams] = useState<Team[]>([]);
   const [loading, setLoading] = useState(true);
   const [teamName, setTeamName] = useState("");
@@ -369,7 +371,8 @@ export default function Teams() {
       };
       setTeams((prev) => [...prev, teamData]);
       setSelectedTeam(newTeam.id);
-      loadTeams();
+      // Don't call loadTeams() immediately - the team is already in state
+      // and loadTeams would overwrite with potentially stale data
     } catch (err: any) {
       console.error("Failed to create team:", err);
       toast.error(err.message || "Failed to create team");
@@ -506,6 +509,17 @@ export default function Teams() {
                   <TooltipContent>รีเฟรชข้อมูลทีม</TooltipContent>
                 </Tooltip>
 
+                {canSeeEmployees && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-9 gap-2 px-3 border-border/60 bg-background/60 hover:bg-accent"
+                    onClick={() => setShowInviteUser(true)}
+                  >
+                    <UserPlus className="w-4 h-4" />
+                    <span className="hidden sm:inline">เชิญผู้ใช้</span>
+                  </Button>
+                )}
                 <Button
                   size="sm"
                   className="h-9 gap-2 px-3 font-medium"
@@ -1162,6 +1176,13 @@ export default function Teams() {
         <CreateChannelDialog
           open={showCreateChannel}
           onOpenChange={setShowCreateChannel}
+        />
+
+        <InviteUserDialog
+          open={showInviteUser}
+          onOpenChange={setShowInviteUser}
+          teamId={selectedTeam || undefined}
+          onInviteSuccess={() => loadTeams(true)}
         />
 
         <Dialog open={showEditTeam} onOpenChange={setShowEditTeam}>
