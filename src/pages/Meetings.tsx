@@ -921,8 +921,14 @@ export default function Meetings() {
           onOpenChange={setShowJoinByCode}
         />
         <MeetingMinutesDialog
-          open={showMinutesDialog}
-          onOpenChange={setShowMinutesDialog}
+          open={showMinutesDialog && !!minutesMeetingId}
+          onOpenChange={(open) => {
+            setShowMinutesDialog(open);
+            if (!open) {
+              setMinutesMeetingId(null);
+              setMinutesMeetingTitle("");
+            }
+          }}
           meetingId={minutesMeetingId || ""}
           meetingTitle={minutesMeetingTitle}
         />

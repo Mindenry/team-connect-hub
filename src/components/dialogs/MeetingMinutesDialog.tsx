@@ -110,6 +110,11 @@ export default function MeetingMinutesDialog({
     if (open && meetingId) {
       loadMinutes();
     }
+    // Reset state when dialog closes
+    if (!open) {
+      setLoading(false);
+      setSaving(false);
+    }
   }, [open, meetingId]);
 
   const loadMinutes = async () => {

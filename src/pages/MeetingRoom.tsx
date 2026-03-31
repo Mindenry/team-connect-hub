@@ -3520,7 +3520,7 @@ function MeetingRoomUI({
 
       {/* Meeting Minutes Dialog - shown after host ends meeting */}
       <MeetingMinutesDialog
-        open={showMinutesDialog}
+        open={showMinutesDialog && !!meetingId}
         onOpenChange={handleMinutesDialogClose}
         meetingId={meetingId || ""}
         meetingTitle={meetingTitle}
