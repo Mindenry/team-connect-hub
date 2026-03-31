@@ -11,6 +11,7 @@ import {
   Calendar,
   Users,
   Loader2,
+  UserPlus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,6 +20,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -50,7 +59,9 @@ interface MeetingMinutesDialogProps {
 interface ActionItem {
   id: string;
   task: string;
-  assignee?: string;
+  assigneeId?: string; // User ID
+  assigneeName?: string; // For display purposes
+  assigneeAvatar?: string; // Avatar URL
   dueDate?: string;
   completed?: boolean;
 }
@@ -99,16 +110,22 @@ export default function MeetingMinutesDialog({
   const [decisions, setDecisions] = useState<Decision[]>([]);
   const [attendeeIds, setAttendeeIds] = useState<string[]>([]); // Store IDs for backend
   const [attendeeNames, setAttendeeNames] = useState<Map<string, string>>(new Map()); // Map ID -> name for display
+  const [attendeeAvatars, setAttendeeAvatars] = useState<Map<string, string>>(new Map()); // Map ID -> avatar for display
 
   // New item inputs
   const [newActionTask, setNewActionTask] = useState("");
-  const [newActionAssignee, setNewActionAssignee] = useState("");
+  const [newActionAssigneeId, setNewActionAssigneeId] = useState<string>("");
+  const [newActionDueDate, setNewActionDueDate] = useState<string>("");
   const [newDecision, setNewDecision] = useState("");
-  const [newAttendee, setNewAttendee] = useState("");
+  const [newAttendeeId, setNewAttendeeId] = useState<string>("");
+
+  // Available users for selection
+  const [availableUsers, setAvailableUsers] = useState<{ id: string; name: string; avatar?: string }[]>([]);
 
   useEffect(() => {
     if (open && meetingId) {
       loadMinutes();
+      loadAvailableUsers();
     }
     // Reset state when dialog closes
     if (!open) {
@@ -116,6 +133,43 @@ export default function MeetingMinutesDialog({
       setSaving(false);
     }
   }, [open, meetingId]);
+
+  const loadAvailableUsers = async () => {
+    try {
+      // Get meeting to find team, then get team members or org users
+      const meeting = await apiGet<any>(`/meetings/${meetingId}`);
+      let users: { id: string; name: string; avatar?: string }[] = [];
+      
+      // If meeting has a team, get team members
+      if (meeting?.teamId) {
+        const team = await apiGet<any>(`/teams/${meeting.teamId}`);
+        if (team?.members && Array.isArray(team.members)) {
+          users = team.members.map((m: any) => ({
+            id: m.userId,
+            name: m.user?.name || m.name || 'Unknown',
+            avatar: m.user?.avatar,
+          }));
+        }
+      }
+      
+      // If no team members, get organization users
+      if (users.length === 0) {
+        const orgUsers = await apiGet<any[]>(`/users`);
+        if (Array.isArray(orgUsers)) {
+          users = orgUsers.map((u) => ({
+            id: u.id,
+            name: u.name || 'Unknown',
+            avatar: u.avatar,
+          }));
+        }
+      }
+      
+      setAvailableUsers(users);
+    } catch (error) {
+      console.error("Failed to load users:", error);
+      setAvailableUsers([]);
+    }
+  };
 
   const loadMinutes = async () => {
     setLoading(true);
@@ -140,26 +194,53 @@ export default function MeetingMinutesDialog({
   const populateForm = async (minutes: MinutesData) => {
     setTitle(minutes.title);
     setContent(minutes.content);
-    setActionItems(minutes.actionItems || []);
     setDecisions(minutes.decisions || []);
     setAttendeeIds(minutes.attendees || []);
     
-    // Fetch attendee names for display
+    // Process action items - fetch missing assignee names/avatars
+    const items = minutes.actionItems || [];
+    const enrichedItems: ActionItem[] = [];
+    
+    for (const item of items) {
+      if (item.assigneeId && (!item.assigneeName || !item.assigneeAvatar)) {
+        try {
+          const user = await apiGet<any>(`/users/${item.assigneeId}`);
+          enrichedItems.push({
+            ...item,
+            assigneeName: user?.name || item.assigneeName,
+            assigneeAvatar: user?.avatar || item.assigneeAvatar,
+          });
+        } catch {
+          enrichedItems.push(item);
+        }
+      } else {
+        enrichedItems.push(item);
+      }
+    }
+    setActionItems(enrichedItems);
+    
+    // Fetch attendee names and avatars for display
     if (minutes.attendees && minutes.attendees.length > 0) {
       try {
         const namesMap = new Map<string, string>();
+        const avatarsMap = new Map<string, string>();
         for (const userId of minutes.attendees) {
           const user = await apiGet<any>(`/users/${userId}`);
           if (user?.name) {
             namesMap.set(userId, user.name);
+            if (user.avatar) {
+              avatarsMap.set(userId, user.avatar);
+            }
           }
         }
         setAttendeeNames(namesMap);
+        setAttendeeAvatars(avatarsMap);
       } catch (error) {
         console.error("Failed to load attendee names:", error);
       }
     } else {
       setAttendeeNames(new Map());
+      setAttendeeAvatars(new Map());
     }
     setIsEditing(false);
   };
@@ -178,24 +259,32 @@ export default function MeetingMinutesDialog({
       if (meeting?.participants && Array.isArray(meeting.participants)) {
         const ids: string[] = [];
         const namesMap = new Map<string, string>();
+        const avatarsMap = new Map<string, string>();
         meeting.participants.forEach((p: any) => {
           const userId = p.user?.id || p.userId;
           const userName = p.user?.name || p.name;
+          const userAvatar = p.user?.avatar;
           if (userId && userName) {
             ids.push(userId);
             namesMap.set(userId, userName);
+            if (userAvatar) {
+              avatarsMap.set(userId, userAvatar);
+            }
           }
         });
         setAttendeeIds(ids);
         setAttendeeNames(namesMap);
+        setAttendeeAvatars(avatarsMap);
       } else {
         setAttendeeIds([]);
         setAttendeeNames(new Map());
+        setAttendeeAvatars(new Map());
       }
     } catch (error) {
       console.error("Failed to load participants:", error);
       setAttendeeIds([]);
       setAttendeeNames(new Map());
+      setAttendeeAvatars(new Map());
     }
   };
 
@@ -258,12 +347,22 @@ export default function MeetingMinutesDialog({
 
   const addActionItem = () => {
     if (!newActionTask.trim()) return;
+    const assignee = availableUsers.find(u => u.id === newActionAssigneeId);
     setActionItems(prev => [
       ...prev,
-      { id: Date.now().toString(), task: newActionTask, assignee: newActionAssignee || undefined, completed: false },
+      { 
+        id: Date.now().toString(), 
+        task: newActionTask, 
+        assigneeId: newActionAssigneeId || undefined,
+        assigneeName: assignee?.name || undefined,
+        assigneeAvatar: assignee?.avatar || undefined,
+        dueDate: newActionDueDate || undefined,
+        completed: false 
+      },
     ]);
     setNewActionTask("");
-    setNewActionAssignee("");
+    setNewActionAssigneeId("");
+    setNewActionDueDate("");
   };
 
   const removeActionItem = (id: string) => {
@@ -288,13 +387,20 @@ export default function MeetingMinutesDialog({
   };
 
   const addAttendee = () => {
-    if (!newAttendee.trim()) return;
-    // For manually added attendees, we need to search for the user
-    // For now, just add as a temporary ID (in production, should search users)
-    const tempId = `temp-${Date.now()}`;
-    setAttendeeIds(prev => [...prev, tempId]);
-    setAttendeeNames(prev => new Map(prev).set(tempId, newAttendee.trim()));
-    setNewAttendee("");
+    if (!newAttendeeId.trim()) return;
+    if (attendeeIds.includes(newAttendeeId)) {
+      toast({ title: "Info", description: "Attendee already added" });
+      return;
+    }
+    const user = availableUsers.find(u => u.id === newAttendeeId);
+    if (user) {
+      setAttendeeIds(prev => [...prev, newAttendeeId]);
+      setAttendeeNames(prev => new Map(prev).set(newAttendeeId, user.name));
+      if (user.avatar) {
+        setAttendeeAvatars(prev => new Map(prev).set(newAttendeeId, user.avatar));
+      }
+    }
+    setNewAttendeeId("");
   };
 
   const selectMinutes = async (minutes: MinutesData) => {
@@ -431,11 +537,25 @@ export default function MeetingMinutesDialog({
                               <span className={item.completed ? "line-through text-muted-foreground" : ""}>
                                 {item.task}
                               </span>
-                              {item.assignee && (
-                                <Badge variant="secondary" className="ml-2 text-xs">
-                                  {item.assignee}
-                                </Badge>
-                              )}
+                              <div className="flex items-center gap-2 mt-1">
+                                {item.assigneeName && (
+                                  <div className="flex items-center gap-1">
+                                    <Avatar className="h-4 w-4">
+                                      <AvatarImage src={item.assigneeAvatar} />
+                                      <AvatarFallback className="text-[8px]">{item.assigneeName?.charAt(0)}</AvatarFallback>
+                                    </Avatar>
+                                    <Badge variant="secondary" className="text-xs">
+                                      {item.assigneeName}
+                                    </Badge>
+                                  </div>
+                                )}
+                                {item.dueDate && (
+                                  <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                    <Calendar className="w-3 h-3" />
+                                    {new Date(item.dueDate).toLocaleDateString()}
+                                  </span>
+                                )}
+                              </div>
                             </div>
                             {isEditing && (
                               <Button
@@ -452,23 +572,44 @@ export default function MeetingMinutesDialog({
                       </div>
                     )}
                     {isEditing && (
-                      <div className="flex gap-2">
-                        <Input
-                          value={newActionTask}
-                          onChange={(e) => setNewActionTask(e.target.value)}
-                          placeholder="Add action item..."
-                          className="flex-1"
-                          onKeyDown={(e) => e.key === "Enter" && addActionItem()}
-                        />
-                        <Input
-                          value={newActionAssignee}
-                          onChange={(e) => setNewActionAssignee(e.target.value)}
-                          placeholder="Assignee"
-                          className="w-32"
-                        />
-                        <Button onClick={addActionItem} size="icon">
-                          <Plus className="w-4 h-4" />
-                        </Button>
+                      <div className="space-y-2">
+                        <div className="flex gap-2">
+                          <Input
+                            value={newActionTask}
+                            onChange={(e) => setNewActionTask(e.target.value)}
+                            placeholder="Add action item..."
+                            className="flex-1"
+                            onKeyDown={(e) => e.key === "Enter" && addActionItem()}
+                          />
+                          <Select value={newActionAssigneeId} onValueChange={setNewActionAssigneeId}>
+                            <SelectTrigger className="w-40">
+                              <SelectValue placeholder="Assign to..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="none">Unassigned</SelectItem>
+                              {availableUsers.map((u) => (
+                                <SelectItem key={u.id} value={u.id}>
+                                  <div className="flex items-center gap-2">
+                                    <Avatar className="h-4 w-4">
+                                      <AvatarImage src={u.avatar} />
+                                      <AvatarFallback className="text-[8px]">{u.name?.charAt(0)}</AvatarFallback>
+                                    </Avatar>
+                                    <span>{u.name}</span>
+                                  </div>
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <Input
+                            type="date"
+                            value={newActionDueDate}
+                            onChange={(e) => setNewActionDueDate(e.target.value)}
+                            className="w-32"
+                          />
+                          <Button onClick={addActionItem} size="icon">
+                            <Plus className="w-4 h-4" />
+                          </Button>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -529,7 +670,11 @@ export default function MeetingMinutesDialog({
                     {attendeeIds.length > 0 && (
                       <div className="flex flex-wrap gap-2">
                         {attendeeIds.map((id) => (
-                          <Badge key={id} variant="secondary" className="text-xs">
+                          <Badge key={id} variant="secondary" className="text-xs flex items-center gap-1.5 py-1 px-2">
+                            <Avatar className="h-4 w-4">
+                              <AvatarImage src={attendeeAvatars.get(id)} />
+                              <AvatarFallback className="text-[8px]">{attendeeNames.get(id)?.charAt(0) || "?"}</AvatarFallback>
+                            </Avatar>
                             {attendeeNames.get(id) || "Unknown"}
                             {isEditing && (
                               <button
@@ -537,6 +682,11 @@ export default function MeetingMinutesDialog({
                                 onClick={() => {
                                   setAttendeeIds(prev => prev.filter(i => i !== id));
                                   setAttendeeNames(prev => {
+                                    const newMap = new Map(prev);
+                                    newMap.delete(id);
+                                    return newMap;
+                                  });
+                                  setAttendeeAvatars(prev => {
                                     const newMap = new Map(prev);
                                     newMap.delete(id);
                                     return newMap;
@@ -552,14 +702,27 @@ export default function MeetingMinutesDialog({
                     )}
                     {isEditing && (
                       <div className="flex gap-2">
-                        <Input
-                          value={newAttendee}
-                          onChange={(e) => setNewAttendee(e.target.value)}
-                          placeholder="Add attendee..."
-                          className="flex-1"
-                          onKeyDown={(e) => e.key === "Enter" && addAttendee()}
-                        />
-                        <Button onClick={addAttendee} size="icon">
+                        <Select value={newAttendeeId} onValueChange={setNewAttendeeId}>
+                          <SelectTrigger className="flex-1">
+                            <SelectValue placeholder="Select attendee..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {availableUsers
+                              .filter((u) => !attendeeIds.includes(u.id))
+                              .map((u) => (
+                                <SelectItem key={u.id} value={u.id}>
+                                  <div className="flex items-center gap-2">
+                                    <Avatar className="h-5 w-5">
+                                      <AvatarImage src={u.avatar} />
+                                      <AvatarFallback>{u.name?.charAt(0)}</AvatarFallback>
+                                    </Avatar>
+                                    <span>{u.name}</span>
+                                  </div>
+                                </SelectItem>
+                              ))}
+                          </SelectContent>
+                        </Select>
+                        <Button onClick={addAttendee} size="icon" disabled={!newAttendeeId}>
                           <Plus className="w-4 h-4" />
                         </Button>
                       </div>
