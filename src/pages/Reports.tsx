@@ -284,8 +284,8 @@ export default function Reports() {
 
       // Try server-side export first
       const tryServerExport = async () => {
-        const startIso = encodeURIComponent(toIsoDate(start));
-        const endIso = encodeURIComponent(toIsoDate(end));
+        const startIso = toIsoDate(start);
+        const endIso = toIsoDate(end);
         
         if (activeTab === "team" && !selectedTeamId) {
           throw new Error("กรุณาเลือกทีมเพื่อออกรายงาน");
@@ -303,6 +303,10 @@ export default function Reports() {
           query.set("endDate", endIso);
         } else if (activeTab === "performance") {
           if (selectedTeamId) query.set("teamId", selectedTeamId);
+          query.set("startDate", startIso);
+          query.set("endDate", endIso);
+        } else if (activeTab === "overview" || activeTab === "personal") {
+          // Overview/personal reports use range parameter only
           query.set("startDate", startIso);
           query.set("endDate", endIso);
         }

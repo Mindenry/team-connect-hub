@@ -299,13 +299,24 @@ export default function MeetingMinutesDialog({
       const user = auth.getUser();
       if (!user) throw new Error("Not authenticated");
 
+      // Clean action items - remove undefined values and empty strings
+      const cleanedActionItems = actionItems.map(item => ({
+        id: item.id,
+        task: item.task,
+        ...(item.assigneeId ? { assigneeId: item.assigneeId } : {}),
+        ...(item.assigneeName ? { assigneeName: item.assigneeName } : {}),
+        ...(item.assigneeAvatar ? { assigneeAvatar: item.assigneeAvatar } : {}),
+        ...(item.dueDate ? { dueDate: item.dueDate } : {}),
+        completed: item.completed || false,
+      }));
+
       const payload = {
         meetingId,
         title,
         content,
-        actionItems,
+        actionItems: cleanedActionItems,
         decisions,
-        attendees: attendeeIds, // Send user IDs to backend
+        attendees: attendeeIds.filter(id => id), // Filter out empty IDs
       };
 
       if (currentMinutes) {
@@ -348,12 +359,14 @@ export default function MeetingMinutesDialog({
   const addActionItem = () => {
     if (!newActionTask.trim()) return;
     const assignee = availableUsers.find(u => u.id === newActionAssigneeId);
+    // Don't include assignee fields if unassigned or empty
+    const assigneeId = newActionAssigneeId && newActionAssigneeId !== 'none' ? newActionAssigneeId : undefined;
     setActionItems(prev => [
       ...prev,
       { 
         id: Date.now().toString(), 
         task: newActionTask, 
-        assigneeId: newActionAssigneeId || undefined,
+        assigneeId: assigneeId,
         assigneeName: assignee?.name || undefined,
         assigneeAvatar: assignee?.avatar || undefined,
         dueDate: newActionDueDate || undefined,
