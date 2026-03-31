@@ -61,13 +61,18 @@ interface Decision {
   date: string;
 }
 
+interface Attendee {
+  id: string;
+  name: string;
+}
+
 interface MinutesData {
   id: string;
   title: string;
   content: string;
   actionItems: ActionItem[];
   decisions: Decision[];
-  attendees: string[];
+  attendees: string[]; // User IDs from backend
   creator: { id: string; name: string; email: string; avatar?: string };
   createdAt: string;
   updatedAt: string;
@@ -92,12 +97,14 @@ export default function MeetingMinutesDialog({
   const [content, setContent] = useState("");
   const [actionItems, setActionItems] = useState<ActionItem[]>([]);
   const [decisions, setDecisions] = useState<Decision[]>([]);
-  const [attendees, setAttendees] = useState<string[]>([]);
+  const [attendeeIds, setAttendeeIds] = useState<string[]>([]); // Store IDs for backend
+  const [attendeeNames, setAttendeeNames] = useState<Map<string, string>>(new Map()); // Map ID -> name for display
 
   // New item inputs
   const [newActionTask, setNewActionTask] = useState("");
   const [newActionAssignee, setNewActionAssignee] = useState("");
   const [newDecision, setNewDecision] = useState("");
+  const [newAttendee, setNewAttendee] = useState("");
 
   useEffect(() => {
     if (open && meetingId) {
@@ -112,35 +119,79 @@ export default function MeetingMinutesDialog({
       setExistingMinutes(data || []);
       if (data && data.length > 0) {
         setCurrentMinutes(data[0]);
-        populateForm(data[0]);
+        await populateForm(data[0]);
       } else {
-        resetForm();
+        await resetForm();
       }
     } catch (error) {
       console.error("Failed to load minutes:", error);
       setExistingMinutes([]);
+      await resetForm();
     } finally {
       setLoading(false);
     }
   };
 
-  const populateForm = (minutes: MinutesData) => {
+  const populateForm = async (minutes: MinutesData) => {
     setTitle(minutes.title);
     setContent(minutes.content);
     setActionItems(minutes.actionItems || []);
     setDecisions(minutes.decisions || []);
-    setAttendees(minutes.attendees || []);
+    setAttendeeIds(minutes.attendees || []);
+    
+    // Fetch attendee names for display
+    if (minutes.attendees && minutes.attendees.length > 0) {
+      try {
+        const namesMap = new Map<string, string>();
+        for (const userId of minutes.attendees) {
+          const user = await apiGet<any>(`/users/${userId}`);
+          if (user?.name) {
+            namesMap.set(userId, user.name);
+          }
+        }
+        setAttendeeNames(namesMap);
+      } catch (error) {
+        console.error("Failed to load attendee names:", error);
+      }
+    } else {
+      setAttendeeNames(new Map());
+    }
     setIsEditing(false);
   };
 
-  const resetForm = () => {
+  const resetForm = async () => {
     setTitle(`Minutes: ${meetingTitle}`);
     setContent("");
     setActionItems([]);
     setDecisions([]);
-    setAttendees([]);
     setIsEditing(true);
     setCurrentMinutes(null);
+    
+    // Auto-populate attendees from meeting participants
+    try {
+      const meeting = await apiGet<any>(`/meetings/${meetingId}`);
+      if (meeting?.participants && Array.isArray(meeting.participants)) {
+        const ids: string[] = [];
+        const namesMap = new Map<string, string>();
+        meeting.participants.forEach((p: any) => {
+          const userId = p.user?.id || p.userId;
+          const userName = p.user?.name || p.name;
+          if (userId && userName) {
+            ids.push(userId);
+            namesMap.set(userId, userName);
+          }
+        });
+        setAttendeeIds(ids);
+        setAttendeeNames(namesMap);
+      } else {
+        setAttendeeIds([]);
+        setAttendeeNames(new Map());
+      }
+    } catch (error) {
+      console.error("Failed to load participants:", error);
+      setAttendeeIds([]);
+      setAttendeeNames(new Map());
+    }
   };
 
   const handleSave = async () => {
@@ -160,7 +211,7 @@ export default function MeetingMinutesDialog({
         content,
         actionItems,
         decisions,
-        attendees,
+        attendees: attendeeIds, // Send user IDs to backend
       };
 
       if (currentMinutes) {
@@ -231,9 +282,19 @@ export default function MeetingMinutesDialog({
     setDecisions(prev => prev.filter(d => d.id !== id));
   };
 
-  const selectMinutes = (minutes: MinutesData) => {
+  const addAttendee = () => {
+    if (!newAttendee.trim()) return;
+    // For manually added attendees, we need to search for the user
+    // For now, just add as a temporary ID (in production, should search users)
+    const tempId = `temp-${Date.now()}`;
+    setAttendeeIds(prev => [...prev, tempId]);
+    setAttendeeNames(prev => new Map(prev).set(tempId, newAttendee.trim()));
+    setNewAttendee("");
+  };
+
+  const selectMinutes = async (minutes: MinutesData) => {
     setCurrentMinutes(minutes);
-    populateForm(minutes);
+    await populateForm(minutes);
   };
 
   return (
@@ -453,6 +514,52 @@ export default function MeetingMinutesDialog({
                       </div>
                     )}
                   </div>
+
+                  {/* Attendees */}
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <Users className="w-4 h-4 text-primary" />
+                      <Label>Attendees ({attendeeIds.length})</Label>
+                    </div>
+                    {attendeeIds.length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {attendeeIds.map((id) => (
+                          <Badge key={id} variant="secondary" className="text-xs">
+                            {attendeeNames.get(id) || "Unknown"}
+                            {isEditing && (
+                              <button
+                                className="ml-1 hover:text-destructive"
+                                onClick={() => {
+                                  setAttendeeIds(prev => prev.filter(i => i !== id));
+                                  setAttendeeNames(prev => {
+                                    const newMap = new Map(prev);
+                                    newMap.delete(id);
+                                    return newMap;
+                                  });
+                                }}
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            )}
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+                    {isEditing && (
+                      <div className="flex gap-2">
+                        <Input
+                          value={newAttendee}
+                          onChange={(e) => setNewAttendee(e.target.value)}
+                          placeholder="Add attendee..."
+                          className="flex-1"
+                          onKeyDown={(e) => e.key === "Enter" && addAttendee()}
+                        />
+                        <Button onClick={addAttendee} size="icon">
+                          <Plus className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </ScrollArea>
             )}
@@ -476,7 +583,7 @@ export default function MeetingMinutesDialog({
                 </>
               )}
               {!currentMinutes && existingMinutes.length === 0 && (
-                <Button variant="outline" onClick={resetForm}>
+                <Button variant="outline" onClick={() => void resetForm()}>
                   <Plus className="w-4 h-4 mr-2" />
                   New Minutes
                 </Button>

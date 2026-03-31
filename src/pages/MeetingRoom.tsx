@@ -63,6 +63,7 @@ import {
   Video,
   Square,
 } from "lucide-react";
+import MeetingMinutesDialog from "@/components/dialogs/MeetingMinutesDialog";
 import { ImagePreview } from "@/components/chat/ImagePreview";
 import { PDFViewer } from "@/components/chat/PDFViewer";
 import { FilePreview } from "@/components/chat/FilePreview";
@@ -403,6 +404,7 @@ function MeetingRoomUI({
     useState<MeetingRecordingStatus | null>(null);
   const [endingMeeting, setEndingMeeting] = useState(false);
   const [isHandRaised, setIsHandRaised] = useState(false);
+  const [showMinutesDialog, setShowMinutesDialog] = useState(false);
 
   // Recording refs
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -1732,8 +1734,9 @@ function MeetingRoomUI({
     });
     clearCurrentMeeting();
     meetingPiPLeave();
-    navigate("/meetings");
     setEndingMeeting(false);
+    // Show Meeting Minutes dialog after ending meeting
+    setShowMinutesDialog(true);
   }, [
     isHost,
     meetingId,
@@ -1750,6 +1753,14 @@ function MeetingRoomUI({
       leaveMeeting();
     }
   }, [isHost, meetingId, endAndSummarizeMeeting, leaveMeeting, isQuickHuddle]);
+
+  const handleMinutesDialogClose = useCallback((open: boolean) => {
+    setShowMinutesDialog(open);
+    if (!open) {
+      // Navigate to meetings page after closing the dialog
+      navigate("/meetings");
+    }
+  }, [navigate]);
 
   const testSpeaker = useCallback(async () => {
     try {
@@ -3506,6 +3517,14 @@ function MeetingRoomUI({
           </div>
         </div>
       )}
+
+      {/* Meeting Minutes Dialog - shown after host ends meeting */}
+      <MeetingMinutesDialog
+        open={showMinutesDialog}
+        onOpenChange={handleMinutesDialogClose}
+        meetingId={meetingId || ""}
+        meetingTitle={meetingTitle}
+      />
     </div>
   );
 }
