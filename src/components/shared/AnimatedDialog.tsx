@@ -29,7 +29,7 @@ const AnimatedDialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
 >(({ className, children, ...props }, ref) => (
-  <AnimatedDialogPortal forceMount>
+  <AnimatedDialogPortal>
     <AnimatedDialogOverlay />
     <DialogPrimitive.Content ref={ref} asChild {...props}>
       <motion.div
