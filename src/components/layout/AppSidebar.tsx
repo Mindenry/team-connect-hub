@@ -20,6 +20,8 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import StatusIndicator from "@/components/shared/StatusIndicator";
 import { auth, useAuth } from "@/lib/auth";
 import { usePresence } from "@/hooks/usePresence";
+import { apiPost } from "@/lib/api";
+import { toast } from "sonner";
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
 
@@ -144,8 +146,20 @@ export default function AppSidebar({
   };
 
   const isQuickHuddleRoom = (roomId: string) => roomId.startsWith("quick-huddle");
-  const createQuickHuddlePath = () =>
-    `/meeting-lobby/quick-huddle-${crypto.randomUUID()}`;
+
+  const createQuickHuddle = async () => {
+    try {
+      const meeting = await apiPost<any>("/meetings/quick-huddle", {});
+      toast.success("Quick Huddle created", {
+        description: `Meeting code: ${meeting.meetingCode}`,
+      });
+      navigate(`/meeting-lobby/${meeting.id}`);
+    } catch (err: any) {
+      toast.error("Failed to create Quick Huddle", {
+        description: err.message || "Please try again",
+      });
+    }
+  };
 
   // Quick Huddle participants from all active quick huddle rooms
   const quickHuddleParticipants = activeRooms
@@ -406,10 +420,7 @@ export default function AppSidebar({
           <div className="px-3 py-2 border-b border-sidebar-border/20 shrink-0">
             <button
               type="button"
-              onClick={() => {
-                handleNav();
-                navigate(createQuickHuddlePath());
-              }}
+              onClick={createQuickHuddle}
               className={cn(
                 "relative w-full flex items-center gap-2.5 px-3 py-2 rounded-lg",
                 "bg-sidebar-primary/10 hover:bg-sidebar-primary/20",
@@ -438,7 +449,7 @@ export default function AppSidebar({
                   type="button"
                   onClick={() => {
                     handleNav();
-                    navigate(createQuickHuddlePath());
+                    createQuickHuddle();
                   }}
                   className="relative p-2 rounded-lg text-sidebar-primary hover:bg-sidebar-primary/15 transition-all"
                 >

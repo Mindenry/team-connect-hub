@@ -755,8 +755,24 @@ export default function Meetings() {
   const [teams, setTeams] = useState<any[]>([]);
   const lastPresenceRefreshRef = useRef(0);
   const { activeRooms, refreshPresence } = usePresence();
-  const createQuickHuddlePath = () =>
-    `/meeting-lobby/quick-huddle-${crypto.randomUUID()}`;
+  const [creatingQuickHuddle, setCreatingQuickHuddle] = useState(false);
+
+  const createQuickHuddle = async () => {
+    setCreatingQuickHuddle(true);
+    try {
+      const meeting = await apiPost<any>("/meetings/quick-huddle", {});
+      toast.success("Quick Huddle created", {
+        description: `Meeting code: ${meeting.meetingCode}`,
+      });
+      navigate(`/meeting-lobby/${meeting.id}`);
+    } catch (err: any) {
+      toast.error("Failed to create Quick Huddle", {
+        description: err.message || "Please try again",
+      });
+    } finally {
+      setCreatingQuickHuddle(false);
+    }
+  };
 
   useEffect(() => {
     apiGet<any[]>("/teams")
@@ -1032,10 +1048,11 @@ export default function Meetings() {
                       variant="outline"
                       size="sm"
                       className="h-8 sm:h-9 gap-1 sm:gap-1.5 px-2 sm:px-2.5 text-[10px] sm:text-[11px] md:text-xs border-border/60 bg-background/50 hover:bg-background"
-                      onClick={() => navigate(createQuickHuddlePath())}
+                      onClick={createQuickHuddle}
+                      disabled={creatingQuickHuddle}
                     >
                       <Zap className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
-                      <span className="hidden md:inline">Quick Huddle</span>
+                      <span className="hidden md:inline">{creatingQuickHuddle ? "Creating..." : "Quick Huddle"}</span>
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>เริ่มประชุมด่วนทันที</TooltipContent>
@@ -1418,13 +1435,12 @@ export default function Meetings() {
                                 </Button>
                                 <Button
                                   variant="outline"
-                                  onClick={() =>
-                                    navigate(createQuickHuddlePath())
-                                  }
+                                  onClick={createQuickHuddle}
+                                  disabled={creatingQuickHuddle}
                                   className="gap-2 h-9 sm:h-10"
                                 >
                                   <Zap className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                                  Quick Huddle
+                                  {creatingQuickHuddle ? "Creating..." : "Quick Huddle"}
                                 </Button>
                               </div>
                             )}

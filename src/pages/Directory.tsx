@@ -175,6 +175,12 @@ export default function Directory() {
   // Audit Logs State
   const canAccess = useMemo(() => {
     const r = (user?.role || "").toLowerCase();
+    return r === "org_owner" || r === "admin" || r === "manager";
+  }, [user?.role]);
+  
+  // Only org_owner and admin can manage users and org settings
+  const canManageOrg = useMemo(() => {
+    const r = (user?.role || "").toLowerCase();
     return r === "org_owner" || r === "admin";
   }, [user?.role]);
 
@@ -695,7 +701,7 @@ export default function Directory() {
                     </TooltipTrigger><TooltipContent>ส่งออกรายชื่อ</TooltipContent></Tooltip>
                   </>
                 )}
-                {canAccess && (
+                {canManageOrg && (
                   <Button size="sm" className="h-8 sm:h-9 gap-1.5 px-2.5 text-[11px] sm:text-xs font-medium shrink-0" onClick={() => setShowInviteDialog(true)}>
                     <UserPlus className="w-3.5 h-3.5 shrink-0" /><span className="hidden sm:inline">Invite User</span>
                   </Button>
@@ -830,7 +836,7 @@ export default function Directory() {
             )}
           </motion.div>
         )}
-        {activeSection === "users" && (
+        {activeSection === "users" && canManageOrg && (
           <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} key="users" className="space-y-5">
           <Card className="border border-border/60 bg-card/80 backdrop-blur-sm shadow-sm">
             <CardHeader className="pb-3">
@@ -1149,7 +1155,7 @@ export default function Directory() {
           </motion.div>
         )}
 
-        {activeSection === "roles" && (
+        {activeSection === "roles" && canManageOrg && (
           <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} key="roles" className="space-y-5">
             <Card className="border border-border/60 bg-card/80 backdrop-blur-sm shadow-sm">
               <CardHeader className="pb-3">
@@ -1274,7 +1280,7 @@ export default function Directory() {
           </motion.div>
         )}
 
-        {activeSection === "org" && (
+        {activeSection === "org" && canManageOrg && (
           <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} key="org" className="max-w-2xl space-y-5">
             <Card className="border border-border/60 bg-card/80 backdrop-blur-sm shadow-sm">
               <CardHeader>
@@ -1510,7 +1516,7 @@ export default function Directory() {
           </motion.div>
         )}
 
-        {activeSection === "security" && (
+        {activeSection === "security" && canManageOrg && (
           <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} key="security" className="w-full space-y-5">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 w-full">
               <Card className="border border-border/60 bg-card/80 backdrop-blur-sm shadow-sm h-full flex flex-col">

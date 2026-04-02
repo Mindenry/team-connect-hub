@@ -48,6 +48,7 @@ export interface IssueLink {
   sourceId: string;
   targetId: string;
   createdAt: string;
+  direction?: 'outgoing' | 'incoming';
   source?: { id: string; title: string; issueType?: string; status?: string };
   target?: { id: string; title: string; issueType?: string; status?: string };
 }

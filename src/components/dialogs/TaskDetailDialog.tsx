@@ -57,7 +57,7 @@ import { auth } from "@/lib/auth";
 import { apiGet, apiPost, apiPatch, apiDelete, apiFetch } from "@/lib/api";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import type { Task, Subtask, TaskComment, TaskActivityLog, TaskAttachment, TaskWatcher } from "@/components/tasks/types";
+import type { Task, Subtask, TaskComment, TaskActivityLog, TaskAttachment, TaskWatcher, IssueLink } from "@/components/tasks/types";
 import { PRIORITY_CONFIG, STATUS_CONFIG, ALL_STATUSES } from "@/components/tasks/types";
 
 interface TaskDetailDialogProps {
@@ -196,6 +196,13 @@ export default function TaskDetailDialog({
   // Confirm delete
   const [confirmDelete, setConfirmDelete] = useState(false);
 
+  // Issue Links
+  const [issueLinks, setIssueLinks] = useState<IssueLink[]>([]);
+  const [showLinkInput, setShowLinkInput] = useState(false);
+  const [linkTaskId, setLinkTaskId] = useState("");
+  const [linkType, setLinkType] = useState("relates");
+  const [linkLoading, setLinkLoading] = useState(false);
+
   useEffect(() => {
     if (open && taskProp?.id) {
       setLoading(true);
@@ -205,12 +212,15 @@ export default function TaskDetailDialog({
       setConfirmDelete(false);
       setBottomTab("comments");
       setShowSubtaskInput(false);
+      setShowLinkInput(false);
       Promise.all([
         apiGet<Task>(`/tasks/${taskProp.id}`),
         apiGet<any[]>("/users").catch(() => []),
-      ]).then(([t, u]) => {
+        apiGet<IssueLink[]>(`/tasks/${taskProp.id}/links`).catch(() => []),
+      ]).then(([t, u, links]) => {
         setFullTask(t as Task);
         setUsers(Array.isArray(u) ? u : []);
+        setIssueLinks(Array.isArray(links) ? links : []);
         if (t) {
           setEditTitle(t.title || "");
           setEditDesc(t.description || "");
@@ -388,6 +398,76 @@ export default function TaskDetailDialog({
         setFullTask({ ...fullTask, watchers: [...watchers, newWatcher] });
       }
     } catch { toast.error("Failed to update watch status"); }
+  };
+
+  // Add watcher (for multi-assignee)
+  const addWatcher = async (userId: string) => {
+    if (!fullTask) return;
+    try {
+      const w = await apiPost<TaskWatcher>("/task-watchers", { taskId: fullTask.id, userId });
+      const user = users.find((u) => u.id === userId);
+      const newWatcher = { ...w, user: { id: userId, name: user?.name || "Unknown", avatar: user?.avatar } };
+      setFullTask({ ...fullTask, watchers: [...watchers, newWatcher] });
+      toast.success("Assignee added");
+    } catch {
+      toast.error("Failed to add assignee");
+    }
+  };
+
+  // Delete watcher (for multi-assignee)
+  const deleteWatcher = async (watcherId: string) => {
+    try {
+      const watcher = watchers.find((w) => w.id === watcherId);
+      if (watcher) {
+        await apiDelete(`/task-watchers?taskId=${fullTask?.id}&userId=${watcher.userId}`);
+        setFullTask({ ...fullTask!, watchers: watchers.filter((w) => w.id !== watcherId) });
+      }
+    } catch {
+      toast.error("Failed to remove assignee");
+    }
+  };
+
+  // Issue Link handlers
+  const addIssueLink = async () => {
+    if (!fullTask || !linkTaskId.trim()) return;
+    setLinkLoading(true);
+    try {
+      const link = await apiPost<IssueLink>(`/tasks/${fullTask.id}/links`, {
+        targetId: linkTaskId.trim(),
+        type: linkType,
+      });
+      setIssueLinks([...issueLinks, link]);
+      setLinkTaskId("");
+      setShowLinkInput(false);
+      toast.success("Link added");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to add link");
+    } finally {
+      setLinkLoading(false);
+    }
+  };
+
+  const deleteIssueLink = async (linkId: string) => {
+    try {
+      await apiDelete(`/tasks/links/${linkId}`);
+      setIssueLinks(issueLinks.filter((l) => l.id !== linkId));
+      toast.success("Link removed");
+    } catch {
+      toast.error("Failed to remove link");
+    }
+  };
+
+  const getLinkTypeLabel = (type: string) => {
+    const labels: Record<string, string> = {
+      blocks: "blocks",
+      blocked_by: "blocked by",
+      relates: "relates to",
+      duplicates: "duplicates",
+      duplicated_by: "duplicated by",
+      clones: "clones",
+      cloned_by: "cloned by",
+    };
+    return labels[type] || type;
   };
 
   const priorityKey = (fullTask?.priority || "medium") as keyof typeof PRIORITY_CONFIG;
@@ -699,24 +779,77 @@ export default function TaskDetailDialog({
                       <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Task Summary</span>
                     </div>
 
-                    {/* Assignee */}
-                    <SidebarField label="Assignee" icon={User}>
-                      <Select value={fullTask.assigneeId || "none"} onValueChange={(v) => patchTask({ assigneeId: v === "none" ? null : v })}>
-                        <SelectTrigger className="h-8 w-full text-xs rounded-md">
-                          {fullTask.assignee ? (
-                            <div className="flex items-center gap-2">
-                              <Avatar className="h-5 w-5"><AvatarImage src={fullTask.assignee.avatar || undefined} /><AvatarFallback className="text-[8px]">{getInitials(fullTask.assignee.name)}</AvatarFallback></Avatar>
-                              <span className="truncate">{fullTask.assignee.name}</span>
-                            </div>
-                          ) : <span className="text-muted-foreground">Unassigned</span>}
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">Unassigned</SelectItem>
-                          {users.map((u) => (
-                            <SelectItem key={u.id} value={u.id}><span className="flex items-center gap-2"><Avatar className="h-4 w-4"><AvatarImage src={u.avatar} /><AvatarFallback className="text-[7px]">{getInitials(u.name)}</AvatarFallback></Avatar>{u.name}</span></SelectItem>
+                    {/* Assignees */}
+                    <SidebarField label="Assignees" icon={Users}>
+                      <div className="space-y-2">
+                        {/* Show all assignees equally (primary + watchers combined) */}
+                        <div className="flex flex-wrap gap-1">
+                          {fullTask.assignee && (
+                            <Badge variant="secondary" className="text-xs gap-1 pr-1 items-center">
+                              <Avatar className="h-4 w-4">
+                                <AvatarImage src={fullTask.assignee.avatar || undefined} />
+                                <AvatarFallback className="text-[8px]">{getInitials(fullTask.assignee.name)}</AvatarFallback>
+                              </Avatar>
+                              <span className="truncate max-w-[80px]">{fullTask.assignee.name}</span>
+                              {fullTask.assigneeId !== currentUser?.id && (
+                                <button
+                                  onClick={() => patchTask({ assigneeId: null })}
+                                  className="hover:text-destructive transition-colors ml-0.5"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              )}
+                            </Badge>
+                          )}
+                          {watchers.filter((w) => w.userId !== fullTask.assigneeId).map((w) => (
+                            <Badge key={w.id} variant="secondary" className="text-xs gap-1 pr-1 items-center">
+                              <Avatar className="h-4 w-4">
+                                <AvatarImage src={w.user?.avatar || undefined} />
+                                <AvatarFallback className="text-[8px]">{getInitials(w.user?.name || "?")}</AvatarFallback>
+                              </Avatar>
+                              <span className="truncate max-w-[80px]">{w.user?.name}</span>
+                              <button
+                                onClick={() => deleteWatcher(w.id)}
+                                className="hover:text-destructive transition-colors ml-0.5"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </Badge>
                           ))}
-                        </SelectContent>
-                      </Select>
+                          {!fullTask.assignee && watchers.filter((w) => w.userId !== fullTask.assigneeId).length === 0 && (
+                            <span className="text-xs text-muted-foreground">No assignees</span>
+                          )}
+                        </div>
+                        {/* Add assignee dropdown */}
+                        <Select
+                          value=""
+                          onValueChange={(v) => {
+                            if (v && v !== "none") {
+                              // Add as watcher (which shows as assignee in UI)
+                              addWatcher(v);
+                            }
+                          }}
+                        >
+                          <SelectTrigger className="h-8 w-full text-xs rounded-md">
+                            <span className="text-muted-foreground">Add assignee...</span>
+                          </SelectTrigger>
+                          <SelectContent>
+                            {users
+                              .filter((u) => u.id !== fullTask.assigneeId && !watchers.some((w) => w.userId === u.id))
+                              .map((u) => (
+                                <SelectItem key={u.id} value={u.id}>
+                                  <span className="flex items-center gap-2">
+                                    <Avatar className="h-4 w-4">
+                                      <AvatarImage src={u.avatar} />
+                                      <AvatarFallback className="text-[7px]">{getInitials(u.name)}</AvatarFallback>
+                                    </Avatar>
+                                    {u.name}
+                                  </span>
+                                </SelectItem>
+                              ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </SidebarField>
 
                     {/* Recurring Task */}
@@ -782,23 +915,68 @@ export default function TaskDetailDialog({
                       </div>
                     </div>
 
-
-                    {/* Watchers */}
+                    {/* Issue Links */}
                     <div className="rounded-lg border border-border/50 p-3 space-y-2 bg-background">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
-                          <Eye className="w-3.5 h-3.5 text-muted-foreground" />
-                          <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Watchers</span>
-                          <span className="text-[11px] bg-muted px-1.5 py-0.5 rounded-full font-medium">{watchers.length}</span>
+                          <Link2 className="w-3.5 h-3.5 text-muted-foreground" />
+                          <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Links</span>
+                          <span className="text-[11px] bg-muted px-1.5 py-0.5 rounded-full font-medium">{issueLinks.length}</span>
                         </div>
-                        <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={toggleWatch}>
-                          <Eye className="w-3 h-3" /> {isWatching ? "Watching" : "Watch"}
+                        <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => setShowLinkInput(true)}>
+                          <Plus className="w-3 h-3" /> Add
                         </Button>
                       </div>
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        {watchers.length > 0 ? watchers.map((w) => (
-                          <Tooltip key={w.id}><TooltipTrigger><Avatar className="h-6 w-6 border border-background"><AvatarImage src={w.user?.avatar || undefined} /><AvatarFallback className="text-[8px]">{getInitials(w.user?.name || "?")}</AvatarFallback></Avatar></TooltipTrigger><TooltipContent>{w.user?.name}</TooltipContent></Tooltip>
-                        )) : <span className="text-xs text-muted-foreground">No watchers</span>}
+                      
+                      {showLinkInput && (
+                        <div className="space-y-2 pt-1">
+                          <Select value={linkType} onValueChange={setLinkType}>
+                            <SelectTrigger className="h-7 text-xs rounded-md">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="relates">Relates to</SelectItem>
+                              <SelectItem value="blocks">Blocks</SelectItem>
+                              <SelectItem value="blocked_by">Blocked by</SelectItem>
+                              <SelectItem value="duplicates">Duplicates</SelectItem>
+                              <SelectItem value="clones">Clones</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <Input
+                            placeholder="Task ID to link..."
+                            value={linkTaskId}
+                            onChange={(e) => setLinkTaskId(e.target.value)}
+                            className="h-7 text-xs rounded-md"
+                          />
+                          <div className="flex gap-1">
+                            <Button size="sm" className="h-6 text-[10px] flex-1" onClick={addIssueLink} disabled={linkLoading || !linkTaskId.trim()}>
+                              {linkLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : "Link"}
+                            </Button>
+                            <Button size="sm" variant="ghost" className="h-6 text-[10px]" onClick={() => { setShowLinkInput(false); setLinkTaskId(""); }}>Cancel</Button>
+                          </div>
+                        </div>
+                      )}
+                      
+                      <div className="space-y-1">
+                        {issueLinks.length > 0 ? issueLinks.map((link) => {
+                          const linkedTask = link.direction === 'outgoing' ? link.target : link.source;
+                          return (
+                            <div key={link.id} className="flex items-center justify-between text-xs py-1 group">
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <span className="text-muted-foreground shrink-0">{getLinkTypeLabel(link.type)}</span>
+                                <span className="truncate font-medium">{linkedTask?.title || link.targetId}</span>
+                              </div>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-5 w-5 p-0 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive"
+                                onClick={() => deleteIssueLink(link.id)}
+                              >
+                                <X className="w-3 h-3" />
+                              </Button>
+                            </div>
+                          );
+                        }) : !showLinkInput && <span className="text-xs text-muted-foreground">No linked issues</span>}
                       </div>
                     </div>
 

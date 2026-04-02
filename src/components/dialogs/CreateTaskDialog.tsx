@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   Plus,
   X,
@@ -26,6 +27,7 @@ import {
   Tag,
   Repeat,
   Loader2,
+  Users,
 } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { apiGet, apiPost } from "@/lib/api";
@@ -66,7 +68,7 @@ export default function CreateTaskDialog({
   const [priority, setPriority] = useState<string>("medium");
   const [status, setStatus] = useState<string>(defaultStatus || "todo");
   const [dueDate, setDueDate] = useState("");
-  const [assigneeId, setAssigneeId] = useState<string>("");
+  const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
   const [teamId, setTeamId] = useState<string>(defaultTeamId || "");
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState("");
@@ -113,7 +115,7 @@ export default function CreateTaskDialog({
     setPriority("medium");
     setStatus(defaultStatus || "todo");
     setDueDate("");
-    setAssigneeId("");
+    setAssigneeIds([]);
     setTeamId(defaultTeamId || "");
     setTags([]);
     setTagInput("");
@@ -159,6 +161,10 @@ export default function CreateTaskDialog({
     }
     setSubmitting(true);
     try {
+      // First assignee goes to assigneeId, rest go to watchers
+      const primaryAssignee = assigneeIds[0] || null;
+      const additionalAssignees = assigneeIds.slice(1);
+      
       const payload: any = {
         title: title.trim(),
         description: description.trim() || undefined,
@@ -168,7 +174,8 @@ export default function CreateTaskDialog({
         createdBy: currentUser?.id,
       };
       if (dueDate) payload.dueDate = new Date(dueDate).toISOString();
-      if (assigneeId && assigneeId !== "none") payload.assigneeId = assigneeId;
+      if (primaryAssignee) payload.assigneeId = primaryAssignee;
+      if (additionalAssignees.length > 0) payload.watcherIds = additionalAssignees;
       if (teamId && teamId !== "none") payload.teamId = teamId;
       if (initialMeetingId) payload.meetingId = initialMeetingId;
       if (storyPoints) payload.storyPoints = parseInt(storyPoints);
@@ -280,7 +287,7 @@ export default function CreateTaskDialog({
             </div>
           </div>
 
-          {/* Team & Assignee */}
+            {/* Team & Assignees */ }
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label className="text-xs font-medium text-muted-foreground">Team</Label>
@@ -297,18 +304,45 @@ export default function CreateTaskDialog({
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-muted-foreground">Assignee</Label>
-              <Select value={assigneeId} onValueChange={setAssigneeId}>
+              <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                <Users className="w-3 h-3" /> Assignees
+              </Label>
+              <Select
+                value=""
+                onValueChange={(id) => {
+                  if (id && id !== "none" && !assigneeIds.includes(id)) {
+                    setAssigneeIds([...assigneeIds, id]);
+                  }
+                }}
+              >
                 <SelectTrigger className="h-9 rounded-lg text-sm">
-                  <SelectValue placeholder="Assign to..." />
+                  <SelectValue placeholder="Add assignee..." />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">Unassigned</SelectItem>
-                  {users.map((u) => (
+                  {users.filter((u) => !assigneeIds.includes(u.id)).map((u) => (
                     <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+              {assigneeIds.length > 0 && (
+                <div className="flex flex-wrap gap-1 mt-1.5">
+                  {assigneeIds.map((id) => {
+                    const u = users.find((usr) => usr.id === id);
+                    return (
+                      <Badge key={id} variant="secondary" className="text-xs gap-1 pr-1 items-center">
+                        <Avatar className="w-4 h-4">
+                          <AvatarImage src={u?.avatar} />
+                          <AvatarFallback className="text-[8px]">{u?.name?.split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase()}</AvatarFallback>
+                        </Avatar>
+                        {u?.name || id}
+                        <button onClick={() => setAssigneeIds(assigneeIds.filter((a) => a !== id))} className="hover:text-destructive transition-colors ml-0.5">
+                          <X className="w-3 h-3" />
+                        </button>
+                      </Badge>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
 

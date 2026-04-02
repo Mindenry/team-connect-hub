@@ -20,6 +20,7 @@ import {
   BarChart3,
   Users,
   Loader2,
+  FileText,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -51,6 +52,7 @@ import {
 } from "@/components/ui/tooltip";
 import CreateTaskDialog from "@/components/dialogs/CreateTaskDialog";
 import TaskDetailDialog from "@/components/dialogs/TaskDetailDialog";
+import TaskTemplateDialog from "@/components/dialogs/TaskTemplateDialog";
 import { auth } from "@/lib/auth";
 import { apiGet, apiPatch } from "@/lib/api";
 import { toast } from "sonner";
@@ -233,7 +235,7 @@ function TaskListView({
   onTaskClick: (t: Task) => void;
   groupBy: string;
 }) {
-  const grouped = useMemo(() => {
+  const grouped: [string, Task[]][] = useMemo(() => {
     if (groupBy === "status") {
       const groups: Record<string, Task[]> = {};
       ALL_STATUSES.forEach((s) => (groups[s] = []));
@@ -546,6 +548,8 @@ export default function Tasks() {
 
   // Dialogs
   const [showCreateTask, setShowCreateTask] = useState(false);
+  const [showTemplateDialog, setShowTemplateDialog] = useState(false);
+  const [editingTemplate, setEditingTemplate] = useState<any>(null);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
 
   // Check for state-passed task (from dashboard)
@@ -690,6 +694,12 @@ export default function Tasks() {
           onOpenChange={setShowCreateTask}
           onCreated={handleTaskCreated}
         />
+        <TaskTemplateDialog
+          open={showTemplateDialog}
+          onOpenChange={(v) => { setShowTemplateDialog(v); if (!v) setEditingTemplate(null); }}
+          template={editingTemplate}
+          onSaved={() => { loadTasks(); toast.success("Template saved"); }}
+        />
         <TaskDetailDialog
           open={!!selectedTask}
           onOpenChange={(open) => { if (!open) setSelectedTask(null); }}
@@ -829,6 +839,15 @@ export default function Tasks() {
               </div>
 
               <div className="flex items-center gap-1 sm:gap-1.5 md:gap-2 self-stretch sm:self-auto justify-end flex-wrap">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-8 sm:h-9 gap-1 sm:gap-1.5 px-2 sm:px-2.5 text-[10px] sm:text-[11px] md:text-xs font-medium shrink-0"
+                  onClick={() => setShowTemplateDialog(true)}
+                >
+                  <FileText className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
+                  <span className="hidden md:inline">Template</span>
+                </Button>
                 <Button
                   size="sm"
                   className="h-8 sm:h-9 gap-1 sm:gap-1.5 px-2 sm:px-2.5 text-[10px] sm:text-[11px] md:text-xs font-medium shrink-0"

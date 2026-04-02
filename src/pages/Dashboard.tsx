@@ -36,8 +36,9 @@ import JoinMeetingByCodeDialog from "@/components/dialogs/JoinMeetingByCodeDialo
 
 import { auth } from "@/lib/auth";
 import { usePresence } from "@/hooks/usePresence";
-import { apiGet, apiPatch } from "@/lib/api";
+import { apiGet, apiPatch, apiPost } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 type MeetingItem = {
   id: string;
@@ -532,8 +533,19 @@ export default function Dashboard() {
     }
   };
 
-  const createQuickHuddlePath = () =>
-    `/meeting-lobby/quick-huddle-${crypto.randomUUID()}`;
+  const createQuickHuddle = async () => {
+    try {
+      const meeting = await apiPost<any>("/meetings/quick-huddle", {});
+      toast.success("Quick Huddle created", {
+        description: `Meeting code: ${meeting.meetingCode}`,
+      });
+      navigate(`/meeting-lobby/${meeting.id}`);
+    } catch (err: any) {
+      toast.error("Failed to create Quick Huddle", {
+        description: err.message || "Please try again",
+      });
+    }
+  };
 
   const kpiCards = [
     { 
@@ -716,7 +728,7 @@ export default function Dashboard() {
                 <Button
                   size="sm"
                   className="h-9 gap-1.5 text-xs bg-gradient-to-r from-primary to-blue-600 hover:from-primary/90 hover:to-blue-500 shadow-md hover:shadow-lg transition-all group"
-                  onClick={() => navigate(createQuickHuddlePath())}
+                  onClick={createQuickHuddle}
                 >
                   <Video className="h-3.5 w-3.5 group-hover:scale-110 transition-transform" />
                   <span className="hidden sm:inline">Start Meeting</span>
@@ -957,7 +969,7 @@ export default function Dashboard() {
                         <Button
                           size="sm"
                           className="gap-1.5 h-8 text-xs bg-gradient-to-r from-primary to-blue-600"
-                          onClick={() => navigate(createQuickHuddlePath())}
+                          onClick={createQuickHuddle}
                         >
                           <Video className="h-4 w-4" />
                           Start Meeting
@@ -1339,7 +1351,7 @@ export default function Dashboard() {
                       <Button
                         size="sm"
                         className="gap-1.5 h-8 text-xs bg-gradient-to-r from-primary to-blue-600"
-                        onClick={() => navigate(createQuickHuddlePath())}
+                        onClick={createQuickHuddle}
                       >
                         <Video className="h-3.5 w-3.5" />
                         Start Meeting

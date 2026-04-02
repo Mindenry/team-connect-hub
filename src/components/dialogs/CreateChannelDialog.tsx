@@ -1,9 +1,8 @@
 import { useState, useEffect } from "react";
-import { Hash, Megaphone, Volume2 } from "lucide-react";
+import { Hash, Megaphone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   AnimatedDialog as Dialog,
@@ -29,14 +28,12 @@ interface CreateChannelDialogProps {
 const channelTypes = [
   { value: "general", label: "General", desc: "For team discussions and updates", icon: Hash },
   { value: "announcement", label: "Announcement", desc: "Important announcements, limited posting", icon: Megaphone },
-  { value: "voice", label: "Voice", desc: "Quick voice chats and huddles", icon: Volume2 },
 ];
 
 export default function CreateChannelDialog({ open, onOpenChange, onChannelCreated }: CreateChannelDialogProps) {
   const [channelName, setChannelName] = useState("");
   const [channelType, setChannelType] = useState("general");
   const [teamId, setTeamId] = useState("");
-  const [description, setDescription] = useState("");
   const [teams, setTeams] = useState<Team[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -63,14 +60,12 @@ export default function CreateChannelDialog({ open, onOpenChange, onChannelCreat
         name: channelName.toLowerCase().replace(/\s+/g, "-"),
         type: channelType,
         teamId,
-        description: description || undefined,
       });
       onChannelCreated?.(channel);
       onOpenChange(false);
       setChannelName("");
       setChannelType("general");
       setTeamId("");
-      setDescription("");
     } catch (err) {
       setError("Failed to create channel. Please try again.");
     } finally {
@@ -83,7 +78,6 @@ export default function CreateChannelDialog({ open, onOpenChange, onChannelCreat
     setChannelName("");
     setChannelType("general");
     setTeamId("");
-    setDescription("");
     setError("");
   };
 
@@ -150,15 +144,6 @@ export default function CreateChannelDialog({ open, onOpenChange, onChannelCreat
                   )}
                 </SelectContent>
               </Select>
-            </div>
-            <div>
-              <Label>Description (optional)</Label>
-              <Textarea
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="What is this channel about?"
-                className="mt-1"
-              />
             </div>
             {error && <p className="text-sm text-destructive">{error}</p>}
           </div>
