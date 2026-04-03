@@ -294,8 +294,10 @@ export default function Reports() {
           case "pdf":
             exportUtils.toPDF(data, filenameBase, {
               title: `${activeTab.charAt(0).toUpperCase() + activeTab.slice(1)} Report`,
-              subtitle: `Generated on ${new Date().toLocaleDateString("th-TH")} | ${currentRangeLabel}`,
-              orientation: "landscape",
+              subtitle: currentRangeLabel,
+              orientation: "portrait",
+              reportType: activeTab,
+              reportData: personalReport,
             });
             break;
         }
@@ -400,7 +402,7 @@ export default function Reports() {
                         <KpiCard title="งานที่เสร็จแล้ว" value={personalReport.tasksCompleted ?? 0} suffix="งาน" icon={CheckSquare} gradient="from-emerald-500 to-teal-500" shadowColor="shadow-emerald-500/20" />
                         <KpiCard title="การประชุมที่เข้าร่วม" value={personalReport.meetingsAttended ?? 0} suffix="การประชุม" icon={Calendar} gradient="from-blue-500 to-cyan-500" shadowColor="shadow-blue-500/20" />
                         <KpiCard title="ข้อความที่ส่ง" value={personalReport.messagesSent ?? 0} suffix="ข้อความ" icon={MessageSquare} gradient="from-violet-500 to-purple-500" shadowColor="shadow-violet-500/20" />
-                        <ProductivityScoreCard score={personalReport.productivityScore ?? 0} />
+                        <ProductivityScoreCard score={personalReport.productivityScore ?? 0} breakdown={personalReport.productivityBreakdown} />
                       </div>
                     )}
 
@@ -523,7 +525,7 @@ export default function Reports() {
                           <KpiCard title="งานที่เสร็จแล้ว" value={personalReport.tasksCompleted ?? 0} suffix="งาน" icon={CheckSquare} gradient="from-emerald-500 to-teal-500" shadowColor="shadow-emerald-500/20" />
                           <KpiCard title="การประชุมที่เข้าร่วม" value={personalReport.meetingsAttended ?? 0} suffix="ครั้ง" icon={Calendar} gradient="from-blue-500 to-cyan-500" shadowColor="shadow-blue-500/20" />
                           <KpiCard title="ข้อความที่ส่ง" value={personalReport.messagesSent ?? 0} suffix="ข้อความ" icon={MessageSquare} gradient="from-violet-500 to-purple-500" shadowColor="shadow-violet-500/20" />
-                          <ProductivityScoreCard score={personalReport.productivityScore ?? 0} />
+                          <ProductivityScoreCard score={personalReport.productivityScore ?? 0} breakdown={personalReport.productivityBreakdown} />
                         </div>
 
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
