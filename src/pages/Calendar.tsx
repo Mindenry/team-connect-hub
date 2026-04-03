@@ -647,7 +647,7 @@ export default function TeamCalendar() {
                         </CardContent>
                       </Card>
                     </motion.div>
-                  )
+                  )}
                 </AnimatePresence>
 
                 <DragOverlay>

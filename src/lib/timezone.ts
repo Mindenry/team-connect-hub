@@ -1,5 +1,5 @@
 import { format, parseISO } from "date-fns";
-import { utcToZonedTime, zonedTimeToUtc } from "date-fns-tz";
+import { toDate, format as tzFormat } from "date-fns-tz";
 import { th, enUS } from "date-fns/locale";
 import { loadTimezone } from "@/components/settings/utils";
 import i18n from "./i18n";
@@ -22,7 +22,7 @@ export function getTimezone(): string {
 export function toLocalTime(utcDateString: string | Date): Date {
   const timezone = getTimezone();
   const date = typeof utcDateString === "string" ? parseISO(utcDateString) : utcDateString;
-  return utcToZonedTime(date, timezone);
+  return toDate(date, { timeZone: timezone });
 }
 
 /**
@@ -30,7 +30,9 @@ export function toLocalTime(utcDateString: string | Date): Date {
  */
 export function toUtc(localDate: Date): Date {
   const timezone = getTimezone();
-  return zonedTimeToUtc(localDate, timezone);
+  // Convert to UTC by formatting and parsing
+  const utcString = localDate.toISOString();
+  return parseISO(utcString);
 }
 
 /**
@@ -115,7 +117,7 @@ export function formatRelative(date: string | Date): string {
  */
 export function nowInTimezone(): Date {
   const timezone = getTimezone();
-  return utcToZonedTime(new Date(), timezone);
+  return toDate(new Date(), { timeZone: timezone });
 }
 
 /**
