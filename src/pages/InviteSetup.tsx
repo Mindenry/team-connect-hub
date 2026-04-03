@@ -520,14 +520,14 @@ export default function InviteSetup() {
 
         {/* ── Right Form Panel ── */}
         <div
-          className="lg:col-span-3 flex flex-col items-center justify-center px-6 py-10 relative overflow-y-auto"
+          className="lg:col-span-3 flex flex-col items-center justify-center px-4 sm:px-6 py-8 sm:py-10 relative overflow-y-auto"
           style={{
             background: "linear-gradient(180deg, #0f172a 0%, #0b1120 100%)",
           }}
         >
           {/* Mobile logo */}
           <motion.div
-            className="lg:hidden flex items-center gap-3 mb-6"
+            className="lg:hidden flex items-center gap-2 sm:gap-3 mb-5 sm:mb-6"
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4 }}
@@ -546,7 +546,7 @@ export default function InviteSetup() {
           <MobileStepIndicator currentStep={step} />
 
           <motion.div
-            className="w-full max-w-md"
+            className="w-full max-w-md px-1 sm:px-0"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}

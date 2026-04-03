@@ -10,7 +10,7 @@ export function PageShell({
   className?: string;
 }) {
   return (
-    <PageTransition className={cn("mx-auto w-full max-w-[1400px] p-3 xs:p-4 sm:p-6 md:p-8 space-y-4 sm:space-y-5 md:space-y-7", className)}>
+    <PageTransition className={cn("mx-auto w-full max-w-[1400px] 3xl:max-w-[1800px] 4xl:max-w-[2200px] p-3 xs:p-4 sm:p-6 md:p-8 3xl:p-10 4xl:p-12 space-y-4 sm:space-y-5 md:space-y-7", className)}>
       {children}
     </PageTransition>
   );

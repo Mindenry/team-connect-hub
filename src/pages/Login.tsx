@@ -510,14 +510,14 @@ export default function Login() {
 
         {/* ── Right Login Panel ── */}
         <div
-          className="flex flex-col items-center justify-center px-6 py-12 relative"
+          className="flex flex-col items-center justify-center px-4 sm:px-6 py-8 sm:py-12 relative"
           style={{
             background: "linear-gradient(180deg, #0f172a 0%, #0b1120 100%)",
           }}
         >
           {/* Mobile logo (visible only on small screens) */}
           <motion.div
-            className="lg:hidden flex items-center gap-3 mb-10"
+            className="lg:hidden flex items-center gap-2 sm:gap-3 mb-8 sm:mb-10"
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4 }}
@@ -558,17 +558,17 @@ export default function Login() {
           </motion.div>
 
           <motion.div
-            className="w-full max-w-sm"
+            className="w-full max-w-sm px-1 sm:px-0"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, ease: "easeOut" }}
           >
             {/* Header */}
-            <div className="mb-8">
-              <h2 className="text-2xl font-bold text-white tracking-tight">
+            <div className="mb-6 sm:mb-8">
+              <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
                 Welcome back
               </h2>
-              <p className="text-slate-400 text-sm mt-2">
+              <p className="text-slate-400 text-xs sm:text-sm mt-1.5 sm:mt-2">
                 Sign in to your workspace to continue
               </p>
             </div>

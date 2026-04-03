@@ -162,7 +162,7 @@ export default function Announcements() {
       <div className="flex flex-col h-screen bg-gradient-to-br from-background via-background to-muted/20">
         {/* Modern Header */}
         <div className="border-b border-border/50 bg-background/95 backdrop-blur-xl supports-[backdrop-filter]:bg-background/80">
-          <div className="max-w-[1920px] mx-auto px-6 lg:px-8">
+          <div className="max-w-[1920px] mx-auto px-3 sm:px-4 md:px-6 lg:px-8">
             <div className="h-20 flex items-center justify-between gap-6">
               {/* Left: Logo & Title */}
               <div className="flex items-center gap-4 min-w-0 flex-1">
@@ -199,7 +199,7 @@ export default function Announcements() {
         {/* Stats Bar */}
         {unreadCount > 0 && (
           <div className="border-b border-border/50 bg-gradient-to-r from-primary/10 via-primary/5 to-transparent">
-            <div className="max-w-[1920px] mx-auto px-6 lg:px-8 py-4">
+            <div className="max-w-[1920px] mx-auto px-3 sm:px-4 md:px-6 lg:px-8 py-3 sm:py-4">
               <div className="flex items-center gap-6 flex-wrap">
                 <div className="flex items-center gap-2">
                   <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
@@ -227,7 +227,7 @@ export default function Announcements() {
 
         {/* Content */}
         <div className="flex-1 overflow-hidden flex flex-col">
-          <div className="max-w-[1920px] mx-auto px-6 lg:px-8 py-6 h-full flex flex-col overflow-y-auto">
+          <div className="max-w-[1920px] mx-auto px-3 sm:px-4 md:px-6 lg:px-8 py-4 sm:py-6 h-full flex flex-col overflow-y-auto">
             {loading ? (
               <div className="h-full flex items-center justify-center">
                 <div className="flex flex-col items-center gap-3">

@@ -326,7 +326,7 @@ export default function SharedDrive() {
       <div className="flex flex-col h-screen bg-gradient-to-br from-background via-background to-muted/20">
         {/* Modern Header */}
         <div className="border-b border-border/50 bg-background/95 backdrop-blur-xl supports-[backdrop-filter]:bg-background/80">
-          <div className="max-w-7xl mx-auto px-6 lg:px-8">
+          <div className="max-w-7xl 3xl:max-w-[1600px] 4xl:max-w-[2000px] mx-auto px-3 sm:px-4 md:px-6 lg:px-8">
             <div className="h-20 flex items-center justify-between gap-6">
               {/* Left: Logo & Title */}
               <div className="flex items-center gap-4 min-w-0 flex-1">
@@ -382,7 +382,7 @@ export default function SharedDrive() {
 
         {/* Main Content */}
         <div className="flex-1 overflow-hidden">
-          <div className="max-w-7xl mx-auto px-6 lg:px-8 h-full flex flex-col">
+          <div className="max-w-7xl 3xl:max-w-[1600px] 4xl:max-w-[2000px] mx-auto px-3 sm:px-4 md:px-6 lg:px-8 h-full flex flex-col">
             {/* Toolbar */}
             <div className="py-6 space-y-4">
               {/* Breadcrumb Navigation */}

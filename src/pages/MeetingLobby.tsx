@@ -357,8 +357,8 @@ export default function MeetingLobby() {
   const avatarUrl = currentUser?.avatar?.startsWith("/") ? `${API_BASE}${currentUser.avatar}` : currentUser?.avatar;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#0a0a0a] via-[#1a1a1a] to-[#0f0f0f] text-white flex items-center justify-center font-sans overflow-hidden p-4">
-      <div className="w-full max-w-[1400px] grid grid-cols-1 lg:grid-cols-[1.2fr_0.8fr] gap-8 items-center">
+    <div className="min-h-screen bg-gradient-to-br from-[#0a0a0a] via-[#1a1a1a] to-[#0f0f0f] text-white flex items-center justify-center font-sans overflow-hidden p-3 sm:p-4">
+      <div className="w-full max-w-[1400px] 3xl:max-w-[1800px] 4xl:max-w-[2200px] grid grid-cols-1 lg:grid-cols-[1.2fr_0.8fr] gap-6 sm:gap-8 items-center">
         <div className="space-y-6">
           <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }} className="text-center lg:text-left">
             <h1 className="text-5xl font-bold tracking-tight text-white mb-3 bg-gradient-to-r from-white to-white/80 bg-clip-text text-transparent">{meetingTitle}</h1>

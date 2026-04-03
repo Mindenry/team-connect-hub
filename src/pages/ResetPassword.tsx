@@ -96,10 +96,10 @@ export default function ResetPassword() {
 
   if (success) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background p-4 relative overflow-hidden">
+      <div className="min-h-screen flex items-center justify-center bg-background p-3 sm:p-4 relative overflow-hidden">
         <div className="absolute inset-0 bg-grid-white/[0.02] bg-[size:50px_50px]" />
         <Card className="w-full max-w-md bg-card/50 backdrop-blur-xl border-border/50 relative z-10">
-          <CardContent className="pt-10 pb-8 px-8 flex flex-col items-center text-center">
+          <CardContent className="pt-8 sm:pt-10 pb-6 sm:pb-8 px-6 sm:px-8 flex flex-col items-center text-center">
             <motion.div
               initial={{ scale: 0 }}
               animate={{ scale: 1 }}
@@ -123,7 +123,7 @@ export default function ResetPassword() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background p-4 relative overflow-hidden">
+    <div className="min-h-screen flex items-center justify-center bg-background p-3 sm:p-4 relative overflow-hidden">
       {/* Dynamic Background Elements */}
       <div className="absolute inset-0 bg-grid-white/[0.02] bg-[size:50px_50px]" />
       <div className="absolute -top-1/2 -left-1/2 w-full h-full bg-gradient-to-br from-primary/10 to-transparent rounded-full blur-3xl opacity-50" />
@@ -133,7 +133,7 @@ export default function ResetPassword() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
-        className="w-full max-w-md relative z-10"
+        className="w-full max-w-md px-1 sm:px-0 relative z-10"
       >
         <div className="flex justify-center mb-8">
           <div className="flex items-center gap-3">
@@ -147,7 +147,7 @@ export default function ResetPassword() {
         </div>
 
         <Card className="border-border/50 bg-card/50 backdrop-blur-xl shadow-2xl">
-          <CardContent className="pt-8 pb-8 px-8">
+          <CardContent className="pt-6 sm:pt-8 pb-6 sm:pb-8 px-6 sm:px-8">
             <div className="mb-6 text-center">
               <p className="text-sm text-muted-foreground">
                 กรุณากำหนดรหัสผ่านใหม่ของคุณ รหัสผ่านที่ดีควรประกอบด้วยตัวอักษรและตัวเลข

@@ -313,7 +313,7 @@ export default function Teams() {
         />
 
         <div className="flex-1 overflow-hidden">
-          <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 h-full flex flex-col">
+          <div className="max-w-7xl 3xl:max-w-[1600px] 4xl:max-w-[2000px] mx-auto px-3 sm:px-4 md:px-6 lg:px-8 h-full flex flex-col">
             <div className="py-3 sm:py-4 md:py-5 space-y-3 sm:space-y-4">
               <TeamFilters
                 searchQuery={searchQuery}

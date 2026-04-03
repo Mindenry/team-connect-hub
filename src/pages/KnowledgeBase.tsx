@@ -206,7 +206,7 @@ export default function KnowledgeBase() {
       <div className="flex flex-col h-screen bg-gradient-to-br from-background via-background to-muted/20">
         {/* Header - Same style as Meetings & Calendar */}
         <div className="border-b border-border/50 bg-background/95 backdrop-blur-xl supports-[backdrop-filter]:bg-background/80">
-          <div className="max-w-[1920px] mx-auto px-6 lg:px-8">
+          <div className="max-w-[1920px] mx-auto px-3 sm:px-4 md:px-6 lg:px-8">
             <div className="h-20 flex items-center justify-between gap-6">
               {/* Left: Logo & Title */}
               <div className="flex items-center gap-4 min-w-0 flex-1">
@@ -242,7 +242,7 @@ export default function KnowledgeBase() {
 
         {/* Stats Bar */}
         <div className="border-b border-border/50 bg-gradient-to-r from-muted/30 to-transparent">
-          <div className="max-w-[1920px] mx-auto px-6 lg:px-8 py-4">
+          <div className="max-w-[1920px] mx-auto px-3 sm:px-4 md:px-6 lg:px-8 py-3 sm:py-4">
             <div className="flex items-center gap-6 flex-wrap">
               <div className="flex items-center gap-2">
                 <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
@@ -270,7 +270,7 @@ export default function KnowledgeBase() {
 
         {/* Main Content */}
         <div className="flex-1 overflow-hidden">
-          <div className="max-w-[1920px] mx-auto px-6 lg:px-8 h-full flex flex-col">
+          <div className="max-w-[1920px] mx-auto px-3 sm:px-4 md:px-6 lg:px-8 h-full flex flex-col">
             {/* Toolbar */}
             <div className="py-6 space-y-4">
               {/* Search & Actions */}

@@ -423,7 +423,7 @@ export default function Dashboard() {
         </div>
 
         <motion.div
-          className="relative mx-auto w-full max-w-[1800px] px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6 sm:space-y-8"
+          className="relative mx-auto w-full max-w-[1800px] 3xl:max-w-[2200px] 4xl:max-w-[2800px] px-3 sm:px-4 md:px-6 lg:px-8 3xl:px-12 4xl:px-16 py-4 sm:py-6 md:py-8 space-y-4 sm:space-y-6 md:space-y-8"
           variants={containerVariants}
           initial="hidden"
           animate="visible"
@@ -465,17 +465,17 @@ export default function Dashboard() {
 
           {/* Compact Hero Header */}
           <motion.div variants={itemVariants}>
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-              <div className="space-y-1.5">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center border border-primary/20">
-                    <LayoutDashboard className="w-4 h-4 text-primary" />
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+              <div className="space-y-1 sm:space-y-1.5 min-w-0 flex-1">
+                <div className="flex items-center gap-2 sm:gap-2.5">
+                  <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center border border-primary/20 shrink-0">
+                    <LayoutDashboard className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary" />
                   </div>
-                  <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">
+                  <h1 className="text-lg sm:text-xl md:text-2xl font-bold tracking-tight text-foreground truncate">
                     {greeting}, <span className="bg-gradient-to-r from-primary to-blue-600 bg-clip-text text-transparent">{currentUser?.name || "User"}</span>
                   </h1>
                 </div>
-                <div className="flex flex-wrap items-center gap-2.5 text-xs text-muted-foreground ml-[42px]">
+                <div className="flex flex-wrap items-center gap-1.5 sm:gap-2.5 text-[10px] sm:text-xs text-muted-foreground ml-[35px] sm:ml-[42px]">
                   <div className="flex items-center gap-1.5">
                     <Calendar className="w-3.5 h-3.5" />
                     <span>
@@ -504,7 +504,7 @@ export default function Dashboard() {
                 </div>
               </div>
 
-              <div className="flex flex-wrap gap-2 lg:flex-nowrap">
+              <div className="flex flex-wrap gap-1.5 sm:gap-2 lg:flex-nowrap mt-2 sm:mt-0">
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button variant="outline" size="sm" onClick={() => setShowJoinByCode(true)} className="h-9 gap-1.5 text-xs bg-background/50 hover:bg-background hover:border-primary/50 transition-all group">
@@ -635,9 +635,9 @@ export default function Dashboard() {
           </AnimatePresence>
 
           {/* Main Content Grid */}
-          <div className="grid gap-4 lg:grid-cols-12 lg:gap-5">
+          <div className="grid gap-3 sm:gap-4 md:gap-5 lg:grid-cols-12 3xl:gap-6">
             {/* Left Column: Meetings + Tasks */}
-            <div className="lg:col-span-8 space-y-4">
+            <div className="lg:col-span-8 space-y-3 sm:space-y-4 3xl:space-y-5">
               <motion.div variants={itemVariants}>
                 <MeetingCard meetings={todayMeetings} loading={loading} onCreateMeeting={() => setShowCreateMeeting(true)} onQuickHuddle={createQuickHuddle} />
               </motion.div>
@@ -648,7 +648,7 @@ export default function Dashboard() {
             </div>
 
             {/* Right Column: Team Pulse + Active Rooms */}
-            <div className="lg:col-span-4 space-y-4">
+            <div className="lg:col-span-4 space-y-3 sm:space-y-4 3xl:space-y-5">
               <motion.div variants={itemVariants}>
                 <TeamPulseCard members={teamPulseMembers} loading={loading} />
               </motion.div>
