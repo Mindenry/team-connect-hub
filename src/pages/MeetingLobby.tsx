@@ -124,7 +124,9 @@ export default function MeetingLobby() {
         setMeetingData(meeting);
         setMeetingTitle(meeting.title || `Meeting ${meetingCode.slice(0, 8)}`);
       } else {
-        setMeetingTitle(`Meeting ${meetingCode.slice(0, 8)}`);
+        // Meeting not found - show error and prevent join
+        setError("Meeting not found. Please check the meeting code and try again.");
+        setMeetingTitle("Meeting Not Found");
       }
     });
   }, [meetingCode, isQuickHuddle, currentUser, navigate]);
@@ -283,6 +285,12 @@ export default function MeetingLobby() {
   };
 
   const handleJoin = async () => {
+    // Block join if meeting not found (and not quick-huddle)
+    if (!isQuickHuddle && !meetingData) {
+      setError("Cannot join: Meeting not found. Please check the meeting code.");
+      return;
+    }
+    
     setJoining(true);
     const previewStream = streamRef.current;
     const effectiveCameraOn = previewStream ? previewStream.getVideoTracks().some((track) => track.enabled) : isCameraOn;
@@ -408,7 +416,7 @@ export default function MeetingLobby() {
 
               <div className="pt-4 space-y-3">
                 <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
-                  <Button className="w-full h-14 text-base font-bold bg-gradient-to-r from-[#0E71EB] to-blue-600 hover:from-[#0c62cc] hover:to-blue-700 text-white rounded-xl shadow-[0_8px_24px_rgba(14,113,235,0.4)] transition-all flex items-center justify-center gap-2" onClick={handleJoin} disabled={joining}>
+                  <Button className="w-full h-14 text-base font-bold bg-gradient-to-r from-[#0E71EB] to-blue-600 hover:from-[#0c62cc] hover:to-blue-700 text-white rounded-xl shadow-[0_8px_24px_rgba(14,113,235,0.4)] transition-all flex items-center justify-center gap-2" onClick={handleJoin} disabled={joining || (!isQuickHuddle && !meetingData)}>
                     {joining ? (<><Loader2 className="w-5 h-5 animate-spin" /><span>Connecting...</span></>) : (<><Check className="w-5 h-5" /><span>{participantCount > 0 ? "Join Meeting" : "Start Meeting"}</span></>)}
                   </Button>
                 </motion.div>

@@ -544,11 +544,15 @@ export default function MeetingRoom() {
       const t = res?.data?.token || res?.token;
       if (t) setToken(t);
       else setError("Could not fetch token.");
-    }).catch((e) => setError(e?.message || "Unknown error")).finally(() => setLoading(false));
+    }).catch((e) => {
+      // Extract error message from API response
+      const errorMsg = e?.response?.data?.message || e?.message || "Unknown error";
+      setError(errorMsg);
+    }).finally(() => setLoading(false));
   }, [id]);
 
-  if (loading) return <div className="h-screen bg-[#0a0a0a] flex items-center justify-center text-white">Loading meeting info...</div>;
-  if (error || !token) return <div className="h-screen bg-[#0a0a0a] flex flex-col items-center justify-center text-white"><p className="text-red-500 mb-4">{error || "Could not connect."}</p><Button onClick={() => navigate("/")}>Go Back</Button></div>;
+  if (loading) return <div className="h-screen bg-[#0a0a0a] flex items-center justify-center text-white"><div className="text-center"><Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-[#0E71EB]" /><p>Loading meeting info...</p></div></div>;
+  if (error || !token) return <div className="h-screen bg-[#0a0a0a] flex flex-col items-center justify-center text-white"><div className="text-center max-w-md"><VideoIcon className="w-16 h-16 mx-auto mb-4 text-red-500" /><p className="text-red-500 text-lg mb-2">{error || "Could not connect."}</p><p className="text-white/60 text-sm mb-6">Please check the meeting code and try again.</p><Button onClick={() => navigate("/meetings")}>Back to Meetings</Button></div></div>;
 
   const envUrl = (import.meta.env.VITE_LIVEKIT_URL as string | undefined)?.trim().replace(/\/+$/, "");
   const isLocal = (s: string) => s.includes("localhost") || s.includes("127.0.0.1");
