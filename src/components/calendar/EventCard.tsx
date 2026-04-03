@@ -78,6 +78,23 @@ export function DraggableEventCard({ event }: DraggableEventCardProps) {
   return <EventCardBase event={event} style={style} draggable dragAttributes={attributes} dragListeners={listeners} setNodeRef={setNodeRef} isDragging={isDragging} />;
 }
 
-export function StaticEventCard({ event }: { event: CalendarEvent }) {
-  return <EventCardBase event={event} />;
+export function StaticEventCard({ event, hourHeight = 48, startHour = 7 }: { event: CalendarEvent; hourHeight?: number; startHour?: number }) {
+  const startMinutes = event.start.getHours() * 60 + event.start.getMinutes();
+  const endMinutes = event.end.getHours() * 60 + event.end.getMinutes();
+  const startOffsetMinutes = startHour * 60;
+  
+  const top = Math.max(0, ((startMinutes - startOffsetMinutes) / 60) * hourHeight);
+  const durationMinutes = Math.max(30, endMinutes - startMinutes);
+  const height = (durationMinutes / 60) * hourHeight;
+  
+  const style: CSSProperties = {
+    position: "absolute",
+    top: `${top}px`,
+    height: `${Math.max(height, 24)}px`,
+    left: "4px",
+    right: "4px",
+    zIndex: 10,
+  };
+  
+  return <EventCardBase event={event} style={style} className="mb-0" />;
 }

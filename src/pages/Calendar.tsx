@@ -481,8 +481,8 @@ export default function TeamCalendar() {
                           <div className={cn("grid flex-1 gap-1 sm:gap-2 md:gap-3 min-h-0", isMobile ? "grid-cols-1" : "grid-cols-[70px_minmax(0,1fr)]")}>
                             {!isMobile && (
                               <div className="flex flex-col text-xs text-muted-foreground pr-3 border-r border-border/60 shrink-0">
-                                {Array.from({ length: 12 }).map((_, i) => {
-                                  const hour = 8 + i;
+                                {Array.from({ length: 15 }).map((_, i) => {
+                                  const hour = 7 + i;
                                   return <div key={hour} className="h-12 flex items-start justify-end pr-2 pt-0.5"><span className="font-medium text-[11px]">{`${hour.toString().padStart(2, "0")}:00`}</span></div>;
                                 })}
                               </div>
@@ -514,11 +514,11 @@ export default function TeamCalendar() {
                                       </DroppableDay>
                                       <div className="mt-1 sm:mt-1.5 relative border border-border/60 rounded-md sm:rounded-lg bg-gradient-to-br from-muted/40 via-muted/25 to-background overflow-hidden shadow-md flex-1 min-h-0">
                                         <div className="absolute inset-0 pointer-events-none">
-                                          {Array.from({ length: 12 }).map((_, i) => <div key={i} className={cn("border-b border-border/40", isMobile ? "h-10" : "h-12", i === 0 && "border-t")} />)}
+                                          {Array.from({ length: 15 }).map((_, i) => <div key={i} className={cn("border-b border-border/40", isMobile ? "h-10" : "h-12", i === 0 && "border-t")} />)}
                                         </div>
                                         <DroppableDay date={day} id={`day-${key}-time`} className="h-full min-h-0">
-                                          <div className="relative h-full overflow-y-auto pt-0.5 px-0.5 sm:px-1">
-                                            {timedEvents.map((ev) => <StaticEventCard key={`${ev.id}-${refreshKey}`} event={ev} />)}
+                                          <div className="relative w-full" style={{ height: `${isMobile ? 15 * 40 : 15 * 48}px` }}>
+                                            {timedEvents.map((ev) => <StaticEventCard key={`${ev.id}-${refreshKey}`} event={ev} hourHeight={isMobile ? 40 : 48} startHour={7} />)}
                                           </div>
                                         </DroppableDay>
                                       </div>
