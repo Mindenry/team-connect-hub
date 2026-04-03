@@ -34,7 +34,7 @@ export function MeetingCardGrid({ meeting, index, activeRooms = [], onEdit, onMi
           "hover:shadow-xl hover:shadow-black/10 hover:-translate-y-1 sm:hover:-translate-y-1.5",
           "ring-0 hover:ring-1 hover:ring-primary/10"
         )}
-        onClick={() => !isEnded && navigate(`/meeting-lobby/${meeting.id}`)}
+        onClick={() => !isEnded && navigate(`/meeting-lobby/${meeting.meetingCode || meeting.id}`)}
       >
         <CardContent className="p-3 sm:p-4 md:p-5">
           <div className="flex flex-col h-full">
@@ -152,7 +152,7 @@ export function MeetingCardGrid({ meeting, index, activeRooms = [], onEdit, onMi
                   size="sm"
                   variant={isActuallyLive || isOnlyMe ? "default" : "outline"}
                   className="h-7 sm:h-8 px-2 sm:px-3 text-[10px] sm:text-xs font-semibold rounded-lg"
-                  onClick={(e) => { e.stopPropagation(); navigate(`/meeting-lobby/${meeting.id}`); }}
+                  onClick={(e) => { e.stopPropagation(); navigate(`/meeting-lobby/${meeting.meetingCode || meeting.id}`); }}
                 >
                   {isActuallyLive || isOnlyMe ? "Join" : "Open"}
                   <ArrowRight className="w-3 h-3 sm:w-3.5 sm:h-3.5 ml-0.5 sm:ml-1" />

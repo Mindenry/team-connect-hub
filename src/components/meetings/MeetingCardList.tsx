@@ -33,7 +33,7 @@ export function MeetingCardList({ meeting, index, activeRooms = [], onEdit, onMi
           "group border-border/50 bg-card/60 hover:bg-card hover:border-border/80 transition-all duration-300 cursor-pointer",
           "hover:shadow-lg hover:shadow-black/8 ring-0 hover:ring-1 hover:ring-primary/10"
         )}
-        onClick={() => !isEnded && navigate(`/meeting-lobby/${meeting.id}`)}
+        onClick={() => !isEnded && navigate(`/meeting-lobby/${meeting.meetingCode || meeting.id}`)}
       >
         <CardContent className="p-3 sm:p-4">
           <div className="flex items-center gap-2 sm:gap-3 md:gap-4">
@@ -138,7 +138,7 @@ export function MeetingCardList({ meeting, index, activeRooms = [], onEdit, onMi
                     size="sm"
                     variant={isActuallyLive || isOnlyMe ? "default" : "outline"}
                     className="h-7 px-2 text-[10px] font-semibold"
-                    onClick={(e) => { e.stopPropagation(); navigate(`/meeting-lobby/${meeting.id}`); }}
+                    onClick={(e) => { e.stopPropagation(); navigate(`/meeting-lobby/${meeting.meetingCode || meeting.id}`); }}
                   >
                     {isActuallyLive || isOnlyMe ? "Join" : "Open"}
                     <ArrowRight className="w-3 h-3 ml-0.5" />

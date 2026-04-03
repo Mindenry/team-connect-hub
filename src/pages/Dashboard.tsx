@@ -31,11 +31,10 @@ import {
   TaskCard,
   TeamPulseCard,
   ActiveRoomsCard,
-  StandupCard,
   containerVariants,
   itemVariants,
 } from "@/components/dashboard";
-import type { MeetingItem, TaskItem, MemberItem, StandupEntryItem, DashboardStats, KpiCardConfig } from "@/components/dashboard";
+import type { MeetingItem, TaskItem, MemberItem, DashboardStats, KpiCardConfig } from "@/components/dashboard";
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -48,9 +47,6 @@ export default function Dashboard() {
   const [members, setMembers] = useState<MemberItem[]>([]);
   const [allUsers, setAllUsers] = useState<MemberItem[]>([]);
   const [teams, setTeams] = useState<any[]>([]);
-  const [standupTeamId, setStandupTeamId] = useState<string | null>(null);
-  const [standupEntries, setStandupEntries] = useState<StandupEntryItem[]>([]);
-  const [standupLoading, setStandupLoading] = useState(false);
   const [stats, setStats] = useState<DashboardStats>({
     meetingsToday: 0,
     openTasks: 0,
@@ -199,9 +195,6 @@ export default function Dashboard() {
          setMembers(memberList);
          setAllUsers(allUsersList);
          setTeams(safeTeams);
-         if (!standupTeamId && safeTeams.length > 0) {
-          setStandupTeamId(safeTeams[0].id);
-         }
          setStats({
           meetingsToday: meetingsTodayAll.length,
           openTasks: safeTasks.length,
@@ -217,7 +210,7 @@ export default function Dashboard() {
     };
 
     loadData();
-  }, [standupTeamId, currentUser?.id]);
+  }, [currentUser?.id]);
 
   useEffect(() => {
     const handleUserStatusUpdate = () => {
@@ -271,27 +264,6 @@ export default function Dashboard() {
       window.removeEventListener("userStatusUpdated", handleUserStatusUpdate);
     };
   }, [currentUser]);
-
-  useEffect(() => {
-    const loadStandups = async () => {
-      if (!standupTeamId) {
-        setStandupEntries([]);
-        return;
-      }
-      setStandupLoading(true);
-      try {
-        const data = await apiGet<StandupEntryItem[]>(`/standups/today?teamId=${standupTeamId}`).catch(() => []);
-        setStandupEntries(Array.isArray(data) ? data : []);
-      } catch (err) {
-        console.error("Failed to load standup entries:", err);
-        setStandupEntries([]);
-      } finally {
-        setStandupLoading(false);
-      }
-    };
-
-    void loadStandups();
-  }, [standupTeamId]);
 
   const greeting = useMemo(() => {
     const h = new Date().getHours();
@@ -392,7 +364,8 @@ export default function Dashboard() {
       toast.success("Quick Huddle created", {
         description: `Meeting code: ${meeting.meetingCode}`,
       });
-      navigate(`/meeting-lobby/${meeting.id}`);
+      // Navigate using meetingCode so URL matches the code shown in toast
+      navigate(`/meeting-lobby/${meeting.meetingCode}`);
     } catch (err: any) {
       toast.error("Failed to create Quick Huddle", {
         description: err.message || "Please try again",
@@ -674,7 +647,7 @@ export default function Dashboard() {
               </motion.div>
             </div>
 
-            {/* Right Column: Team Pulse + Active Rooms + Standup */}
+            {/* Right Column: Team Pulse + Active Rooms */}
             <div className="lg:col-span-4 space-y-4">
               <motion.div variants={itemVariants}>
                 <TeamPulseCard members={teamPulseMembers} loading={loading} />
@@ -682,10 +655,6 @@ export default function Dashboard() {
 
               <motion.div variants={itemVariants}>
                 <ActiveRoomsCard rooms={activeRooms} onQuickHuddle={createQuickHuddle} />
-              </motion.div>
-
-              <motion.div variants={itemVariants}>
-                <StandupCard entries={standupEntries} teams={teams} selectedTeamId={standupTeamId} loading={standupLoading} onTeamChange={setStandupTeamId} />
               </motion.div>
             </div>
           </div>

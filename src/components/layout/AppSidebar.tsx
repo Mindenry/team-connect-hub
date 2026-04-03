@@ -153,7 +153,8 @@ export default function AppSidebar({
       toast.success("Quick Huddle created", {
         description: `Meeting code: ${meeting.meetingCode}`,
       });
-      navigate(`/meeting-lobby/${meeting.id}`);
+      // Navigate using meetingCode so URL matches the code shown in toast
+      navigate(`/meeting-lobby/${meeting.meetingCode}`);
     } catch (err: any) {
       toast.error("Failed to create Quick Huddle", {
         description: err.message || "Please try again",

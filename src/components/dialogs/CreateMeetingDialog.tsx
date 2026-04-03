@@ -193,7 +193,7 @@ export default function CreateMeetingDialog({ open, onOpenChange }: CreateMeetin
         endTime = new Date(startTime.getTime() + parseInt(duration) * 60000);
       }
 
-      const result = await apiPost<{ id: string }>("/meetings", {
+      const result = await apiPost<{ id: string; meetingCode?: string }>("/meetings", {
         title,
         description: description || null,
         startTime: startTime.toISOString(),
@@ -215,7 +215,9 @@ export default function CreateMeetingDialog({ open, onOpenChange }: CreateMeetin
       setDate("");
       setTime("");
       if (meetingType === "instant") {
-        navigate(`/meeting-lobby/${result.id}`);
+        // Use meetingCode if available, otherwise fall back to id
+        const navigateId = result.meetingCode || result.id;
+        navigate(`/meeting-lobby/${navigateId}`);
       }
     } catch (err: any) {
       setError(err.message ?? "Failed to create meeting");

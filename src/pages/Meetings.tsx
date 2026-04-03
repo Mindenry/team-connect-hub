@@ -59,8 +59,10 @@ export default function Meetings() {
     setCreatingQuickHuddle(true);
     try {
       const meeting = await apiPost<any>("/meetings/quick-huddle", {});
-      toast.success("Quick Huddle created", { description: `Meeting code: ${meeting.meetingCode}` });
-      navigate(`/meeting-lobby/${meeting.id}`);
+      toast.success("Quick Huddle created", {
+        description: `Meeting code: ${meeting.meetingCode}`,
+      });
+      navigate(`/meeting-lobby/${meeting.meetingCode}`);
     } catch (err: any) {
       toast.error("Failed to create Quick Huddle", { description: err.message || "Please try again" });
     } finally {

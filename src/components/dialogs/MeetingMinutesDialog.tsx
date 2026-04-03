@@ -310,24 +310,30 @@ export default function MeetingMinutesDialog({
         completed: item.completed || false,
       }));
 
-      const payload = {
-        meetingId,
-        title,
-        content,
-        actionItems: cleanedActionItems,
-        decisions,
-        attendees: attendeeIds.filter(id => id), // Filter out empty IDs
-      };
-
       if (currentMinutes) {
-        // Update existing
-        const updated = await apiPatch<MinutesData>(`/meeting-minutes/${currentMinutes.id}`, payload);
+        // Update existing - don't send meetingId (not in UpdateMeetingMinutesDto)
+        const updatePayload = {
+          title,
+          content,
+          actionItems: cleanedActionItems,
+          decisions,
+          attendees: attendeeIds.filter(id => id),
+        };
+        const updated = await apiPatch<MinutesData>(`/meeting-minutes/${currentMinutes.id}`, updatePayload);
         setCurrentMinutes(updated);
         setExistingMinutes(prev => prev.map(m => m.id === updated.id ? updated : m));
         toast({ title: "Success", description: "Meeting minutes updated" });
       } else {
-        // Create new
-        const created = await apiPost<MinutesData>("/meeting-minutes", payload);
+        // Create new - send meetingId
+        const createPayload = {
+          meetingId,
+          title,
+          content,
+          actionItems: cleanedActionItems,
+          decisions,
+          attendees: attendeeIds.filter(id => id),
+        };
+        const created = await apiPost<MinutesData>("/meeting-minutes", createPayload);
         setCurrentMinutes(created);
         setExistingMinutes(prev => [created, ...prev]);
         toast({ title: "Success", description: "Meeting minutes saved" });
