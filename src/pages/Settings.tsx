@@ -652,8 +652,8 @@ export default function SettingsPage() {
               </p>
             </div>
             <Card>
-              <CardContent className="p-6 space-y-6">
-                <div className="flex items-center gap-4">
+              <CardContent className="p-4 sm:p-6 space-y-4 sm:space-y-6">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-4">
                   {(() => {
                     // Calculate the final avatar URL to display - prioritize avatarUrl state
                     let displayAvatarUrl: string | undefined = undefined;
@@ -786,7 +786,7 @@ export default function SettingsPage() {
               )}
             </div>
             <Card>
-              <CardContent className="p-6 space-y-6">
+              <CardContent className="p-4 sm:p-6 space-y-4 sm:space-y-6">
                 <div>
                   <Label>Microphone</Label>
                   <Select value={selectedMic} onValueChange={setSelectedMic}>
@@ -897,7 +897,7 @@ export default function SettingsPage() {
               <CardHeader>
                 <CardTitle className="text-base">Notification Types</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="space-y-3 sm:space-y-4">
                 {[
                   {
                     key: "meetingReminders",
@@ -958,7 +958,7 @@ export default function SettingsPage() {
               <CardHeader>
                 <CardTitle className="text-base">Delivery Options</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="space-y-3 sm:space-y-4">
                 <div className="flex items-center justify-between py-1">
                   <div>
                     <p className="text-sm font-medium text-foreground">Push notifications</p>
@@ -996,7 +996,7 @@ export default function SettingsPage() {
               </p>
             </div>
             <Card>
-              <CardContent className="p-6 space-y-4">
+              <CardContent className="p-4 sm:p-6 space-y-3 sm:space-y-4">
                 {[
                   {
                     key: "showOnlineStatus",
@@ -1071,7 +1071,7 @@ export default function SettingsPage() {
               </p>
             </div>
             <Card>
-              <CardContent className="p-6 space-y-6">
+              <CardContent className="p-4 sm:p-6 space-y-4 sm:space-y-6">
                 <div>
                   <Label>Theme</Label>
                   <Select value={theme} onValueChange={(v: any) => setTheme(v)}>
@@ -1280,13 +1280,13 @@ export default function SettingsPage() {
         }
       />
 
-      <div className="grid gap-4 lg:grid-cols-12">
+      <div className="grid gap-4 md:grid-cols-12">
         {/* Nav */}
-        <Card className={cn("lg:col-span-3 border bg-card/70 shadow-sm h-fit", isMobile && "lg:col-span-12")}>
+        <Card className={cn("md:col-span-3 border bg-card/70 shadow-sm h-fit", isMobile && "md:col-span-12")}>
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-semibold">Sections</CardTitle>
           </CardHeader>
-          <CardContent className={cn("pt-0 space-y-1", isMobile && "flex flex-wrap gap-1 space-y-0")}>
+          <CardContent className={cn("pt-0 space-y-1", isMobile && "flex flex-wrap gap-1.5 space-y-0")}>
             {sections.map((s) => (
               <button
                 key={s.id}
@@ -1299,7 +1299,7 @@ export default function SettingsPage() {
                     : "text-muted-foreground hover:bg-muted hover:text-foreground"
                 )}
               >
-                <s.icon className="w-4 h-4" />
+                <s.icon className="w-4 h-4 shrink-0" />
                 {s.label}
               </button>
             ))}
@@ -1307,8 +1307,8 @@ export default function SettingsPage() {
         </Card>
 
         {/* Content */}
-        <Card className="lg:col-span-9 border bg-card/70 shadow-sm">
-          <CardContent className="p-4 md:p-6">
+        <Card className="md:col-span-9 border bg-card/70 shadow-sm">
+          <CardContent className="p-3 sm:p-4 md:p-6">
             <motion.div
               key={activeSection}
               initial={{ opacity: 0, x: 10 }}

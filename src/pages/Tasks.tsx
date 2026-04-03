@@ -107,7 +107,7 @@ function KanbanColumn({
   return (
     <div
       className={cn(
-        "flex flex-col min-w-[280px] max-w-[340px] w-full rounded-xl border bg-card/40 transition-all",
+        "flex flex-col min-w-[260px] sm:min-w-[280px] md:max-w-[340px] w-[85vw] sm:w-full rounded-xl border bg-card/40 transition-all",
         dragOver ? "border-primary/50 bg-primary/5 shadow-lg shadow-primary/10" : "border-border/50"
       )}
       onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}

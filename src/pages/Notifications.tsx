@@ -352,32 +352,36 @@ export default function Notifications() {
         }
         actions={
           <>
-            <div className="relative">
+            <div className="relative w-full sm:w-auto">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="Search notifications…"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="h-9 w-72 pl-9 bg-background/40"
+                className="h-9 w-full sm:w-72 pl-9 bg-background/40"
               />
             </div>
-            <Button variant="outline" size="sm" onClick={markAllRead} disabled={unreadCount === 0} className="gap-2">
-              <CheckCheck className="h-4 w-4" />
-              Mark all read
-            </Button>
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={() => setGrouped(!grouped)} 
-              className="gap-2"
-              title={grouped ? "Show individual notifications" : "Group related notifications"}
-            >
-              {grouped ? "Ungroup" : "Group"}
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => setShowSettings(true)} className="gap-2">
-              <Settings className="h-4 w-4" />
-              Preferences
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" size="sm" onClick={markAllRead} disabled={unreadCount === 0} className="gap-2">
+                <CheckCheck className="h-4 w-4" />
+                <span className="hidden sm:inline">Mark all read</span>
+                <span className="sm:hidden">Mark read</span>
+              </Button>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => setGrouped(!grouped)} 
+                className="gap-2"
+                title={grouped ? "Show individual notifications" : "Group related notifications"}
+              >
+                {grouped ? "Ungroup" : "Group"}
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setShowSettings(true)} className="gap-2">
+                <Settings className="h-4 w-4" />
+                <span className="hidden sm:inline">Preferences</span>
+                <span className="sm:hidden">Prefs</span>
+              </Button>
+            </div>
           </>
         }
       />

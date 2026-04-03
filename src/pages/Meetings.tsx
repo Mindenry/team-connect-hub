@@ -1040,7 +1040,7 @@ export default function Meetings() {
                   onClick={() => setShowJoinByCode(true)}
                 >
                   <Grid3x3 className="w-3 h-3 sm:w-3.5 sm:h-3.5 mr-0.5 sm:mr-1" />
-                  <span className="hidden xs:inline">Join by code</span>
+                  <span className="hidden sm:inline">Join by code</span>
                 </Button>
                 <Tooltip>
                   <TooltipTrigger asChild>
