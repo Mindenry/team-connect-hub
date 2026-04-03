@@ -949,9 +949,18 @@ export default function Chat() {
       setActiveDm(userId);
       setActiveChannel(null);
 
+      // Clear previous DM messages immediately to avoid showing stale messages
+      setDmMessages([]);
+
       try {
         // Load DM history from backend so it behaves like channel messages (no localStorage dependency)
-        const dmHistory = await apiGet<any[]>(`/dm/${userId}/messages?limit=200`).catch(() => []);
+        console.log(`[DM] Loading messages for user ${userId}`);
+        const dmHistory = await apiGet<any[]>(`/dm/${userId}/messages?limit=200`).catch((err) => {
+          console.error('[DM] Failed to load from backend:', err);
+          return [];
+        });
+
+        console.log(`[DM] Received ${Array.isArray(dmHistory) ? dmHistory.length : 0} messages`);
 
         const mapped: Message[] = Array.isArray(dmHistory)
           ? dmHistory.map((dm) => ({
@@ -980,6 +989,7 @@ export default function Chat() {
           return timeA - timeB;
         });
 
+        console.log(`[DM] Setting ${sorted.length} messages for user ${userId}`);
         setDmMessages(sorted);
       } catch (err) {
         console.error("Failed to load DM history from backend:", err);
@@ -1001,7 +1011,7 @@ export default function Chat() {
         return next;
       });
     },
-    [isMobile, setSearchParams, loadDmHistory, currentUser?.id]
+    [isMobile, setSearchParams, currentUser?.id]
   );
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
