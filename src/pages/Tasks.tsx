@@ -99,10 +99,33 @@ function KanbanColumn({
   status: string;
   tasks: Task[];
   onTaskClick: (t: Task) => void;
-  onDrop: (taskId: string, newStatus: string) => void;
+  onDrop: (taskId: string, newStatus: string, newPosition?: number) => void;
 }) {
   const cfg = STATUS_CONFIG[status] || STATUS_CONFIG.todo;
   const [dragOver, setDragOver] = useState(false);
+  const [dropIndex, setDropIndex] = useState<number | null>(null);
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(true);
+  };
+
+  const handleDragLeave = () => {
+    setDragOver(false);
+    setDropIndex(null);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    setDropIndex(null);
+    const id = e.dataTransfer.getData("taskId");
+    if (id) {
+      // Calculate position based on drop index
+      const position = dropIndex !== null ? dropIndex : tasks.length;
+      onDrop(id, status, position);
+    }
+  };
 
   return (
     <div
@@ -110,9 +133,9 @@ function KanbanColumn({
         "flex flex-col min-w-[260px] sm:min-w-[280px] md:max-w-[340px] w-[85vw] sm:w-full rounded-xl border bg-card/40 transition-all",
         dragOver ? "border-primary/50 bg-primary/5 shadow-lg shadow-primary/10" : "border-border/50"
       )}
-      onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-      onDragLeave={() => setDragOver(false)}
-      onDrop={(e) => { e.preventDefault(); setDragOver(false); const id = e.dataTransfer.getData("taskId"); if (id) onDrop(id, status); }}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
     >
       {/* Column header */}
       <div className="px-3 py-2.5 border-b border-border/40 flex items-center justify-between">
@@ -126,8 +149,14 @@ function KanbanColumn({
       {/* Cards */}
       <div className="flex-1 overflow-y-auto p-2 space-y-2 min-h-[200px] max-h-[calc(100vh-340px)]">
         <AnimatePresence mode="popLayout">
-          {tasks.map((task) => (
-            <KanbanCard key={task.id} task={task} onClick={() => onTaskClick(task)} />
+          {tasks.map((task, index) => (
+            <KanbanCard 
+              key={task.id} 
+              task={task} 
+              index={index}
+              onDropIndexChange={setDropIndex}
+              onClick={() => onTaskClick(task)} 
+            />
           ))}
         </AnimatePresence>
         {tasks.length === 0 && (
@@ -140,11 +169,37 @@ function KanbanColumn({
   );
 }
 
-function KanbanCard({ task, onClick }: { task: Task; onClick: () => void }) {
+function KanbanCard({ 
+  task, 
+  index,
+  onDropIndexChange,
+  onClick 
+}: { 
+  task: Task; 
+  index: number;
+  onDropIndexChange: (index: number | null) => void;
+  onClick: () => void;
+}) {
   const pCfg = PRIORITY_CONFIG[task.priority] || PRIORITY_CONFIG.medium;
   const overdue = isOverdue(task);
   const subtasks = task.subtasks || [];
   const completedSubs = subtasks.filter((s) => s.isCompleted).length;
+
+  const handleDragStart = (e: React.DragEvent) => {
+    e.dataTransfer?.setData("taskId", task.id);
+    e.dataTransfer.effectAllowed = "move";
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onDropIndexChange(index);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.stopPropagation();
+    onDropIndexChange(null);
+  };
 
   return (
     <motion.div
@@ -152,18 +207,23 @@ function KanbanCard({ task, onClick }: { task: Task; onClick: () => void }) {
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.95 }}
-      draggable
-      onDragStart={(e: any) => { e.dataTransfer?.setData("taskId", task.id); }}
       className="cursor-grab active:cursor-grabbing"
     >
-      <Card
-        className={cn(
-          "group border-border/50 bg-card/80 hover:bg-card hover:border-border/80 transition-all duration-200 cursor-pointer",
-          "hover:shadow-md hover:shadow-black/5 hover:-translate-y-0.5",
-          overdue && "border-red-500/30 bg-red-500/5"
-        )}
-        onClick={onClick}
+      <div
+        draggable
+        onDragStart={handleDragStart}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        className="contents"
       >
+        <Card
+          className={cn(
+            "group border-border/50 bg-card/80 hover:bg-card hover:border-border/80 transition-all duration-200 cursor-pointer",
+            "hover:shadow-md hover:shadow-black/5 hover:-translate-y-0.5",
+            overdue && "border-red-500/30 bg-red-500/5"
+          )}
+          onClick={onClick}
+        >
         <CardContent className="p-3 space-y-2">
           {/* Priority + tags row */}
           <div className="flex items-center gap-1.5 flex-wrap">
@@ -219,6 +279,7 @@ function KanbanCard({ task, onClick }: { task: Task; onClick: () => void }) {
           </div>
         </CardContent>
       </Card>
+      </div>
     </motion.div>
   );
 }
@@ -645,22 +706,62 @@ export default function Tasks() {
   const hasActiveFilters = filterTeam !== "all" || filterPriority !== "all" || filterStatus !== "all" || filterAssignee !== "all";
 
   // Kanban drop handler
-  const handleKanbanDrop = async (taskId: string, newStatus: string) => {
+  const handleKanbanDrop = async (taskId: string, newStatus: string, newPosition?: number) => {
     const task = tasks.find((t) => t.id === taskId);
-    if (!task || task.status === newStatus) return;
+    if (!task) return;
 
-    // Optimistic update
-    setTasks((prev) => prev.map((t) => t.id === taskId ? { ...t, status: newStatus } : t));
+    const oldStatus = task.status;
+    const oldPosition = task.position ?? 0;
+
+    // If same status and position, no change needed
+    if (oldStatus === newStatus && (newPosition === undefined || newPosition === oldPosition)) {
+      return;
+    }
+
+    // Calculate target position if not provided
+    let targetPosition = newPosition;
+    if (targetPosition === undefined) {
+      // Get tasks in the target status column (filtered by same team if applicable)
+      const targetTasks = tasks.filter(
+        (t) => t.status === newStatus && (task.teamId ? t.teamId === task.teamId : true)
+      );
+      // Place at the end of the column
+      targetPosition = targetTasks.length;
+    }
+
+    // Optimistic update - update the moved task and recalculate positions
+    setTasks((prev) => {
+      const updated = [...prev];
+      const movedTaskIndex = updated.findIndex((t) => t.id === taskId);
+      if (movedTaskIndex === -1) return prev;
+
+      const movedTask = updated[movedTaskIndex];
+      
+      if (oldStatus !== newStatus) {
+        // Moving to different column - just update status and position
+        updated[movedTaskIndex] = { ...movedTask, status: newStatus, position: targetPosition };
+      } else {
+        // Reordering within same column - update position only
+        updated[movedTaskIndex] = { ...movedTask, position: targetPosition };
+      }
+      
+      return updated;
+    });
 
     try {
-      await apiPatch(`/tasks/${taskId}/position`, {
+      const response = await apiPatch<Task>(`/tasks/${taskId}/position`, {
         status: newStatus,
-        position: 0,
+        position: targetPosition,
         teamId: task.teamId,
       });
+      
+      // Update with server response to sync positions
+      if (response) {
+        setTasks((prev) => prev.map((t) => t.id === response.id ? response : t));
+      }
     } catch {
       // Revert
-      setTasks((prev) => prev.map((t) => t.id === taskId ? { ...t, status: task.status } : t));
+      setTasks((prev) => prev.map((t) => t.id === taskId ? { ...t, status: oldStatus, position: oldPosition } : t));
       toast.error("Failed to move task");
     }
   };
