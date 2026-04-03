@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useTranslation } from "react-i18next";
 import { CalendarDays, CalendarRange, CalendarSearch, ChevronLeft, ChevronRight, CheckSquare, Clock, Filter, Loader2, Users, Video, Sparkles, TrendingUp, Zap, ChevronDown, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,6 +17,7 @@ import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { apiGet, apiPatch } from "@/lib/api";
+import { useTimezone } from "@/lib/timezone";
 
 import {
   DraggableEventCard,
@@ -38,6 +40,8 @@ import {
 } from "@/components/calendar";
 
 export default function TeamCalendar() {
+  const { t, i18n } = useTranslation();
+  const { formatDateTime, formatTime, formatDate } = useTimezone();
   const isMobile = useIsMobile();
   const [view, setView] = useState<ViewMode>("week");
   const [currentDate, setCurrentDate] = useState(() => new Date());
@@ -255,14 +259,15 @@ export default function TeamCalendar() {
   };
 
   const titleLabel = useMemo(() => {
-    if (view === "day") return currentDate.toLocaleDateString("th-TH", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
+    const locale = i18n.language === 'th' ? 'th-TH' : 'en-US';
+    if (view === "day") return formatDate(currentDate, { weekday: "long", month: "long", day: "numeric", year: "numeric" });
     if (view === "week") {
       const start = startOfWeek(currentDate);
       const end = endOfWeek(currentDate);
-      return `${start.toLocaleDateString("th-TH", { month: "short", day: "numeric" })} – ${end.toLocaleDateString("th-TH", { month: "short", day: "numeric", year: "numeric" })}`;
+      return `${formatDate(start, { month: "short", day: "numeric" })} – ${formatDate(end, { month: "short", day: "numeric", year: "numeric" })}`;
     }
-    return currentDate.toLocaleDateString("th-TH", { month: "long", year: "numeric" });
-  }, [currentDate, view]);
+    return formatDate(currentDate, { month: "long", year: "numeric" });
+  }, [currentDate, view, formatDate]);
 
   const isToday = (date: Date) => isSameDay(date, new Date());
 
@@ -299,8 +304,8 @@ export default function TeamCalendar() {
                   <div className="absolute -top-0.5 -right-0.5 sm:-top-1 sm:-right-1 w-3 h-3 sm:w-4 sm:h-4 bg-primary rounded-full border-2 border-background animate-pulse-soft" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <h1 className="text-base sm:text-lg md:text-xl font-bold text-foreground tracking-tight">Team Calendar</h1>
-                  <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5 truncate hidden sm:block">ดูการประชุม · กำหนดส่งงาน · วันหยุด · จัดการตารางงานของทีม</p>
+                  <h1 className="text-base sm:text-lg md:text-xl font-bold text-foreground tracking-tight">{t("calendar.title")}</h1>
+                  <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5 truncate hidden sm:block">{t("calendar.subtitle")}</p>
                 </div>
               </div>
 
@@ -309,13 +314,13 @@ export default function TeamCalendar() {
                   <Tabs value={view} onValueChange={(v) => setView(v as ViewMode)}>
                     <TabsList className="h-9 md:h-10 bg-muted/40 border border-border/50 p-1">
                       <TabsTrigger value="day" className="h-7 md:h-8 px-3 md:px-4 text-[10px] md:text-xs font-medium transition-all duration-200 data-[state=active]:bg-background data-[state=active]:shadow-sm data-[state=active]:ring-1 data-[state=active]:ring-border/50">
-                        <CalendarSearch className="w-3 h-3 md:w-3.5 md:h-3.5 mr-1 md:mr-1.5" />วัน
+                        <CalendarSearch className="w-3 h-3 md:w-3.5 md:h-3.5 mr-1 md:mr-1.5" />{t("calendar.day")}
                       </TabsTrigger>
                       <TabsTrigger value="week" className="h-7 md:h-8 px-3 md:px-4 text-[10px] md:text-xs font-medium transition-all duration-200 data-[state=active]:bg-background data-[state=active]:shadow-sm data-[state=active]:ring-1 data-[state=active]:ring-border/50">
-                        <CalendarRange className="w-3 h-3 md:w-3.5 md:h-3.5 mr-1 md:mr-1.5" />สัปดาห์
+                        <CalendarRange className="w-3 h-3 md:w-3.5 md:h-3.5 mr-1 md:mr-1.5" />{t("calendar.week")}
                       </TabsTrigger>
                       <TabsTrigger value="month" className="h-7 md:h-8 px-3 md:px-4 text-[10px] md:text-xs font-medium transition-all duration-200 data-[state=active]:bg-background data-[state=active]:shadow-sm data-[state=active]:ring-1 data-[state=active]:ring-border/50">
-                        <CalendarDays className="w-3 h-3 md:w-3.5 md:h-3.5 mr-1 md:mr-1.5" />เดือน
+                        <CalendarDays className="w-3 h-3 md:w-3.5 md:h-3.5 mr-1 md:mr-1.5" />{t("calendar.month")}
                       </TabsTrigger>
                     </TabsList>
                   </Tabs>
@@ -325,9 +330,9 @@ export default function TeamCalendar() {
                   <Select value={view} onValueChange={(v) => setView(v as ViewMode)}>
                     <SelectTrigger className="h-8 w-[100px] text-xs border-border/50 bg-background/50"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="day">วัน</SelectItem>
-                      <SelectItem value="week">สัปดาห์</SelectItem>
-                      <SelectItem value="month">เดือน</SelectItem>
+                      <SelectItem value="day">{t("calendar.day")}</SelectItem>
+                      <SelectItem value="week">{t("calendar.week")}</SelectItem>
+                      <SelectItem value="month">{t("calendar.month")}</SelectItem>
                     </SelectContent>
                   </Select>
                 )}
@@ -339,7 +344,7 @@ export default function TeamCalendar() {
                         <ChevronLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                       </Button>
                     </TooltipTrigger>
-                    <TooltipContent>ก่อนหน้า</TooltipContent>
+                    <TooltipContent>{t("calendar.previous")}</TooltipContent>
                   </Tooltip>
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -347,9 +352,9 @@ export default function TeamCalendar() {
                         <ChevronRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                       </Button>
                     </TooltipTrigger>
-                    <TooltipContent>ถัดไป</TooltipContent>
+                    <TooltipContent>{t("calendar.next")}</TooltipContent>
                   </Tooltip>
-                  <Button variant="outline" size="sm" className="h-7 sm:h-8 text-[10px] sm:text-xs px-2 sm:px-3 border-border/50 bg-background/50 hover:bg-background hidden sm:inline-flex" onClick={handleToday}>วันนี้</Button>
+                  <Button variant="outline" size="sm" className="h-7 sm:h-8 text-[10px] sm:text-xs px-2 sm:px-3 border-border/50 bg-background/50 hover:bg-background hidden sm:inline-flex" onClick={handleToday}>{t("calendar.today")}</Button>
                 </div>
               </div>
             </div>
@@ -363,7 +368,7 @@ export default function TeamCalendar() {
                 <div className="min-w-0">
                   <h2 className="text-sm sm:text-base font-bold text-foreground truncate">{titleLabel}</h2>
                   <div className="flex items-center gap-1 sm:gap-2 mt-0.5 sm:mt-1 flex-wrap">
-                    <Badge variant="secondary" className="text-[9px] sm:text-[10px] px-1.5 sm:px-2 py-0.5 h-4 sm:h-5 bg-primary/10 text-primary border-primary/20">{eventsInRange.length} รายการ</Badge>
+                    <Badge variant="secondary" className="text-[9px] sm:text-[10px] px-1.5 sm:px-2 py-0.5 h-4 sm:h-5 bg-primary/10 text-primary border-primary/20">{eventsInRange.length} {t("calendar.items")}</Badge>
                     {stats.totalMeetings > 0 && <Badge variant="outline" className="text-[9px] sm:text-[10px] px-1.5 sm:px-2 py-0.5 h-4 sm:h-5 border-primary/30 text-primary bg-primary/5"><Video className="w-2 h-2 sm:w-2.5 sm:h-2.5 mr-0.5 sm:mr-1" />{stats.totalMeetings}</Badge>}
                     {stats.totalTasks > 0 && <Badge variant="outline" className="text-[9px] sm:text-[10px] px-1.5 sm:px-2 py-0.5 h-4 sm:h-5 border-amber-300 text-amber-700 bg-amber-50"><CheckSquare className="w-2 h-2 sm:w-2.5 sm:h-2.5 mr-0.5 sm:mr-1" />{stats.totalTasks}</Badge>}
                     {stats.totalHolidays > 0 && <Badge variant="outline" className="text-[9px] sm:text-[10px] px-1.5 sm:px-2 py-0.5 h-4 sm:h-5 border-red-300 text-red-700 bg-red-50"><Sparkles className="w-2 h-2 sm:w-2.5 sm:h-2.5 mr-0.5 sm:mr-1" />{stats.totalHolidays}</Badge>}
@@ -372,43 +377,43 @@ export default function TeamCalendar() {
               </div>
               <div className="flex items-center gap-2 sm:gap-3 shrink-0">
                 <div className="flex items-center gap-1.5 sm:gap-2">
-                  <span className="text-[10px] sm:text-xs text-muted-foreground font-medium hidden sm:inline">ทีม</span>
+                  <span className="text-[10px] sm:text-xs text-muted-foreground font-medium hidden sm:inline">{t("calendar.team")}</span>
                   <Select value={teamFilter} onValueChange={setTeamFilter}>
-                    <SelectTrigger className="h-8 sm:h-9 w-[120px] sm:w-[160px] md:w-[180px] text-[10px] sm:text-xs border-border/50 bg-background/50 hover:bg-background"><SelectValue placeholder="ทุกทีม" /></SelectTrigger>
+                    <SelectTrigger className="h-8 sm:h-9 w-[120px] sm:w-[160px] md:w-[180px] text-[10px] sm:text-xs border-border/50 bg-background/50 hover:bg-background"><SelectValue placeholder={t("calendar.allTeams")} /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">ทุกทีม</SelectItem>
+                      <SelectItem value="all">{t("calendar.allTeams")}</SelectItem>
                       {teams.map((team) => (<SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>))}
                     </SelectContent>
                   </Select>
                 </div>
                 <Popover open={showFilters} onOpenChange={setShowFilters}>
                   <PopoverTrigger asChild>
-                    <Button variant="outline" size="sm" className={cn("h-9 text-xs gap-2 transition-all duration-200 border-border/60 bg-background hover:bg-muted hover:border-border text-foreground hover:text-foreground shadow-sm hover:shadow-md", showFilters && "bg-primary/10 border-primary/50 text-primary ring-1 ring-primary/20")} title="ตัวกรองเพิ่มเติม">
+                    <Button variant="outline" size="sm" className={cn("h-9 text-xs gap-2 transition-all duration-200 border-border/60 bg-background hover:bg-muted hover:border-border text-foreground hover:text-foreground shadow-sm hover:shadow-md", showFilters && "bg-primary/10 border-primary/50 text-primary ring-1 ring-primary/20")} title={t("calendar.filters")}>
                       <Filter className="w-3.5 h-3.5" />
-                      <span className="hidden sm:inline">ตัวกรอง</span>
+                      <span className="hidden sm:inline">{t("calendar.filters")}</span>
                     </Button>
                   </PopoverTrigger>
                   <PopoverContent className="w-64 p-4" align="end" sideOffset={8}>
                     <div className="space-y-4">
                       <div>
-                        <h4 className="text-sm font-semibold text-foreground mb-3">ตัวกรอง</h4>
+                        <h4 className="text-sm font-semibold text-foreground mb-3">{t("calendar.filters")}</h4>
                         <div className="space-y-3">
                           <div className="flex items-center space-x-2">
                             <Checkbox id="filter-meetings" checked={filterTypes.meetings} onCheckedChange={(checked) => setFilterTypes((prev) => ({ ...prev, meetings: checked as boolean }))} />
-                            <Label htmlFor="filter-meetings" className="text-sm font-medium text-foreground cursor-pointer flex items-center gap-2"><Video className="w-4 h-4 text-primary" />การประชุม</Label>
+                            <Label htmlFor="filter-meetings" className="text-sm font-medium text-foreground cursor-pointer flex items-center gap-2"><Video className="w-4 h-4 text-primary" />{t("calendar.meetings")}</Label>
                           </div>
                           <div className="flex items-center space-x-2">
                             <Checkbox id="filter-tasks" checked={filterTypes.tasks} onCheckedChange={(checked) => setFilterTypes((prev) => ({ ...prev, tasks: checked as boolean }))} />
-                            <Label htmlFor="filter-tasks" className="text-sm font-medium text-foreground cursor-pointer flex items-center gap-2"><CheckSquare className="w-4 h-4 text-amber-600" />งาน</Label>
+                            <Label htmlFor="filter-tasks" className="text-sm font-medium text-foreground cursor-pointer flex items-center gap-2"><CheckSquare className="w-4 h-4 text-amber-600" />{t("calendar.tasks")}</Label>
                           </div>
                           <div className="flex items-center space-x-2">
                             <Checkbox id="filter-holidays" checked={filterTypes.holidays} onCheckedChange={(checked) => setFilterTypes((prev) => ({ ...prev, holidays: checked as boolean }))} />
-                            <Label htmlFor="filter-holidays" className="text-sm font-medium text-foreground cursor-pointer flex items-center gap-2"><Sparkles className="w-4 h-4 text-red-600" />วันหยุด</Label>
+                            <Label htmlFor="filter-holidays" className="text-sm font-medium text-foreground cursor-pointer flex items-center gap-2"><Sparkles className="w-4 h-4 text-red-600" />{t("calendar.holidays")}</Label>
                           </div>
                         </div>
                       </div>
                       <div className="pt-3 border-t border-border/50">
-                        <Button variant="outline" size="sm" className="w-full h-8 text-xs" onClick={() => setFilterTypes({ meetings: true, tasks: true, holidays: true })}>รีเซ็ตทั้งหมด</Button>
+                        <Button variant="outline" size="sm" className="w-full h-8 text-xs" onClick={() => setFilterTypes({ meetings: true, tasks: true, holidays: true })}>{t("calendar.resetAll")}</Button>
                       </div>
                     </div>
                   </PopoverContent>
@@ -424,14 +429,14 @@ export default function TeamCalendar() {
               <div className="h-full flex items-center justify-center">
                 <div className="flex flex-col items-center gap-3">
                   <Loader2 className="w-8 h-8 text-primary animate-spin" />
-                  <span className="text-sm text-muted-foreground font-medium">กำลังโหลดปฏิทิน...</span>
+                  <span className="text-sm text-muted-foreground font-medium">{t("calendar.loading")}</span>
                 </div>
               </div>
             ) : error ? (
               <Card className="border-destructive/50 bg-destructive/5">
                 <CardContent className="flex flex-col items-center justify-center py-12">
                   <div className="w-16 h-16 rounded-2xl bg-destructive/10 flex items-center justify-center mb-4"><X className="w-8 h-8 text-destructive" /></div>
-                  <h3 className="text-lg font-semibold text-foreground mb-1">โหลดปฏิทินไม่สำเร็จ</h3>
+                  <h3 className="text-lg font-semibold text-foreground mb-1">{t("calendar.loadError")}</h3>
                   <p className="text-sm text-muted-foreground">{error}</p>
                 </CardContent>
               </Card>
@@ -440,9 +445,17 @@ export default function TeamCalendar() {
                 <AnimatePresence mode="wait">
                   {view === "month" ? (
                     <motion.div key="month" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} transition={{ duration: 0.2 }} className="grid grid-cols-7 gap-1 sm:gap-2 md:gap-3 overflow-x-auto">
-                      {["อา", "จ", "อ", "พ", "พฤ", "ศ", "ส"].map((day) => (
-                        <div key={day} className="text-center py-1.5 sm:py-2 md:py-3 text-[9px] sm:text-[10px] md:text-xs font-bold text-muted-foreground uppercase tracking-wider bg-muted/30 rounded sm:rounded-md md:rounded-lg">{day}</div>
-                      ))}
+                      {(() => {
+                        const locale = i18n.language === 'th' ? 'th-TH' : 'en-US';
+                        const weekdays = [];
+                        for (let i = 0; i < 7; i++) {
+                          const date = new Date(2024, 0, i + 1);
+                          weekdays.push(date.toLocaleDateString(locale, { weekday: 'short' }).slice(0, 2));
+                        }
+                        return weekdays.map((day, i) => (
+                          <div key={i} className="text-center py-1.5 sm:py-2 md:py-3 text-[9px] sm:text-[10px] md:text-xs font-bold text-muted-foreground uppercase tracking-wider bg-muted/30 rounded sm:rounded-md md:rounded-lg">{day}</div>
+                        ));
+                      })()}
                       {visibleDays.map((day) => {
                         const key = dateKey(day);
                         const dayEvents = eventsByDay.get(key) ?? [];
@@ -466,7 +479,7 @@ export default function TeamCalendar() {
                               <CardContent className="px-1 sm:px-2 md:px-3 pb-1.5 sm:pb-2 md:pb-3">
                                 <DroppableDay date={day} className="min-h-[40px] sm:min-h-[50px] md:min-h-[60px]">
                                   {dayEvents.slice(0, isMobile ? 2 : 3).map((ev) => <DraggableEventCard key={`${ev.id}-${refreshKey}`} event={ev} />)}
-                                  {dayEvents.length > (isMobile ? 2 : 3) && <div className="text-[8px] sm:text-[10px] text-muted-foreground mt-0.5 sm:mt-1 font-medium px-0.5 sm:px-1">+{dayEvents.length - (isMobile ? 2 : 3)} เพิ่มเติม</div>}
+                                  {dayEvents.length > (isMobile ? 2 : 3) && <div className="text-[8px] sm:text-[10px] text-muted-foreground mt-0.5 sm:mt-1 font-medium px-0.5 sm:px-1">+{dayEvents.length - (isMobile ? 2 : 3)} {t("calendar.more")}</div>}
                                 </DroppableDay>
                               </CardContent>
                             </Card>
@@ -500,7 +513,7 @@ export default function TeamCalendar() {
                                     <div key={eventsKey} className="flex flex-col min-w-0">
                                       <div className="flex items-center justify-between mb-1 sm:mb-2 px-1 sm:px-2">
                                         <div className="flex items-baseline gap-1 sm:gap-2">
-                                          <span className={cn("text-xs sm:text-sm font-bold", isToday(day) && "text-primary")}>{day.toLocaleDateString("th-TH", { weekday: "short", day: "numeric" })}</span>
+                                          <span className={cn("text-xs sm:text-sm font-bold", isToday(day) && "text-primary")}>{formatDate(day, { weekday: "short", day: "numeric" })}</span>
                                           {isToday(day) && <div className="w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full bg-primary animate-pulse" />}
                                         </div>
                                         <div className="flex items-center gap-0.5 sm:gap-1">

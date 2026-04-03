@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { useLocation, Link, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
+import { useTranslation } from "react-i18next";
 import {
   LayoutDashboard, Video, MessageSquare, CheckSquare,
   Settings, Bell, ChevronRight, ChevronDown,
@@ -47,49 +48,52 @@ interface AppSidebarProps {
 }
 
 // Main navigation - ใช้บ่อยที่สุด (always visible)
+// Note: titles are translation keys, will be resolved in component
 const mainNav: NavItem[] = [
-  { title: "Dashboard", url: "/", icon: LayoutDashboard, description: "Overview & insights" },
-  { title: "Meetings", url: "/meetings", icon: Video, description: "Video calls & rooms" },
-  { title: "Calendar", url: "/calendar", icon: CalendarDays, description: "Schedule & events" },
-  { title: "Chat", url: "/chat", icon: MessageSquare, description: "Messages & channels" },
-  { title: "Tasks", url: "/tasks", icon: CheckSquare, description: "Projects & todos" },
+  { title: "dashboard", url: "/", icon: LayoutDashboard, description: "Overview & insights" },
+  { title: "meetings", url: "/meetings", icon: Video, description: "Video calls & rooms" },
+  { title: "calendar", url: "/calendar", icon: CalendarDays, description: "Schedule & events" },
+  { title: "chat", url: "/chat", icon: MessageSquare, description: "Messages & channels" },
+  { title: "tasks", url: "/tasks", icon: CheckSquare, description: "Projects & todos" },
 ];
 
 // Secondary navigation - grouped in collapsible sections
+// Note: titles are translation keys, will be resolved in component
 const secondarySections: NavSection[] = [
   {
-    title: "Employee",
+    title: "employee",
     items: [
-      { title: "Teams", url: "/teams", icon: Users, description: "Team collaboration" },
-      { title: "Directory", url: "/directory", icon: IdCard, description: "Company members" },
+      { title: "teams", url: "/teams", icon: Users, description: "Team collaboration" },
+      { title: "directory", url: "/directory", icon: IdCard, description: "Company members" },
     ],
     defaultOpen: true,
   },
   {
-    title: "Resources",
+    title: "resources",
     icon: Folder,
     items: [
-      { title: "Shared Drive", url: "/drive", icon: Folder, description: "Files & documents" },
-      { title: "Knowledge Base", url: "/wiki", icon: BookOpen, description: "Docs & guides" },
+      { title: "shared_drive", url: "/drive", icon: Folder, description: "Files & documents" },
+      { title: "knowledge_base", url: "/wiki", icon: BookOpen, description: "Docs & guides" },
     ],
     defaultOpen: false,
   },
   {
-    title: "Tools",
+    title: "tools",
     icon: Zap,
     items: [
-      { title: "Announcements", url: "/announcements", icon: Megaphone, description: "Updates & news" },
-      { title: "Reports", url: "/reports", icon: FileBarChart, description: "Analytics & insights" },
+      { title: "announcements", url: "/announcements", icon: Megaphone, description: "Updates & news" },
+      { title: "reports", url: "/reports", icon: FileBarChart, description: "Analytics & insights" },
     ],
     defaultOpen: false,
   },
 ];
 
 // System & Settings (always visible, compact)
+// Note: titles are translation keys, will be resolved in component
 const systemNav: NavItem[] = [
-  { title: "Reminders", url: "/reminders", icon: FileText, description: "Tasks & notes" },
-  { title: "Notifications", url: "/notifications", icon: Bell, description: "Alerts & updates" },
-  { title: "Settings", url: "/settings", icon: Settings, description: "Preferences" },
+  { title: "reminders", url: "/reminders", icon: FileText, description: "Tasks & notes" },
+  { title: "notifications", url: "/notifications", icon: Bell, description: "Alerts & updates" },
+  { title: "settings", url: "/settings", icon: Settings, description: "Preferences" },
 ];
 
 // Admin Only
@@ -101,6 +105,7 @@ export default function AppSidebar({
   chatUnreadCount = 0,
   notificationsUnreadCount = 0,
 }: AppSidebarProps) {
+  const { t } = useTranslation();
   const location = useLocation();
   const navigate = useNavigate();
   const { user: currentUser } = useAuth();
@@ -569,7 +574,7 @@ export default function AppSidebar({
           {/* Section label */}
           {showContent && (
             <p className="px-3 py-1 text-[9px] font-bold uppercase tracking-wider text-sidebar-muted/50">
-              Main
+              {t("nav.main")}
             </p>
           )}
 
@@ -611,13 +616,13 @@ export default function AppSidebar({
 
                     {showContent && (
                       <div className="flex-1 flex items-center justify-between min-w-0">
-                        <span className="truncate">{item.title}</span>
-                        {item.title === "Meetings" && activeMeetingsCount > 0 && (
+                        <span className="truncate">{t(`nav.${item.title}`)}</span>
+                        {item.title === "meetings" && activeMeetingsCount > 0 && (
                           <Badge className="h-4 min-w-[16px] px-1 text-[9px] bg-green-500 text-white border-0">
                             {activeMeetingsCount}
                           </Badge>
                         )}
-                        {item.title !== "Meetings" && item.badge && item.badge > 0 && (
+                        {item.title !== "meetings" && item.badge && item.badge > 0 && (
                           <Badge variant="destructive" className="h-4 min-w-[16px] px-1 text-[9px]">
                             {item.badge > 99 ? "99+" : item.badge}
                           </Badge>
@@ -628,10 +633,10 @@ export default function AppSidebar({
                     {/* Badge dot when collapsed */}
                     {!showContent && (
                       <>
-                        {item.title === "Meetings" && activeMeetingsCount > 0 && (
+                        {item.title === "meetings" && activeMeetingsCount > 0 && (
                           <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-green-500 animate-pulse" />
                         )}
-                        {item.title !== "Meetings" && item.badge && item.badge > 0 && (
+                        {item.title !== "meetings" && item.badge && item.badge > 0 && (
                           <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-red-500" />
                         )}
                       </>
@@ -640,7 +645,7 @@ export default function AppSidebar({
                 </TooltipTrigger>
                 {collapsed && !onNavigate && (
                   <TooltipContent side="right" className="hidden md:block text-xs">
-                    <div className="font-semibold">{item.title}</div>
+                    <div className="font-semibold">{t(`nav.${item.title}`)}</div>
                   </TooltipContent>
                 )}
               </Tooltip>
@@ -675,7 +680,7 @@ export default function AppSidebar({
                     >
                       <div className="flex items-center gap-2">
                         {SectionIcon && <SectionIcon className="w-3 h-3" />}
-                        <span className="uppercase tracking-wider text-[9px] font-bold">{section.title}</span>
+                        <span className="uppercase tracking-wider text-[9px] font-bold">{t(`nav.${section.title}`)}</span>
                       </div>
                       <motion.div
                         animate={{ rotate: isOpen ? 180 : 0 }}
@@ -710,7 +715,7 @@ export default function AppSidebar({
                                   )}
                                 >
                                   <item.icon className="w-3.5 h-3.5 shrink-0" />
-                                  <span className="truncate">{item.title}</span>
+                                  <span className="truncate">{t(`nav.${item.title}`)}</span>
                                 </Link>
                               );
                             })}
@@ -745,7 +750,7 @@ export default function AppSidebar({
                         </Link>
                       </TooltipTrigger>
                       <TooltipContent side="right" className="hidden md:block text-xs">
-                        <div className="font-semibold">{item.title}</div>
+                        <div className="font-semibold">{t(`nav.${item.title}`)}</div>
                       </TooltipContent>
                     </Tooltip>
                   );
@@ -784,7 +789,7 @@ export default function AppSidebar({
                     )} />
                     {showContent && (
                       <>
-                        <span className="flex-1">{item.title}</span>
+                        <span className="flex-1">{t(`nav.${item.title}`)}</span>
                         {item.badge && item.badge > 0 && (
                           <Badge variant="destructive" className="h-4 min-w-[16px] px-1 text-[9px]">
                             {item.badge}
@@ -800,7 +805,7 @@ export default function AppSidebar({
                 </TooltipTrigger>
                 {collapsed && !onNavigate && (
                   <TooltipContent side="right" className="hidden md:block text-xs">
-                    {item.title}
+                    {t(`nav.${item.title}`)}
                   </TooltipContent>
                 )}
               </Tooltip>
