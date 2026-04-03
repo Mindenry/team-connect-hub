@@ -268,6 +268,18 @@ function MeetingRoomUI({ meetingId: propMeetingId }: any) {
         if (isQuickHuddle) setIsHost(data.hostUserId === currentUser?.id);
       }
     });
+    socket.on("meeting:join:error", (data: { message: string; meetingId: string }) => {
+      toast.error("ไม่สามารถเข้าร่วมประชุมได้", { description: data.message === "Meeting not found" ? "ไม่พบรหัสประชุมนี้ กรุณาตรวจสอบรหัสอีกครั้ง" : data.message, duration: 5000 });
+      setTimeout(() => navigate("/meetings"), 2000);
+    });
+    socket.on("meeting:ended", (data: { meetingId: string; reason: string }) => {
+      toast.info("การประชุมจบแล้ว", { description: data.reason === "Host left the meeting" ? "Host ออกจากการประชุมแล้ว" : data.reason, duration: 4000 });
+      setTimeout(() => {
+        clearCurrentMeeting();
+        meetingPiPLeave();
+        navigate("/meetings");
+      }, 1500);
+    });
 
     return () => {
       clearCurrentMeeting();
@@ -280,8 +292,10 @@ function MeetingRoomUI({ meetingId: propMeetingId }: any) {
       socket.off("meeting:participant:force_mute", handleForceMute);
       socket.off("meeting:recording:status", handleRecordingStatus);
       socket.off("meeting:host:set");
+      socket.off("meeting:join:error");
+      socket.off("meeting:ended");
     };
-  }, [loading, meetingCode, isQuickHuddle, currentUser?.id]);
+  }, [loading, meetingCode, isQuickHuddle, currentUser?.id, navigate]);
 
   useEffect(() => {
     if (loading) return;
