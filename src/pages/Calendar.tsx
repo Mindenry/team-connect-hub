@@ -487,22 +487,116 @@ export default function TeamCalendar() {
                         );
                       })}
                     </motion.div>
-                  ) : (
-                    <motion.div key={view} initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.2 }} className="h-full">
+                  ) : view === "day" ? (
+                    // Day View - Full width, spacious layout
+                    <motion.div key="day" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.2 }} className="h-full">
                       <Card className="flex-1 border-border/50 bg-card/50 shadow-xl flex flex-col min-h-0">
-                        <CardContent className="p-1.5 sm:p-3 md:p-4 flex-1 flex flex-col min-h-0 overflow-hidden">
-                          <div className={cn("grid flex-1 gap-1 sm:gap-2 md:gap-3 min-h-0", isMobile ? "grid-cols-1" : "grid-cols-[70px_minmax(0,1fr)]")}>
+                        <CardContent className="p-2 sm:p-4 md:p-6 flex-1 flex flex-col min-h-0 overflow-hidden">
+                          {(() => {
+                            const day = currentDate;
+                            const key = dateKey(day);
+                            const dayEvents = eventsByDay.get(key) ?? [];
+                            const allDayEvents = dayEvents.filter((e) => e.allDay);
+                            const timedEvents = dayEvents.filter((e) => !e.allDay);
+                            const summary = workloadSummary.get(key) ?? { meetings: 0, tasks: 0, holidays: 0 };
+                            return (
+                              <div className="flex flex-col h-full">
+                                {/* Day Header */}
+                                <div className="flex items-center justify-between mb-3 sm:mb-4 pb-3 border-b border-border/50">
+                                  <div className="flex items-center gap-3 sm:gap-4">
+                                    <div className={cn("w-12 h-12 sm:w-14 sm:h-14 rounded-xl flex items-center justify-center shadow-lg", isToday(day) ? "bg-gradient-to-br from-primary to-primary/80 text-primary-foreground" : "bg-muted/50 text-muted-foreground")}>
+                                      <span className="text-xl sm:text-2xl font-bold">{day.getDate()}</span>
+                                    </div>
+                                    <div>
+                                      <h3 className="text-base sm:text-lg font-bold text-foreground">{formatDate(day, { weekday: "long" })}</h3>
+                                      <p className="text-xs sm:text-sm text-muted-foreground">{formatDate(day, { month: "long", year: "numeric" })}</p>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-2 sm:gap-3">
+                                    {summary.holidays > 0 && (
+                                      <Badge className="bg-gradient-to-r from-red-100 via-red-50 to-red-100 text-red-900 border border-red-200 text-xs sm:text-sm px-3 py-1 h-auto gap-1.5 shadow-sm">
+                                        <Sparkles className="w-3.5 h-3.5" />
+                                        {t("calendar.holidays")}
+                                      </Badge>
+                                    )}
+                                    {summary.meetings > 0 && (
+                                      <Badge className="bg-gradient-to-r from-primary/20 via-primary/15 to-primary/20 text-primary border border-primary/30 text-xs sm:text-sm px-3 py-1 h-auto gap-1.5 shadow-sm">
+                                        <Video className="w-3.5 h-3.5" />
+                                        {summary.meetings} {t("calendar.meetings")}
+                                      </Badge>
+                                    )}
+                                    {summary.tasks > 0 && (
+                                      <Badge className="bg-gradient-to-r from-amber-100 via-amber-50 to-amber-100 text-amber-900 border border-amber-200 text-xs sm:text-sm px-3 py-1 h-auto gap-1.5 shadow-sm">
+                                        <CheckSquare className="w-3.5 h-3.5" />
+                                        {summary.tasks} {t("calendar.tasks")}
+                                      </Badge>
+                                    )}
+                                  </div>
+                                </div>
+                                
+                                {/* All Day Events */}
+                                {allDayEvents.length > 0 && (
+                                  <div className="mb-3 sm:mb-4">
+                                    <h4 className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wider">{t("calendar.holidays")} & {t("calendar.tasks")}</h4>
+                                    <DroppableDay date={day} id={`day-${key}-all`} className="min-h-[50px] bg-muted/20 rounded-lg">
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                                          {allDayEvents.map((ev) => <DraggableEventCard key={`${ev.id}-${refreshKey}`} event={ev} />)}
+                                        </div>
+                                    </DroppableDay>
+                                  </div>
+                                )}
+                                
+                                {/* Time Grid */}
+                                <div className="flex-1 flex flex-col min-h-0">
+                                  <h4 className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wider">{t("calendar.meetings")}</h4>
+                                  <div className="flex-1 flex gap-3 sm:gap-4 min-h-0">
+                                    {/* Time Labels */}
+                                    <div className="flex flex-col text-xs text-muted-foreground pr-2 sm:pr-3 border-r border-border/60 shrink-0">
+                                      {Array.from({ length: 15 }).map((_, i) => {
+                                        const hour = 7 + i;
+                                        return <div key={hour} className="h-10 sm:h-12 flex items-start justify-end pr-1 sm:pr-2 pt-0.5"><span className="font-medium text-[10px] sm:text-xs">{`${hour.toString().padStart(2, "0")}:00`}</span></div>;
+                                      })}
+                                    </div>
+                                    {/* Events Area */}
+                                    <div className="flex-1 relative border border-border/60 rounded-lg sm:rounded-xl bg-gradient-to-br from-muted/40 via-muted/25 to-background overflow-hidden shadow-lg min-h-0">
+                                      <div className="absolute inset-0 pointer-events-none">
+                                        {Array.from({ length: 15 }).map((_, i) => (
+                                          <div key={i} className={cn("border-b border-border/40", "h-10 sm:h-12", i === 0 && "border-t")} />
+                                        ))}
+                                      </div>
+                                      <DroppableDay date={day} id={`day-${key}-time`} className="h-full min-h-0 overflow-y-auto">
+                                        <div className="relative w-full" style={{ height: `${15 * 48}px` }}>
+                                          {timedEvents.map((ev) => <StaticEventCard key={`${ev.id}-${refreshKey}`} event={ev} hourHeight={48} startHour={7} />)}
+                                        </div>
+                                      </DroppableDay>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })()}
+                        </CardContent>
+                      </Card>
+                    </motion.div>
+                  ) : (
+                    // Week View - Horizontal scroll with wider columns
+                    <motion.div key="week" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.2 }} className="h-full">
+                      <Card className="flex-1 border-border/50 bg-card/50 shadow-xl flex flex-col min-h-0">
+                        <CardContent className="p-2 sm:p-3 md:p-4 flex-1 flex flex-col min-h-0 overflow-hidden">
+                          <div className="flex gap-2 sm:gap-3 h-full">
+                            {/* Time Labels */}
                             {!isMobile && (
-                              <div className="flex flex-col text-xs text-muted-foreground pr-3 border-r border-border/60 shrink-0">
+                              <div className="flex flex-col text-xs text-muted-foreground pr-2 sm:pr-3 border-r border-border/60 shrink-0 pt-8">
                                 {Array.from({ length: 15 }).map((_, i) => {
                                   const hour = 7 + i;
-                                  return <div key={hour} className="h-12 flex items-start justify-end pr-2 pt-0.5"><span className="font-medium text-[11px]">{`${hour.toString().padStart(2, "0")}:00`}</span></div>;
+                                  return <div key={hour} className="h-12 flex items-start justify-end pr-1 sm:pr-2 pt-0.5"><span className="font-medium text-[11px]">{`${hour.toString().padStart(2, "0")}:00`}</span></div>;
                                 })}
                               </div>
                             )}
-                            <div className="flex flex-col overflow-x-auto overflow-y-hidden min-w-0">
-                              <div className={cn("grid gap-1 sm:gap-2 flex-1 min-h-0", view === "day" ? "grid-cols-1" : isMobile ? "grid-cols-1" : "grid-cols-7")}>
-                                {(view === "day" ? [currentDate] : visibleDays.slice(0, 7)).map((day) => {
+                            {/* Days Container - Horizontal Scroll */}
+                            <div className="flex-1 overflow-x-auto overflow-y-hidden min-w-0">
+                              <div className="grid grid-cols-7 gap-2 sm:gap-3 h-full min-w-[700px] sm:min-w-[900px] md:min-w-[1100px]">
+                                {visibleDays.slice(0, 7).map((day) => {
                                   const key = dateKey(day);
                                   const dayEvents = eventsByDay.get(key) ?? [];
                                   const allDayEvents = dayEvents.filter((e) => e.allDay);
@@ -510,26 +604,35 @@ export default function TeamCalendar() {
                                   const summary = workloadSummary.get(key) ?? { meetings: 0, tasks: 0, holidays: 0 };
                                   const eventsKey = `${key}-${dayEvents.length}-${dayEvents.map((e) => e.id).join(",")}`;
                                   return (
-                                    <div key={eventsKey} className="flex flex-col min-w-0">
-                                      <div className="flex items-center justify-between mb-1 sm:mb-2 px-1 sm:px-2">
-                                        <div className="flex items-baseline gap-1 sm:gap-2">
-                                          <span className={cn("text-xs sm:text-sm font-bold", isToday(day) && "text-primary")}>{formatDate(day, { weekday: "short", day: "numeric" })}</span>
-                                          {isToday(day) && <div className="w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full bg-primary animate-pulse" />}
+                                    <div key={eventsKey} className="flex flex-col min-w-0 h-full">
+                                      {/* Day Header */}
+                                      <div className="flex items-center justify-between mb-2 px-2 py-1.5 rounded-lg bg-muted/30 shrink-0">
+                                        <div className="flex items-center gap-1.5">
+                                          <span className={cn("text-sm font-bold", isToday(day) && "text-primary")}>{formatDate(day, { weekday: "short" })}</span>
+                                          <span className={cn("text-sm font-medium", isToday(day) && "text-primary")}>{day.getDate()}</span>
+                                          {isToday(day) && <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />}
                                         </div>
-                                        <div className="flex items-center gap-0.5 sm:gap-1">
-                                          {summary.holidays > 0 && <Badge className="bg-red-100 text-red-900 border-0 text-[8px] sm:text-[9px] px-1 sm:px-1.5 h-3.5 sm:h-4">🎉</Badge>}
-                                          {summary.meetings > 0 && <Badge className="bg-primary/10 text-primary border-0 text-[8px] sm:text-[9px] px-1 sm:px-1.5 h-3.5 sm:h-4">{summary.meetings}</Badge>}
-                                          {summary.tasks > 0 && <Badge className="bg-amber-100 text-amber-900 border-0 text-[8px] sm:text-[9px] px-1 sm:px-1.5 h-3.5 sm:h-4">{summary.tasks}</Badge>}
+                                        <div className="flex items-center gap-1">
+                                          {summary.holidays > 0 && <Badge className="bg-red-100 text-red-900 border-0 text-[9px] px-1.5 h-4 gap-0.5"><Sparkles className="w-2.5 h-2.5" /></Badge>}
+                                          {summary.meetings > 0 && <Badge className="bg-primary/10 text-primary border-0 text-[9px] px-1.5 h-4">{summary.meetings}</Badge>}
+                                          {summary.tasks > 0 && <Badge className="bg-amber-100 text-amber-900 border-0 text-[9px] px-1.5 h-4">{summary.tasks}</Badge>}
                                         </div>
                                       </div>
-                                      <DroppableDay date={day} id={`day-${key}-all`} className="min-h-[30px] sm:min-h-[40px]">
-                                        {allDayEvents.map((ev) => <DraggableEventCard key={`${ev.id}-${refreshKey}`} event={ev} />)}
-                                      </DroppableDay>
-                                      <div className="mt-1 sm:mt-1.5 relative border border-border/60 rounded-md sm:rounded-lg bg-gradient-to-br from-muted/40 via-muted/25 to-background overflow-hidden shadow-md flex-1 min-h-0">
+                                      {/* All Day Events */}
+                                      {allDayEvents.length > 0 && (
+                                        <DroppableDay date={day} id={`day-${key}-all`} className="min-h-[35px] mb-1.5">
+                                          {allDayEvents.slice(0, 2).map((ev) => <DraggableEventCard key={`${ev.id}-${refreshKey}`} event={ev} />)}
+                                          {allDayEvents.length > 2 && <div className="text-[9px] text-muted-foreground mt-0.5 px-1">+{allDayEvents.length - 2} {t("calendar.more")}</div>}
+                                        </DroppableDay>
+                                      )}
+                                      {/* Time Grid */}
+                                      <div className="flex-1 relative border border-border/60 rounded-lg bg-gradient-to-br from-muted/40 via-muted/25 to-background overflow-hidden shadow-md min-h-0">
                                         <div className="absolute inset-0 pointer-events-none">
-                                          {Array.from({ length: 15 }).map((_, i) => <div key={i} className={cn("border-b border-border/40", isMobile ? "h-10" : "h-12", i === 0 && "border-t")} />)}
+                                          {Array.from({ length: 15 }).map((_, i) => (
+                                            <div key={i} className={cn("border-b border-border/40", isMobile ? "h-10" : "h-12", i === 0 && "border-t")} />
+                                          ))}
                                         </div>
-                                        <DroppableDay date={day} id={`day-${key}-time`} className="h-full min-h-0">
+                                        <DroppableDay date={day} id={`day-${key}-time`} className="h-full min-h-0 overflow-y-auto">
                                           <div className="relative w-full" style={{ height: `${isMobile ? 15 * 40 : 15 * 48}px` }}>
                                             {timedEvents.map((ev) => <StaticEventCard key={`${ev.id}-${refreshKey}`} event={ev} hourHeight={isMobile ? 40 : 48} startHour={7} />)}
                                           </div>
@@ -544,7 +647,7 @@ export default function TeamCalendar() {
                         </CardContent>
                       </Card>
                     </motion.div>
-                  )}
+                  )
                 </AnimatePresence>
 
                 <DragOverlay>
