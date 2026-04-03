@@ -12,6 +12,7 @@ import {
   Users,
   Loader2,
   UserPlus,
+  ArrowRightCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -64,6 +65,8 @@ interface ActionItem {
   assigneeAvatar?: string; // Avatar URL
   dueDate?: string;
   completed?: boolean;
+  convertedToTask?: boolean; // Flag if converted to task
+  taskId?: string; // ID of created task
 }
 
 interface Decision {
@@ -285,6 +288,33 @@ export default function MeetingMinutesDialog({
       setAttendeeIds([]);
       setAttendeeNames(new Map());
       setAttendeeAvatars(new Map());
+    }
+  };
+
+  const convertToTask = async (item: ActionItem) => {
+    try {
+      const user = auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+
+      const taskData = {
+        title: item.task,
+        description: `Created from meeting: ${meetingTitle}`,
+        assigneeId: item.assigneeId || undefined,
+        dueDate: item.dueDate || undefined,
+        meetingId: meetingId,
+        priority: "medium" as const,
+        status: "todo" as const,
+      };
+
+      const created = await apiPost<any>("/tasks", taskData);
+      toast({ title: "Success", description: `Task created: ${created.title}` });
+      
+      // Mark action item as converted
+      setActionItems(prev => prev.map(a => 
+        a.id === item.id ? { ...a, convertedToTask: true, taskId: created.id } : a
+      ));
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message || "Failed to create task", variant: "destructive" });
     }
   };
 
@@ -574,8 +604,27 @@ export default function MeetingMinutesDialog({
                                     {new Date(item.dueDate).toLocaleDateString()}
                                   </span>
                                 )}
+                                {item.convertedToTask && (
+                                  <Badge variant="outline" className="text-xs text-green-600 border-green-300">
+                                    <ArrowRightCircle className="w-3 h-3 mr-1" />
+                                    Task Created
+                                  </Badge>
+                                )}
                               </div>
                             </div>
+                            {/* Convert to Task button - show if not yet converted */}
+                            {!item.convertedToTask && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 text-xs text-primary hover:text-primary"
+                                onClick={() => convertToTask(item)}
+                                title="Convert to Task"
+                              >
+                                <ArrowRightCircle className="w-4 h-4 mr-1" />
+                                Task
+                              </Button>
+                            )}
                             {isEditing && (
                               <Button
                                 variant="ghost"
