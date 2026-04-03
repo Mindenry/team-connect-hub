@@ -185,6 +185,8 @@ export default function Directory() {
         setOrgId(resolvedOrgId);
         const org = await apiGet<any>(`/organizations/${resolvedOrgId}`).catch(() => null);
         if (org) {
+          console.log('Loaded org data:', org);
+          console.log('Org settings:', org.settings);
           setOrgSettingsJson(org.settings || {});
           setOrgSettings({
             name: org.name || "",
@@ -295,7 +297,7 @@ export default function Directory() {
         .split(",")
         .map((d) => d.trim())
         .filter(Boolean);
-      await apiPatch(`/organizations/${orgId}`, {
+      const payload = {
         name: orgSettings.name,
         logo: orgSettings.logo || null,
         allowedDomains,
@@ -304,7 +306,10 @@ export default function Directory() {
           defaultTeamId: orgSettings.defaultTeam || null,
           departments: orgSettings.departments,
         },
-      });
+      };
+      console.log('Saving org settings:', JSON.stringify(payload, null, 2));
+      const result = await apiPatch(`/organizations/${orgId}`, payload);
+      console.log('Save result:', result);
       toast.success("Organization settings saved");
       loadData();
     } catch (err: any) {
