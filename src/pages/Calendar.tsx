@@ -476,10 +476,10 @@ export default function TeamCalendar() {
                                   {summary.tasks > 0 && <Badge className="bg-gradient-to-r from-amber-100 via-amber-50 to-amber-100 text-amber-900 border-0 text-[8px] sm:text-[9px] px-1 sm:px-2 h-3.5 sm:h-4.5 shadow-sm font-semibold">{summary.tasks}</Badge>}
                                 </div>
                               </CardHeader>
-                              <CardContent className="px-1 sm:px-2 md:px-3 pb-1.5 sm:pb-2 md:pb-3">
-                                <DroppableDay date={day} className="min-h-[40px] sm:min-h-[50px] md:min-h-[60px]">
+                              <CardContent className="px-1.5 sm:px-2 md:px-3 pb-1.5 sm:pb-2 md:pb-3 overflow-hidden">
+                                <DroppableDay date={day} className="min-h-[60px] sm:min-h-[80px] md:min-h-[100px] overflow-hidden">
                                   {dayEvents.slice(0, isMobile ? 2 : 3).map((ev) => <DraggableEventCard key={`${ev.id}-${refreshKey}`} event={ev} />)}
-                                  {dayEvents.length > (isMobile ? 2 : 3) && <div className="text-[8px] sm:text-[10px] text-muted-foreground mt-0.5 sm:mt-1 font-medium px-0.5 sm:px-1">+{dayEvents.length - (isMobile ? 2 : 3)} {t("calendar.more")}</div>}
+                                  {dayEvents.length > (isMobile ? 2 : 3) && <div className="text-[9px] sm:text-[10px] text-muted-foreground mt-1 font-medium px-1 truncate">+{dayEvents.length - (isMobile ? 2 : 3)} {t("calendar.more")}</div>}
                                 </DroppableDay>
                               </CardContent>
                             </Card>
@@ -536,9 +536,9 @@ export default function TeamCalendar() {
                                 
                                 {/* All Day Events */}
                                 {allDayEvents.length > 0 && (
-                                  <div className="mb-3 sm:mb-4">
+                                  <div className="mb-4">
                                     <h4 className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wider">{t("calendar.holidays")} & {t("calendar.tasks")}</h4>
-                                    <DroppableDay date={day} id={`day-${key}-all`} className="min-h-[50px] bg-muted/20 rounded-lg">
+                                    <DroppableDay date={day} id={`day-${key}-all`} className="min-h-[60px] bg-muted/20 rounded-lg overflow-hidden">
                                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                                           {allDayEvents.map((ev) => <DraggableEventCard key={`${ev.id}-${refreshKey}`} event={ev} />)}
                                         </div>
@@ -620,9 +620,9 @@ export default function TeamCalendar() {
                                       </div>
                                       {/* All Day Events */}
                                       {allDayEvents.length > 0 && (
-                                        <DroppableDay date={day} id={`day-${key}-all`} className="min-h-[35px] mb-1.5">
+                                        <DroppableDay date={day} id={`day-${key}-all`} className="min-h-[45px] mb-2 overflow-hidden">
                                           {allDayEvents.slice(0, 2).map((ev) => <DraggableEventCard key={`${ev.id}-${refreshKey}`} event={ev} />)}
-                                          {allDayEvents.length > 2 && <div className="text-[9px] text-muted-foreground mt-0.5 px-1">+{allDayEvents.length - 2} {t("calendar.more")}</div>}
+                                          {allDayEvents.length > 2 && <div className="text-[9px] text-muted-foreground mt-1 px-1 truncate">+{allDayEvents.length - 2} {t("calendar.more")}</div>}
                                         </DroppableDay>
                                       )}
                                       {/* Time Grid */}

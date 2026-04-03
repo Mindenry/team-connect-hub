@@ -17,7 +17,7 @@ export function DroppableDay({ date, children, id, className }: DroppableDayProp
     <div
       ref={setNodeRef}
       className={cn(
-        "flex flex-col border rounded-md px-1.5 py-1.5 min-h-[60px] bg-gradient-to-br from-background via-muted/20 to-background transition-all duration-200",
+        "flex flex-col border rounded-md px-1.5 py-1.5 min-h-[60px] bg-gradient-to-br from-background via-muted/20 to-background transition-all duration-200 overflow-hidden",
         "hover:border-border/80 hover:bg-muted/30",
         isOver && "ring-2 ring-primary/60 bg-primary/15 shadow-xl scale-[1.02] border-primary/40",
         className
