@@ -1,34 +1,20 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { motion, AnimatePresence, useScroll, useSpring } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Video,
   Calendar,
   MessageSquare,
   CheckSquare,
   Users,
-  Eye,
   Hash,
   Sparkles,
-  Zap,
-  Clock,
-  Plus,
-  ChevronRight,
   LayoutDashboard,
-  PlayCircle,
-  CheckCircle2,
-  Circle,
-  AlertCircle,
 } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
+import { TooltipProvider, Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-
-import StatusIndicator from "@/components/shared/StatusIndicator";
 import CreateMeetingDialog from "@/components/dialogs/CreateMeetingDialog";
 import CreateTaskDialog from "@/components/dialogs/CreateTaskDialog";
 import TaskDetailDialog from "@/components/dialogs/TaskDetailDialog";
@@ -37,120 +23,19 @@ import JoinMeetingByCodeDialog from "@/components/dialogs/JoinMeetingByCodeDialo
 import { auth } from "@/lib/auth";
 import { usePresence } from "@/hooks/usePresence";
 import { apiGet, apiPatch, apiPost } from "@/lib/api";
-import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
-type MeetingItem = {
-  id: string;
-  title: string;
-  startTime: string;
-  team: string;
-  participants: number;
-  isLive: boolean;
-};
-
-type TaskItem = {
-  id: string;
-  title: string;
-  priority: "urgent" | "high" | "medium" | "low";
-  status: string;
-  dueDate?: string;
-  assignee?: { id: string; name: string; initials: string; avatar?: string };
-  project?: { id: string; key: string; name: string; color?: string };
-  epic?: { id: string; name: string; color?: string };
-  tags: string[];
-};
-
-type MemberItem = {
-  id: string;
-  name: string;
-  initials: string;
-  status: string;
-  activity: string;
-  room: string | null;
-  avatar?: string;
-};
-
-type StandupEntryItem = {
-  id: string;
-  userId: string;
-  teamId: string;
-  date: string;
-  rawText: string;
-  yesterday: string[];
-  today: string[];
-  blockers: string[];
-  updatedAt: string;
-  user: {
-    id: string;
-    name: string;
-    email: string;
-    avatar?: string | null;
-    status?: string | null;
-    activity?: string | null;
-  };
-};
-
-const priorityConfig: Record<string, { color: string; icon: any; label: string }> = {
-  urgent: {
-    color: "bg-gradient-to-br from-red-600/25 via-red-500/15 to-red-500/5 text-red-700 border-red-600/40",
-    icon: AlertCircle,
-    label: "Urgent",
-  },
-  high: {
-    color: "bg-gradient-to-br from-red-500/20 via-red-500/10 to-red-500/5 text-red-600 border-red-500/30",
-    icon: AlertCircle,
-    label: "High",
-  },
-  medium: {
-    color: "bg-gradient-to-br from-amber-500/20 via-amber-500/10 to-amber-500/5 text-amber-600 border-amber-500/30",
-    icon: Circle,
-    label: "Medium",
-  },
-  low: {
-    color: "bg-gradient-to-br from-blue-500/20 via-blue-500/10 to-blue-500/5 text-blue-600 border-blue-500/30",
-    icon: CheckCircle2,
-    label: "Low",
-  },
-};
-
-const containerVariants = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: {
-      staggerChildren: 0.08,
-      delayChildren: 0.1,
-    },
-  },
-};
-
-const itemVariants = {
-  hidden: { opacity: 0, y: 20, scale: 0.95 },
-  visible: {
-    opacity: 1,
-    y: 0,
-    scale: 1,
-    transition: {
-      type: "spring" as const,
-      stiffness: 100,
-      damping: 15,
-    },
-  },
-};
-
-const cardHoverVariants = {
-  rest: { scale: 1, y: 0 },
-  hover: {
-    scale: 1.02,
-    y: -4,
-    transition: {
-      type: "spring" as const,
-      stiffness: 300,
-      damping: 20,
-    },
-  },
-};
+import {
+  KpiCardsGrid,
+  MeetingCard,
+  TaskCard,
+  TeamPulseCard,
+  ActiveRoomsCard,
+  StandupCard,
+  containerVariants,
+  itemVariants,
+} from "@/components/dashboard";
+import type { MeetingItem, TaskItem, MemberItem, StandupEntryItem, DashboardStats, KpiCardConfig } from "@/components/dashboard";
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -166,7 +51,7 @@ export default function Dashboard() {
   const [standupTeamId, setStandupTeamId] = useState<string | null>(null);
   const [standupEntries, setStandupEntries] = useState<StandupEntryItem[]>([]);
   const [standupLoading, setStandupLoading] = useState(false);
-  const [stats, setStats] = useState({
+  const [stats, setStats] = useState<DashboardStats>({
     meetingsToday: 0,
     openTasks: 0,
     unreadMessages: 0,
@@ -482,39 +367,7 @@ export default function Dashboard() {
     
     return onlineMembersList;
   }, [onlineUsers, allUsersMap, currentUser]);
-  
-  const membersWithPresence = useMemo(() => {
-    return members.map((m) => {
-      const isOnline = isUserOnline(m.id);
-      
-      let finalStatus: "online" | "busy" | "away" | "offline" | "dnd" = "offline";
-      
-      if (isOnline) {
-        if (m.status && ["online", "busy", "away", "dnd"].includes(m.status)) {
-          finalStatus = m.status as "online" | "busy" | "away" | "dnd";
-        } else {
-          finalStatus = "online";
-        }
-      } else {
-        finalStatus = "offline";
-      }
-      
-      if (currentUser && m.id === currentUser.id && currentUser.status) {
-        const authStatus = currentUser.status;
-        if (isOnline && ["online", "busy", "away", "dnd"].includes(authStatus)) {
-          finalStatus = authStatus as "online" | "busy" | "away" | "dnd";
-        }
-      }
-      
-      return {
-        ...m,
-        isOnline,
-        status: finalStatus,
-      };
-    });
-  }, [members, isUserOnline, currentUser]);
 
-  // Quick navigation for KPI cards to connect metrics with workflows
   const handleKpiClick = (label: string) => {
     if (label === "Meetings Today") {
       navigate("/meetings");
@@ -547,7 +400,7 @@ export default function Dashboard() {
     }
   };
 
-  const kpiCards = [
+  const kpiCards: KpiCardConfig[] = [
     { 
       label: "Meetings Today", 
       value: stats.meetingsToday, 
@@ -607,7 +460,6 @@ export default function Dashboard() {
             open={showCreateTask}
             onOpenChange={setShowCreateTask}
             onCreated={(task) => {
-              // After creating from dashboard, jump to the task detail in Tasks page
               setShowCreateTask(false);
               setSelectedTask(null);
               navigate("/tasks", { state: { openTask: task } });
@@ -682,12 +534,7 @@ export default function Dashboard() {
               <div className="flex flex-wrap gap-2 lg:flex-nowrap">
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      onClick={() => setShowJoinByCode(true)} 
-                      className="h-9 gap-1.5 text-xs bg-background/50 hover:bg-background hover:border-primary/50 transition-all group"
-                    >
+                    <Button variant="outline" size="sm" onClick={() => setShowJoinByCode(true)} className="h-9 gap-1.5 text-xs bg-background/50 hover:bg-background hover:border-primary/50 transition-all group">
                       <Hash className="h-3.5 w-3.5 group-hover:rotate-12 transition-transform" />
                       <span className="hidden sm:inline">Join by Code</span>
                       <span className="sm:hidden">Join</span>
@@ -697,12 +544,7 @@ export default function Dashboard() {
                 </Tooltip>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      onClick={() => setShowCreateTask(true)} 
-                      className="h-9 gap-1.5 text-xs bg-background/50 hover:bg-background hover:border-amber-500/50 transition-all group"
-                    >
+                    <Button variant="outline" size="sm" onClick={() => setShowCreateTask(true)} className="h-9 gap-1.5 text-xs bg-background/50 hover:bg-background hover:border-amber-500/50 transition-all group">
                       <CheckSquare className="h-3.5 w-3.5 group-hover:scale-110 transition-transform" />
                       <span className="hidden sm:inline">New Task</span>
                       <span className="sm:hidden">Task</span>
@@ -712,12 +554,7 @@ export default function Dashboard() {
                 </Tooltip>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      onClick={() => setShowCreateMeeting(true)} 
-                      className="h-9 gap-1.5 text-xs bg-background/50 hover:bg-background hover:border-blue-500/50 transition-all group"
-                    >
+                    <Button variant="outline" size="sm" onClick={() => setShowCreateMeeting(true)} className="h-9 gap-1.5 text-xs bg-background/50 hover:bg-background hover:border-blue-500/50 transition-all group">
                       <Calendar className="h-3.5 w-3.5 group-hover:scale-110 transition-transform" />
                       <span className="hidden sm:inline">Schedule</span>
                       <span className="sm:hidden">Meet</span>
@@ -753,56 +590,11 @@ export default function Dashboard() {
           )}
 
           {/* KPI Cards Grid */}
-          <motion.div
-            variants={itemVariants}
-            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6"
-          >
-            {kpiCards.map((kpi, index) => {
-              const Icon = kpi.icon;
-              return (
-                <motion.div
-                  key={kpi.label}
-                  variants={cardHoverVariants}
-                  initial="rest"
-                  whileHover="hover"
-                  custom={index}
-                >
-                  <Card
-                    className="group relative h-full border bg-card/80 backdrop-blur-xl overflow-hidden hover:shadow-lg transition-all duration-300 cursor-pointer"
-                    onClick={() => handleKpiClick(kpi.label)}
-                  >
-                    <div className={cn("absolute inset-0 bg-gradient-to-br opacity-0 group-hover:opacity-100 transition-opacity duration-500", kpi.gradient)} />
-                    <CardContent className="relative p-4">
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="flex-1 min-w-0">
-                          <p className="text-[11px] font-semibold text-muted-foreground mb-1.5 uppercase tracking-wider">
-                            {kpi.label}
-                          </p>
-                          {loading ? (
-                            <Skeleton className="h-7 w-16" />
-                          ) : (
-                            <p className="text-2xl font-bold tracking-tight text-foreground">
-                              {kpi.value}
-                            </p>
-                          )}
-                        </div>
-                        <div className={cn(
-                          "w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border transition-all duration-300 group-hover:scale-110",
-                          kpi.iconBg,
-                          kpi.borderColor,
-                          kpi.iconColor
-                        )}>
-                          <Icon className="w-5 h-5" />
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </motion.div>
-              );
-            })}
+          <motion.div variants={itemVariants}>
+            <KpiCardsGrid cards={kpiCards} loading={loading} onCardClick={handleKpiClick} />
           </motion.div>
 
-          {/* Active Meeting Rooms */}
+          {/* Active Meeting Rooms Banner */}
           <AnimatePresence>
             {activeRooms.length > 0 && (
               <motion.div
@@ -812,8 +604,8 @@ export default function Dashboard() {
                 exit={{ opacity: 0, height: 0 }}
               >
                 <Card className="border border-emerald-500/20 bg-gradient-to-br from-emerald-500/[0.04] via-card/80 to-card/80 backdrop-blur-xl shadow-sm overflow-hidden">
-                  <CardHeader className="py-3 px-4 border-b border-emerald-500/10">
-                    <div className="flex items-center justify-between gap-3">
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between gap-3 mb-3">
                       <div className="flex items-center gap-3">
                         <div className="relative">
                           <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-500/20 to-emerald-500/10 flex items-center justify-center border border-emerald-500/20">
@@ -822,26 +614,20 @@ export default function Dashboard() {
                           <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse border-2 border-background" />
                         </div>
                         <div>
-                          <CardTitle className="text-sm font-bold">Active Rooms</CardTitle>
-                          <CardDescription className="text-[11px]">
+                          <p className="text-sm font-bold">Active Rooms</p>
+                          <p className="text-[11px] text-muted-foreground">
                             {activeRooms.length} room{activeRooms.length !== 1 ? "s" : ""} with{" "}
                             {activeRooms.reduce((sum, r) => sum + r.participants.length, 0)} participant{activeRooms.reduce((sum, r) => sum + r.participants.length, 0) !== 1 ? "s" : ""}
-                          </CardDescription>
+                          </p>
                         </div>
                       </div>
-                      <Link
-                        to="/meetings"
-                        className="text-[11px] font-semibold text-muted-foreground hover:text-primary transition-colors flex items-center gap-1 group"
-                      >
+                      <Link to="/meetings" className="text-[11px] font-semibold text-muted-foreground hover:text-primary transition-colors flex items-center gap-1 group">
                         View All
-                        <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                        <span className="group-hover:translate-x-1 transition-transform">→</span>
                       </Link>
                     </div>
-                  </CardHeader>
-                  <CardContent className="p-4">
                     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                       {activeRooms.map((room, i) => {
-                        const isQuickHuddle = room.roomId.startsWith("quick-huddle");
                         const myParticipant = room.participants.find((p) => p.userId === currentUser?.id);
                         return (
                           <motion.div
@@ -849,58 +635,20 @@ export default function Dashboard() {
                             initial={{ opacity: 0, scale: 0.98 }}
                             animate={{ opacity: 1, scale: 1 }}
                             transition={{ delay: i * 0.05, duration: 0.3 }}
-                            className={cn(
-                              "group flex items-center gap-3 rounded-xl border p-3 cursor-pointer transition-all duration-300",
-                              "bg-gradient-to-r from-emerald-500/5 to-transparent border-emerald-500/20",
-                              "hover:border-emerald-500/40 hover:shadow-md hover:shadow-emerald-500/5 hover:-translate-y-0.5"
-                            )}
+                            className="group flex items-center gap-3 rounded-xl border p-3 cursor-pointer transition-all duration-300 bg-gradient-to-r from-emerald-500/5 to-transparent border-emerald-500/20 hover:border-emerald-500/40 hover:shadow-md hover:shadow-emerald-500/5 hover:-translate-y-0.5"
                             onClick={() => navigate(`/meeting-lobby/${room.roomId}`)}
                           >
                             <div className="relative shrink-0">
-                              <div className={cn(
-                                "w-10 h-10 rounded-lg flex items-center justify-center",
-                                isQuickHuddle ? "bg-amber-500/15 text-amber-600" : "bg-emerald-500/15 text-emerald-600"
-                              )}>
-                                {isQuickHuddle ? <Zap className="w-5 h-5" /> : <Video className="w-5 h-5" />}
+                              <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-emerald-500/15 text-emerald-600">
+                                <Video className="w-5 h-5" />
                               </div>
                               <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                             </div>
                             <div className="flex-1 min-w-0">
                               <p className="text-sm font-semibold text-foreground truncate">{room.name}</p>
-                              <div className="flex items-center gap-2 mt-1">
-                                <div className="flex -space-x-1.5">
-                                  {room.participants.slice(0, 4).map((p, idx) => (
-                                    <Tooltip key={p.peerId || idx}>
-                                      <TooltipTrigger asChild>
-                                        <Avatar className="h-5 w-5 border-2 border-background">
-                                          <AvatarImage
-                                            src={p.avatar ? (p.avatar.startsWith("/") ? `${import.meta.env.VITE_API_URL || "http://localhost:3000"}${p.avatar}` : p.avatar) : undefined}
-                                            alt={p.name}
-                                          />
-                                          <AvatarFallback className="text-[7px] font-bold bg-emerald-500/10 text-emerald-700">
-                                            {p.name.charAt(0).toUpperCase()}
-                                          </AvatarFallback>
-                                        </Avatar>
-                                      </TooltipTrigger>
-                                      <TooltipContent side="bottom" className="text-xs">{p.name}</TooltipContent>
-                                    </Tooltip>
-                                  ))}
-                                </div>
-                                <span className="text-[10px] text-muted-foreground font-medium truncate">
-                                  {room.participants.slice(0, 2).map((p) => p.name.split(" ")[0]).join(", ")}
-                                  {room.participants.length > 2 && ` +${room.participants.length - 2}`}
-                                </span>
-                              </div>
+                              <p className="text-[10px] text-muted-foreground">{room.participants.length} participants</p>
                             </div>
-                            <Button
-                              size="sm"
-                              variant={myParticipant ? "default" : "outline"}
-                              className="h-7 px-2.5 text-[11px] font-semibold shrink-0"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                navigate(`/meeting-lobby/${room.roomId}`);
-                              }}
-                            >
+                            <Button size="sm" variant={myParticipant ? "default" : "outline"} className="h-7 px-2.5 text-[11px] font-semibold shrink-0" onClick={(e) => { e.stopPropagation(); navigate(`/meeting-lobby/${room.roomId}`); }}>
                               {myParticipant ? "Return" : "Join"}
                             </Button>
                           </motion.div>
@@ -917,596 +665,30 @@ export default function Dashboard() {
           <div className="grid gap-4 lg:grid-cols-12 lg:gap-5">
             {/* Left Column: Meetings + Tasks */}
             <div className="lg:col-span-8 space-y-4">
-            {/* Meetings Section */}
-            <motion.div variants={itemVariants}>
-              <Card className="border bg-card/80 backdrop-blur-xl shadow-sm hover:shadow-md transition-all duration-300">
-                <CardHeader className="py-3 px-4 border-b border-border/50">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500/20 to-blue-500/10 flex items-center justify-center border border-blue-500/20">
-                        <Video className="w-4 h-4 text-blue-600" />
-                      </div>
-                      <div>
-                        <CardTitle className="text-sm font-bold">Today's Meetings</CardTitle>
-                        <CardDescription className="text-[11px]">Upcoming and live</CardDescription>
-                      </div>
-                    </div>
-                    <Link 
-                      to="/meetings" 
-                      className="text-[11px] font-semibold text-muted-foreground hover:text-primary transition-colors flex items-center gap-1 group"
-                    >
-                      View Schedule
-                      <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                    </Link>
-                  </div>
-                </CardHeader>
-                <CardContent className="p-4 space-y-3">
-                  {loading ? (
-                    <div className="space-y-3">
-                      {[0, 1, 2].map((k) => (
-                        <div key={k} className="flex items-center gap-3 rounded-lg border border-border/50 bg-background/40 p-3">
-                          <Skeleton className="h-14 w-14 rounded-xl" />
-                          <div className="flex-1 space-y-2">
-                            <Skeleton className="h-5 w-48" />
-                            <Skeleton className="h-4 w-64" />
-                          </div>
-                          <Skeleton className="h-10 w-24 rounded-lg" />
-                        </div>
-                      ))}
-                    </div>
-                  ) : todayMeetings.length === 0 ? (
-                    <div className="rounded-xl border border-dashed border-border/50 bg-muted/20 p-8 text-center">
-                      <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-muted/50 to-muted/30 flex items-center justify-center mx-auto mb-4">
-                        <Calendar className="w-7 h-7 text-muted-foreground" />
-                      </div>
-                      <p className="text-sm font-bold text-foreground mb-1">No upcoming meetings today</p>
-                      <p className="text-xs text-muted-foreground mb-4">Schedule one, or start a quick meeting</p>
-                      <div className="flex flex-wrap justify-center gap-2">
-                        <Button size="sm" variant="outline" onClick={() => setShowCreateMeeting(true)} className="gap-1.5 h-8 text-xs">
-                          <Calendar className="h-4 w-4" />
-                          Schedule
-                        </Button>
-                        <Button
-                          size="sm"
-                          className="gap-1.5 h-8 text-xs bg-gradient-to-r from-primary to-blue-600"
-                          onClick={createQuickHuddle}
-                        >
-                          <Video className="h-4 w-4" />
-                          Start Meeting
-                        </Button>
-                      </div>
-                    </div>
-                  ) : (
-                    <AnimatePresence>
-                      {todayMeetings.map((m, i) => (
-                        <motion.div
-                          key={m.id}
-                          initial={{ opacity: 0, x: -20 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          exit={{ opacity: 0, x: 20 }}
-                          transition={{ delay: i * 0.1 }}
-                          className="group flex items-center gap-3 rounded-lg border border-border/50 bg-gradient-to-r from-background to-muted/10 p-3 hover:border-primary/40 hover:shadow-md transition-all duration-300"
-                        >
-                          <div className={cn(
-                            "w-10 h-10 rounded-lg flex items-center justify-center shrink-0 border transition-all duration-300 group-hover:scale-105",
-                            m.isLive 
-                              ? "bg-gradient-to-br from-red-500/20 to-red-500/10 border-red-500/30" 
-                              : "bg-gradient-to-br from-blue-500/20 to-blue-500/10 border-blue-500/30"
-                          )}>
-                            <Video className={cn(
-                              "w-4 h-4",
-                              m.isLive ? "text-red-600" : "text-blue-600"
-                            )} />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-2">
-                              <p className="text-sm font-semibold text-foreground truncate">{m.title}</p>
-                              {m.isLive && (
-                                <Badge className="h-6 bg-gradient-to-r from-red-500 to-red-600 text-white border-0 text-xs px-2.5 animate-pulse">
-                                  <div className="w-1.5 h-1.5 rounded-full bg-white mr-1.5 animate-pulse" />
-                                  LIVE
-                                </Badge>
-                              )}
-                            </div>
-                            <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-                              <div className="flex items-center gap-1.5">
-                                <Clock className="w-4 h-4" />
-                                <span className="font-medium">{new Date(m.startTime).toLocaleTimeString("th-TH", { hour: "numeric", minute: "2-digit" })}</span>
-                              </div>
-                              <span>·</span>
-                              <span>{m.team}</span>
-                              <span>·</span>
-                              <div className="flex items-center gap-1.5">
-                                <Users className="w-4 h-4" />
-                                <span>{m.participants} participants</span>
-                              </div>
-                            </div>
-                          </div>
-                          <Button 
-                            size="sm" 
-                            variant={m.isLive ? "default" : "outline"} 
-                            className={cn(
-                              "h-8 gap-1.5 text-xs min-w-[80px]",
-                              m.isLive && "bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 shadow-lg"
-                            )} 
-                            asChild
-                          >
-                            <Link to={`/meeting-lobby/${m.id}`}>
-                              {m.isLive ? (
-                                <>
-                                  <Zap className="w-4 h-4" />
-                                  Join
-                                </>
-                              ) : (
-                                <>
-                                  <PlayCircle className="w-4 h-4" />
-                                  Lobby
-                                </>
-                              )}
-                            </Link>
-                          </Button>
-                        </motion.div>
-                      ))}
-                    </AnimatePresence>
-                  )}
-                </CardContent>
-              </Card>
-            </motion.div>
+              <motion.div variants={itemVariants}>
+                <MeetingCard meetings={todayMeetings} loading={loading} onCreateMeeting={() => setShowCreateMeeting(true)} onQuickHuddle={createQuickHuddle} />
+              </motion.div>
 
-            {/* Tasks Section */}
-            <motion.div variants={itemVariants}>
-              <Card className="border bg-card/80 backdrop-blur-xl shadow-sm hover:shadow-md transition-all duration-300">
-                <CardHeader className="py-3 px-4 border-b border-border/50">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-500/20 to-amber-500/10 flex items-center justify-center border border-amber-500/20">
-                        <CheckSquare className="w-4 h-4 text-amber-600" />
-                      </div>
-                      <div>
-                        <CardTitle className="text-sm font-bold">My Tasks</CardTitle>
-                        <CardDescription className="text-[11px]">Active and pending</CardDescription>
-                      </div>
-                    </div>
-                    <Link 
-                      to="/tasks" 
-                      className="text-[11px] font-semibold text-muted-foreground hover:text-primary transition-colors flex items-center gap-1 group"
-                    >
-                      View All
-                      <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                    </Link>
-                  </div>
-                </CardHeader>
-                <CardContent className="p-6 space-y-3">
-                  {loading ? (
-                    <div className="space-y-3">
-                      {[0, 1, 2, 3].map((k) => (
-                        <div key={k} className="flex items-center gap-3 rounded-lg border border-border/50 bg-background/40 p-3">
-                          <Skeleton className="h-5 w-5 rounded" />
-                          <div className="flex-1 space-y-2">
-                            <Skeleton className="h-4 w-56" />
-                            <Skeleton className="h-3 w-32" />
-                          </div>
-                          <Skeleton className="h-7 w-20 rounded-full" />
-                        </div>
-                      ))}
-                    </div>
-                  ) : recentTasks.length === 0 ? (
-                    <div className="rounded-xl border border-dashed border-border/50 bg-muted/20 p-8 text-center">
-                      <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-muted/50 to-muted/30 flex items-center justify-center mx-auto mb-4">
-                        <CheckSquare className="w-7 h-7 text-muted-foreground" />
-                      </div>
-                      <p className="text-sm font-bold text-foreground mb-1">No tasks assigned</p>
-                      <p className="text-xs text-muted-foreground mb-4">Create one to track your next actions</p>
-                      <Button size="sm" variant="outline" onClick={() => setShowCreateTask(true)} className="gap-1.5 h-8 text-xs">
-                        <Plus className="h-4 w-4" />
-                        New Task
-                      </Button>
-                    </div>
-                  ) : (
-                    recentTasks.map((t, i) => {
-                      const priority = priorityConfig[t.priority] || priorityConfig.low;
-                      const PriorityIcon = priority.icon;
-                      return (
-                        <motion.div
-                          key={t.id}
-                          initial={{ opacity: 0, x: 20 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          transition={{ delay: i * 0.05 }}
-                          className="group flex items-center gap-3 rounded-lg border border-border/50 bg-gradient-to-r from-background to-muted/10 p-3 hover:border-primary/40 hover:shadow-md transition-all duration-300 cursor-pointer"
-                          onClick={() => setSelectedTask(t)}
-                        >
-                          <div className={cn(
-                            "w-5 h-5 rounded shrink-0 transition-colors flex items-center justify-center",
-                            t.status === "done" ? "text-green-600" : "text-muted-foreground"
-                          )}>
-                            {t.status === "done" ? (
-                              <CheckCircle2 className="w-5 h-5" />
-                            ) : (
-                              <Circle className="w-5 h-5" />
-                            )}
-                          </div>
-                          <div className="flex-1 min-w-0 space-y-0.5">
-                            <div className="flex items-center gap-2">
-                              {t.project && (
-                                <Badge
-                                  variant="outline"
-                                  className="text-[10px] px-1.5 py-0 font-mono border-muted-foreground/30"
-                                >
-                                  {t.project.key}
-                                </Badge>
-                              )}
-                              <p
-                                className={cn(
-                                  "text-sm font-semibold truncate",
-                                  t.status === "done" ? "line-through text-muted-foreground" : "text-foreground"
-                                )}
-                              >
-                                {t.title}
-                              </p>
-                            </div>
-                            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                              <div className="flex items-center gap-1.5">
-                                <PriorityIcon className="w-3 h-3 text-muted-foreground" />
-                                <span>Priority · {priority.label}</span>
-                              </div>
-                              {t.dueDate && (
-                                <>
-                                  <span className="text-muted-foreground/40">·</span>
-                                  <div className="flex items-center gap-1.5">
-                                    <Clock className="w-3 h-3" />
-                                    <span>
-                                      {new Date(t.dueDate).toLocaleDateString(undefined, {
-                                        month: "short",
-                                        day: "numeric",
-                                      })}
-                                    </span>
-                                  </div>
-                                </>
-                              )}
-                              {t.epic && (
-                                <>
-                                  <span className="text-muted-foreground/40">·</span>
-                                  <span className="flex items-center gap-1.5">
-                                    <span
-                                      className="w-2 h-2 rounded-full"
-                                      style={{ backgroundColor: t.epic.color || "#6366f1" }}
-                                    />
-                                    <span className="truncate max-w-[120px]">
-                                      {t.epic.name}
-                                    </span>
-                                  </span>
-                                </>
-                              )}
-                            </div>
-                          </div>
-                          {t.assignee ? (
-                            <Avatar className="h-7 w-7 border border-border/50 ring-2 ring-background">
-                              <AvatarImage src={t.assignee.avatar} alt={t.assignee.name} />
-                              <AvatarFallback className="bg-muted text-muted-foreground text-[10px] font-semibold">
-                                {t.assignee.initials || t.assignee.name?.charAt(0) || "?"}
-                              </AvatarFallback>
-                            </Avatar>
-                          ) : (
-                            <div className="h-7 w-7 rounded-full border-2 border-dashed border-muted-foreground/20 flex items-center justify-center">
-                              <Users className="w-3.5 h-3.5 text-muted-foreground/30" />
-                            </div>
-                          )}
-                          <Badge 
-                            variant="outline" 
-                            className={cn(
-                              "text-xs px-3 py-1 h-7 font-semibold border-2",
-                              priority.color
-                            )}
-                          >
-                            {priority.label}
-                          </Badge>
-                        </motion.div>
-                      );
-                    })
-                  )}
-                </CardContent>
-              </Card>
-            </motion.div>
-            </div>{/* close left column */}
+              <motion.div variants={itemVariants}>
+                <TaskCard tasks={recentTasks} loading={loading} onCreateTask={() => setShowCreateTask(true)} onTaskClick={setSelectedTask} />
+              </motion.div>
+            </div>
 
             {/* Right Column: Team Pulse + Active Rooms + Standup */}
             <div className="lg:col-span-4 space-y-4">
-            {/* Team Pulse */}
-            <motion.div variants={itemVariants}>
-              <Card className="border bg-card/80 backdrop-blur-xl shadow-sm hover:shadow-md transition-all duration-300">
-                <CardHeader className="py-3 px-4 border-b border-border/50">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-green-500/20 to-green-500/10 flex items-center justify-center border border-green-500/20">
-                        <Eye className="w-4 h-4 text-green-600" />
-                      </div>
-                      <div>
-                        <CardTitle className="text-sm font-bold">Team Pulse</CardTitle>
-                        <CardDescription className="text-[11px]">Who's online</CardDescription>
-                      </div>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="p-4 space-y-2">
-                  {loading ? (
-                    <div className="space-y-2">
-                      {[0, 1, 2, 3].map((k) => (
-                        <div key={k} className="flex items-center gap-3">
-                          <Skeleton className="h-9 w-9 rounded-full" />
-                          <div className="flex-1 space-y-1.5">
-                            <Skeleton className="h-3.5 w-24" />
-                            <Skeleton className="h-3 w-32" />
-                          </div>
-                          <Skeleton className="h-6 w-20 rounded-md" />
-                        </div>
-                      ))}
-                    </div>
-                  ) : teamPulseMembers.length === 0 ? (
-                    <p className="text-xs text-muted-foreground text-center py-6">No team members online</p>
-                  ) : (
-                    teamPulseMembers.slice(0, 6).map((m, i) => {
-                      const presenceStatus: "online" | "busy" | "away" | "offline" | "dnd" = m.status as any;
+              <motion.div variants={itemVariants}>
+                <TeamPulseCard members={teamPulseMembers} loading={loading} />
+              </motion.div>
 
-                      const roomNames: Record<string, string> = {
-                        workspace: "Workspace",
-                        "meeting-1": "Meeting A",
-                        "meeting-2": "Meeting B",
-                        huddle: "Huddle",
-                        lounge: "Lounge",
-                        phone: "Phone",
-                        "quick-huddle": "Quick huddle",
-                      };
+              <motion.div variants={itemVariants}>
+                <ActiveRoomsCard rooms={activeRooms} onQuickHuddle={createQuickHuddle} />
+              </motion.div>
 
-                      const statusLabels: Record<"online" | "busy" | "away" | "offline" | "dnd", string> = {
-                        online: "Online",
-                        busy: "Busy",
-                        away: "Away",
-                        offline: "Offline",
-                        dnd: "Do Not Disturb",
-                      };
-
-                      const statusColors: Record<"online" | "busy" | "away" | "offline" | "dnd", string> = {
-                        online: "bg-green-500/10 text-green-600 border-green-500/30",
-                        busy: "bg-red-500/10 text-red-600 border-red-500/30",
-                        away: "bg-yellow-500/10 text-yellow-600 border-yellow-500/30",
-                        offline: "bg-muted/40 text-muted-foreground border-border/60",
-                        dnd: "bg-purple-500/10 text-purple-600 border-purple-500/30",
-                      };
-
-                      return (
-                        <motion.div
-                          key={m.id}
-                          initial={{ opacity: 0, y: 10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ delay: i * 0.05 }}
-                          className="group flex items-center gap-3 rounded-lg border border-border/50 bg-gradient-to-r from-background to-muted/10 p-2.5 hover:border-primary/40 hover:shadow-md transition-all duration-300"
-                        >
-                          <div className="relative">
-                            <Avatar className={cn(
-                              "h-9 w-9 ring-2 transition-all duration-300",
-                              m.isOnline ? "ring-green-500/30" : "ring-background"
-                            )}>
-                              <AvatarImage src={(m as any).avatar} alt={m.name || "Avatar"} />
-                              <AvatarFallback className={cn(
-                                "bg-gradient-to-br text-foreground text-xs font-bold transition-colors",
-                                m.isOnline ? "from-green-500/20 to-green-500/10" : "from-muted/80 to-muted/60"
-                              )}>
-                                {m.initials}
-                              </AvatarFallback>
-                            </Avatar>
-                            <StatusIndicator
-                              status={presenceStatus}
-                              className="absolute -bottom-0.5 -right-0.5 border-2 border-background"
-                            />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-xs font-bold text-foreground truncate">{m.name}</p>
-                            <p className="text-[11px] text-muted-foreground truncate">
-                              {m.activity && presenceStatus !== "offline"
-                                ? m.activity
-                                : statusLabels[presenceStatus]}
-                            </p>
-                          </div>
-                          <Badge 
-                            variant="outline" 
-                            className={cn(
-                              "text-[10px] px-2 py-0.5 h-5 font-semibold border",
-                              statusColors[presenceStatus]
-                            )}
-                          >
-                            {m.room
-                              ? roomNames[m.room] || m.room
-                              : statusLabels[presenceStatus]}
-                          </Badge>
-                        </motion.div>
-                      );
-                    })
-                  )}
-                </CardContent>
-              </Card>
-            </motion.div>
-
-            {/* Active Rooms */}
-            <motion.div variants={itemVariants}>
-              <Card className="border bg-card/80 backdrop-blur-xl shadow-sm hover:shadow-md transition-all duration-300">
-                <CardHeader className="py-3 px-4 border-b border-border/50">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center border border-primary/20">
-                      <Video className="w-4 h-4 text-primary" />
-                    </div>
-                    <div>
-                      <CardTitle className="text-sm font-bold">Active Rooms</CardTitle>
-                      <CardDescription className="text-[11px]">Live meetings</CardDescription>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="p-4 space-y-2">
-                  {activeRooms.length === 0 ? (
-                    <div className="rounded-xl border border-dashed border-border/50 bg-muted/20 p-6 text-center">
-                      <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-muted/50 to-muted/30 flex items-center justify-center mx-auto mb-3">
-                        <Video className="w-6 h-6 text-muted-foreground" />
-                      </div>
-                      <p className="text-sm font-bold text-foreground mb-1">No live rooms</p>
-                      <p className="text-xs text-muted-foreground mb-3">Start a quick meeting</p>
-                      <Button
-                        size="sm"
-                        className="gap-1.5 h-8 text-xs bg-gradient-to-r from-primary to-blue-600"
-                        onClick={createQuickHuddle}
-                      >
-                        <Video className="h-3.5 w-3.5" />
-                        Start Meeting
-                      </Button>
-                    </div>
-                  ) : (
-                    activeRooms.slice(0, 4).map((room: any, i: number) => (
-                      <motion.div
-                        key={room.roomId}
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: i * 0.05 }}
-                        className="group flex items-center gap-3 rounded-lg border border-border/50 bg-gradient-to-r from-background to-muted/10 p-3 hover:border-primary/40 hover:shadow-md transition-all duration-300"
-                      >
-                        <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 bg-gradient-to-br from-primary/20 to-primary/10 border border-primary/30">
-                          <Video className="w-4 h-4 text-primary" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs font-bold text-foreground truncate">{room.name}</p>
-                          <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                            <Users className="w-3 h-3" />
-                            <span>{room.participants?.length || 0}</span>
-                          </div>
-                        </div>
-                        <Button size="sm" variant="outline" className="h-7 gap-1 text-[11px] px-2" asChild>
-                          <Link to={`/meeting-lobby/${room.roomId}`}>
-                            <Zap className="w-3 h-3" />
-                            Join
-                          </Link>
-                        </Button>
-                      </motion.div>
-                    ))
-                  )}
-                </CardContent>
-              </Card>
-            </motion.div>
-
-            {/* Daily Standup */}
-            <motion.div variants={itemVariants}>
-              <Card className="border bg-card/80 backdrop-blur-xl shadow-sm hover:shadow-md transition-all duration-300">
-                <CardHeader className="py-3 px-4 border-b border-border/50">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500/20 to-blue-500/10 flex items-center justify-center border border-blue-500/20">
-                        <Hash className="w-4 h-4 text-blue-600" />
-                      </div>
-                      <div>
-                        <CardTitle className="text-sm font-bold">Daily Standup</CardTitle>
-                        <CardDescription className="text-[11px]">Updates & blockers</CardDescription>
-                      </div>
-                    </div>
-                    {teams.length > 0 && (
-                      <select
-                        className="text-[11px] px-2 py-1 border border-border/60 rounded-md bg-background text-foreground hover:bg-muted transition-colors font-medium"
-                        value={standupTeamId ?? ""}
-                        onChange={(e) => setStandupTeamId(e.target.value || null)}
-                      >
-                        {teams.map((t: any) => (
-                          <option key={t.id} value={t.id}>
-                            {t.name}
-                          </option>
-                        ))}
-                      </select>
-                    )}
-                  </div>
-                </CardHeader>
-                <CardContent className="p-4 space-y-2">
-                  {standupLoading ? (
-                    <div className="space-y-2">
-                      {[0, 1, 2].map((k) => (
-                        <div key={k} className="flex items-center gap-3">
-                          <Skeleton className="h-9 w-9 rounded-full" />
-                          <div className="flex-1 space-y-1.5">
-                            <Skeleton className="h-3.5 w-28" />
-                            <Skeleton className="h-3 w-36" />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : !standupTeamId || teams.length === 0 ? (
-                    <div className="rounded-xl border border-dashed border-border/50 bg-muted/20 p-6 text-center">
-                      <p className="text-xs text-muted-foreground">
-                        No teams configured yet. Create a team and a #standup channel to start.
-                      </p>
-                    </div>
-                  ) : standupEntries.length === 0 ? (
-                    <div className="rounded-xl border border-dashed border-border/50 bg-muted/20 p-6 text-center">
-                      <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-muted/50 to-muted/30 flex items-center justify-center mx-auto mb-3">
-                        <Hash className="w-6 h-6 text-muted-foreground" />
-                      </div>
-                      <p className="text-sm font-bold text-foreground mb-1">No updates yet</p>
-                      <p className="text-xs text-muted-foreground">
-                        Post updates in <span className="font-bold">#standup</span>
-                      </p>
-                    </div>
-                  ) : (
-                    standupEntries.slice(0, 4).map((entry, i) => (
-                      <motion.div
-                        key={entry.id}
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: i * 0.05 }}
-                        className="group rounded-lg border border-border/50 bg-gradient-to-r from-background to-muted/10 p-3 hover:border-primary/40 hover:shadow-md transition-all duration-300"
-                      >
-                        <div className="flex items-start gap-3">
-                          <Avatar className="h-8 w-8 ring-2 ring-background shrink-0">
-                            <AvatarImage src={entry.user.avatar || undefined} alt={entry.user.name || "Avatar"} />
-                            <AvatarFallback className="bg-gradient-to-br from-muted/80 to-muted/60 text-foreground text-[10px] font-bold">
-                              {(entry.user.name || "?")
-                                .split(" ")
-                                .map((n) => n[0])
-                                .join("")
-                                .slice(0, 2)
-                                .toUpperCase()}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div className="flex-1 min-w-0 space-y-1">
-                            <div className="flex items-center justify-between gap-2">
-                              <p className="text-xs font-bold text-foreground truncate">{entry.user.name}</p>
-                              <div className="flex items-center gap-1 flex-wrap">
-                                <Badge variant="outline" className="h-4 px-1.5 text-[9px] bg-green-500/10 text-green-600 border-green-500/30 font-semibold">
-                                  {entry.yesterday.length} done
-                                </Badge>
-                                <Badge variant="outline" className="h-4 px-1.5 text-[9px] bg-blue-500/10 text-blue-600 border-blue-500/30 font-semibold">
-                                  {entry.today.length} today
-                                </Badge>
-                                {entry.blockers.length > 0 && (
-                                  <Badge variant="outline" className="h-4 px-1.5 text-[9px] bg-red-500/10 text-red-600 border-red-500/30 font-semibold">
-                                    {entry.blockers.length} blocked
-                                  </Badge>
-                                )}
-                              </div>
-                            </div>
-                            {entry.today.length > 0 && (
-                              <p className="text-[11px] text-muted-foreground truncate">
-                                📝 {entry.today[0]}
-                                {entry.today.length > 1 ? " +" + (entry.today.length - 1) + " more" : ""}
-                              </p>
-                            )}
-                            {entry.blockers.length > 0 && (
-                              <p className="text-[11px] text-red-600/80 truncate">
-                                ⚠️ {entry.blockers[0]}
-                                {entry.blockers.length > 1 ? " +" + (entry.blockers.length - 1) + " more" : ""}
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      </motion.div>
-                    ))
-                  )}
-                </CardContent>
-              </Card>
-            </motion.div>
-            </div>{/* close right column */}
-          </div>{/* close main grid */}
+              <motion.div variants={itemVariants}>
+                <StandupCard entries={standupEntries} teams={teams} selectedTeamId={standupTeamId} loading={standupLoading} onTeamChange={setStandupTeamId} />
+              </motion.div>
+            </div>
+          </div>
 
           {/* Notification Digest */}
           {digest && !digest.isRead && (
@@ -1529,9 +711,9 @@ export default function Dashboard() {
                           {digest.byType && Object.keys(digest.byType).length > 0 && (
                             <div className="flex flex-wrap gap-2">
                               {Object.entries(digest.byType).slice(0, 5).map(([type, count]: [string, any]) => (
-                                <Badge key={type} variant="secondary" className="h-7 text-xs px-3 bg-primary/10 text-primary border-primary/20 font-semibold">
+                                <span key={type} className="h-7 text-xs px-3 inline-flex items-center rounded-full bg-primary/10 text-primary border border-primary/20 font-semibold">
                                   {type.replace(/_/g, ' ')}: {count}
-                                </Badge>
+                                </span>
                               ))}
                             </div>
                           )}
@@ -1553,11 +735,7 @@ export default function Dashboard() {
                           >
                             Mark Read
                           </Button>
-                          <Button
-                            size="lg"
-                            onClick={() => navigate('/notifications')}
-                            className="h-11 bg-gradient-to-r from-primary to-blue-600"
-                          >
+                          <Button size="lg" onClick={() => navigate('/notifications')} className="h-11 bg-gradient-to-r from-primary to-blue-600">
                             View
                           </Button>
                         </div>

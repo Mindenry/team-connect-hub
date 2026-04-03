@@ -2,45 +2,21 @@ import { useEffect, useMemo, useState, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   Folder,
-  FileText,
   Upload,
-  Link as LinkIcon,
   RefreshCw,
-  History,
-  MoreHorizontal,
-  Image as ImageIcon,
-  FileArchive,
-  FileSpreadsheet,
-  FileCode,
-  FileAudio,
-  FileVideo,
-  File as FileIcon,
-  Download,
-  Eye,
   Plus,
   Search,
   Grid3x3,
   List,
   ChevronRight,
-  Clock,
   HardDrive,
   FolderOpen,
   X,
-  Share2,
-  Copy,
-  Check,
-  Trash2,
-  Users,
-  UserPlus,
 } from "lucide-react";
-import * as mammoth from "mammoth";
-import * as XLSX from "xlsx";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -53,8 +29,6 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
-import { cn } from "@/lib/utils";
-import { useToast } from "@/components/ui/use-toast";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -65,192 +39,22 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { cn } from "@/lib/utils";
+import { useToast } from "@/components/ui/use-toast";
 import { auth } from "@/lib/auth";
 import { apiGet, apiPost, apiFetch, apiDelete } from "@/lib/api";
+import {
+  DriveGrid,
+  DriveList,
+  FilePreviewDialog,
+  ManageAccessDialog,
+  formatBytes,
+  formatDate,
+  getFullUrl,
+} from "@/components/drive";
+import type { DriveEntry, DriveEntryWithVersions, Team, ViewMode } from "@/components/drive";
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
-
-interface Team {
-  id: string;
-  name: string;
-}
-
-interface DriveEntry {
-  id: string;
-  name: string;
-  path: string;
-  isFolder: boolean;
-  latestVersion: {
-    id: string;
-    version: number;
-    size: number;
-    mimeType: string;
-    storageKey?: string;
-    url: string;
-  } | null;
-  updatedAt: string;
-}
-
-interface DriveEntryWithVersions {
-  id: string;
-  name: string;
-  path: string;
-  isFolder: boolean;
-  versions: {
-    id: string;
-    version: number;
-    size: number;
-    mimeType: string;
-    url: string;
-    createdAt: string;
-  }[];
-}
-
-type ViewMode = "grid" | "list";
-
-const formatBytes = (bytes?: number) => {
-  if (!bytes && bytes !== 0) return "-";
-  if (bytes === 0) return "0 B";
-  const k = 1024;
-  const sizes = ["B", "KB", "MB", "GB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
-};
-
-const formatDate = (dateString: string) => {
-  const date = new Date(dateString);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMs / 3600000);
-  const diffDays = Math.floor(diffMs / 86400000);
-
-  if (diffMins < 1) return "เมื่อสักครู่";
-  if (diffMins < 60) return `${diffMins} นาทีที่แล้ว`;
-  if (diffHours < 24) return `${diffHours} ชั่วโมงที่แล้ว`;
-  if (diffDays < 7) return `${diffDays} วันที่แล้ว`;
-  return date.toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "numeric" });
-};
-
-const iconForMime = (mime?: string, fileName?: string) => {
-  const lowerName = (fileName || "").toLowerCase();
-  if (isVideoLike(mime, lowerName)) return FileVideo;
-  if (!mime) return FileIcon;
-  if (mime.startsWith("image/")) return ImageIcon;
-  if (mime.startsWith("audio/")) return FileAudio;
-  if (mime === "application/pdf") return FileText;
-  if (
-    mime.includes("sheet") ||
-    mime.includes("excel") ||
-    [".csv", ".xls", ".xlsx"].some((ext) => lowerName.endsWith(ext))
-  ) {
-    return FileSpreadsheet;
-  }
-  if (
-    mime.includes("json") ||
-    mime.includes("xml") ||
-    mime.includes("javascript") ||
-    mime.includes("typescript") ||
-    mime.includes("text/") ||
-    [
-      ".json",
-      ".xml",
-      ".js",
-      ".ts",
-      ".tsx",
-      ".jsx",
-      ".md",
-      ".txt",
-      ".yml",
-      ".yaml",
-      ".html",
-      ".css",
-    ].some((ext) => lowerName.endsWith(ext))
-  ) {
-    return FileCode;
-  }
-  if (mime.includes("zip") || mime.includes("rar") || mime.includes("7z")) return FileArchive;
-  return FileIcon;
-};
-
-const getFileColor = (mime?: string, name?: string) => {
-  if (isVideoLike(mime, name)) return "text-violet-500";
-  if (!mime) return "text-muted-foreground";
-  if (mime.startsWith("image/")) return "text-blue-500";
-  if (mime.startsWith("audio/")) return "text-green-500";
-  if (mime === "application/pdf") return "text-red-500";
-  if (mime.includes("sheet") || mime.includes("excel")) return "text-emerald-600";
-  if (mime.includes("json") || mime.includes("text/") || mime.includes("javascript") || mime.includes("typescript")) return "text-cyan-500";
-  if (mime.includes("zip") || mime.includes("rar") || mime.includes("7z")) return "text-yellow-500";
-  return "text-muted-foreground";
-};
-
-const isVideoLike = (mime?: string, name?: string) => {
-  const lowerName = (name || "").toLowerCase();
-  if ((mime || "").startsWith("video/")) return true;
-  return [".webm", ".mp4", ".mov", ".mkv", ".avi", ".wmv", ".flv"].some((ext) =>
-    lowerName.endsWith(ext),
-  );
-};
-
-const isTextLike = (mime?: string, name?: string) => {
-  const lowerName = (name || "").toLowerCase();
-
-  // Guard: some binary files may be mislabeled as text/plain by upstream.
-  if (isVideoLike(mime, lowerName)) return false;
-  // Exclude common binary formats that might be mislabeled
-  if ([".mp3", ".wav", ".ogg", ".m4a", ".aac", ".flac", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".pdf"].some((ext) => lowerName.endsWith(ext))) {
-    return false;
-  }
-  // Exclude Office documents - they are binary ZIP-based formats, not text
-  if ([".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx"].some((ext) => lowerName.endsWith(ext))) {
-    return false;
-  }
-
-  if (mime?.startsWith("text/")) return true;
-  if (
-    (mime || "").includes("json") ||
-    (mime || "").includes("xml") ||
-    (mime || "").includes("javascript") ||
-    (mime || "").includes("typescript")
-  ) {
-    return true;
-  }
-  return [
-    ".txt",
-    ".md",
-    ".json",
-    ".xml",
-    ".js",
-    ".jsx",
-    ".ts",
-    ".tsx",
-    ".css",
-    ".html",
-    ".yml",
-    ".yaml",
-    ".csv",
-  ].some((ext) => lowerName.endsWith(ext));
-};
-
-const isOfficeLike = (mime?: string, name?: string) => {
-  const lowerName = (name || "").toLowerCase();
-  // Check by extension first (most reliable)
-  if ([".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx"].some((ext) => lowerName.endsWith(ext))) {
-    return true;
-  }
-  // Also check MIME type
-  if (!mime) return false;
-  if (
-    mime.includes("officedocument") ||
-    mime.includes("msword") ||
-    mime.includes("excel") ||
-    mime.includes("powerpoint")
-  ) {
-    return true;
-  }
-  return false;
-};
 
 export default function SharedDrive() {
   const currentUser = auth.getUser();
@@ -276,16 +80,9 @@ export default function SharedDrive() {
   const [loadingVersions, setLoadingVersions] = useState(false);
   const [showNewFolderDialog, setShowNewFolderDialog] = useState(false);
   const [copiedLink, setCopiedLink] = useState<string | null>(null);
-  const [imageError, setImageError] = useState(false);
-  const [imageLoading, setImageLoading] = useState(true);
   const [entryToDelete, setEntryToDelete] = useState<DriveEntry | null>(null);
   const [manageAccessEntry, setManageAccessEntry] = useState<DriveEntry | null>(null);
-  const [textPreview, setTextPreview] = useState<string>("");
-  const [textPreviewLoading, setTextPreviewLoading] = useState(false);
-  const [textPreviewError, setTextPreviewError] = useState<string | null>(null);
-  const [officePreview, setOfficePreview] = useState<string>("");
-  const [officePreviewLoading, setOfficePreviewLoading] = useState(false);
-  const [officePreviewError, setOfficePreviewError] = useState<string | null>(null);
+
   const teamIdFromQuery = searchParams.get("teamId") || "";
 
   const loadTeams = async () => {
@@ -307,7 +104,6 @@ export default function SharedDrive() {
 
   useEffect(() => {
     loadTeams();
-
   }, [teamIdFromQuery]);
 
   useEffect(() => {
@@ -324,9 +120,7 @@ export default function SharedDrive() {
     try {
       const params = new URLSearchParams();
       if (currentPath) params.set("path", currentPath);
-      const data = await apiGet<DriveEntry[]>(`/drive/teams/${selectedTeamId}?${params.toString()}`).catch(
-        () => [],
-      );
+      const data = await apiGet<DriveEntry[]>(`/drive/teams/${selectedTeamId}?${params.toString()}`).catch(() => []);
       setEntries(Array.isArray(data) ? data : []);
     } catch (e: any) {
       console.error("Failed to load drive entries:", e);
@@ -342,16 +136,13 @@ export default function SharedDrive() {
 
   useEffect(() => {
     loadEntries();
-
   }, [selectedTeamId, currentPath]);
 
   const filteredEntries = useMemo(() => {
-    // Filter out "Personal Recordings" folder - it's personal, not for team drive
     let filtered = entries.filter(
       (entry) => !(entry.isFolder && entry.name.toLowerCase() === "personal recordings")
     );
-    
-    // Apply search filter
+
     if (!searchQuery.trim()) return filtered;
     const query = searchQuery.toLowerCase();
     return filtered.filter(
@@ -386,10 +177,7 @@ export default function SharedDrive() {
       });
       setNewFolderName("");
       await loadEntries();
-      toast({
-        title: "สร้างโฟลเดอร์สำเร็จ",
-        description: name,
-      });
+      toast({ title: "สร้างโฟลเดอร์สำเร็จ", description: name });
     } catch (e: any) {
       console.error("Create folder error:", e);
       toast({
@@ -437,117 +225,12 @@ export default function SharedDrive() {
     }
   };
 
-  const loadTextPreview = useCallback(async (entry: DriveEntry) => {
-    if (!entry.latestVersion) return;
-
-    const mime = entry.latestVersion.mimeType;
-    if (!isTextLike(mime, entry.name)) {
-      setTextPreview("");
-      setTextPreviewError(null);
-      setTextPreviewLoading(false);
-      return;
-    }
-
-    try {
-      setTextPreviewLoading(true);
-      setTextPreviewError(null);
-      const src = entry.latestVersion.url.startsWith("http")
-        ? entry.latestVersion.url
-        : `${API_BASE}${entry.latestVersion.url}`;
-      const res = await fetch(src, {
-        headers: {
-          ...(auth.getToken() ? { Authorization: `Bearer ${auth.getToken()}` } : {}),
-        },
-      });
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`);
-      }
-      const txt = await res.text();
-      setTextPreview(txt.slice(0, 200000));
-    } catch (err: any) {
-      setTextPreview("");
-      setTextPreviewError(err?.message || "Unable to preview this file");
-    } finally {
-      setTextPreviewLoading(false);
-    }
-  }, []);
-
-  const loadOfficePreview = useCallback(async (entry: DriveEntry) => {
-    if (!entry.latestVersion) return;
-    
-    const lowerName = entry.name.toLowerCase();
-    const isWord = lowerName.endsWith('.doc') || lowerName.endsWith('.docx');
-    const isExcel = lowerName.endsWith('.xls') || lowerName.endsWith('.xlsx');
-    
-    if (!isWord && !isExcel) {
-      setOfficePreview("");
-      setOfficePreviewError(null);
-      setOfficePreviewLoading(false);
-      return;
-    }
-
-    try {
-      setOfficePreviewLoading(true);
-      setOfficePreviewError(null);
-      
-      const src = entry.latestVersion.url.startsWith("http")
-        ? entry.latestVersion.url
-        : `${API_BASE}${entry.latestVersion.url}`;
-      
-      const res = await fetch(src, {
-        headers: {
-          ...(auth.getToken() ? { Authorization: `Bearer ${auth.getToken()}` } : {}),
-        },
-      });
-      
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`);
-      }
-
-      if (isWord) {
-        // DOCX preview using mammoth
-        const arrayBuffer = await res.arrayBuffer();
-        const result = await mammoth.convertToHtml({ arrayBuffer });
-        setOfficePreview(result.value);
-      } else if (isExcel) {
-        // XLSX preview using xlsx
-        const arrayBuffer = await res.arrayBuffer();
-        const workbook = XLSX.read(arrayBuffer, { type: 'array' });
-        
-        // Get first sheet
-        const firstSheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[firstSheetName];
-        
-        // Convert to HTML table
-        const html = XLSX.utils.sheet_to_html(worksheet, { editable: false });
-        setOfficePreview(html);
-      }
-    } catch (err: any) {
-      console.error("Office preview error:", err);
-      setOfficePreview("");
-      setOfficePreviewError(err?.message || "Unable to preview this file");
-    } finally {
-      setOfficePreviewLoading(false);
-    }
-  }, []);
-
   const handleOpenEntry = (entry: DriveEntry) => {
     if (entry.isFolder) {
       setCurrentPath(entry.path === "/" ? `/${entry.name}` : `${entry.path}/${entry.name}`);
     } else {
       setPreviewEntry(entry);
       setVersionsData(null);
-      setImageError(false);
-      setImageLoading(true);
-      setTextPreview("");
-      setTextPreviewError(null);
-      setTextPreviewLoading(false);
-      setOfficePreview("");
-      setOfficePreviewError(null);
-      setOfficePreviewLoading(false);
-      void loadVersions(entry.id);
-      void loadTextPreview(entry);
-      void loadOfficePreview(entry);
     }
   };
 
@@ -573,28 +256,21 @@ export default function SharedDrive() {
 
   const handleCopyLink = async (url?: string) => {
     if (!url) return;
-    const full = url.startsWith("http") ? url : `${API_BASE}${url}`;
+    const full = getFullUrl(url);
     try {
       await navigator.clipboard.writeText(full);
       setCopiedLink(full);
-      toast({
-        title: "คัดลอกลิงก์แล้ว",
-        description: "สามารถนำไปวางในแชทได้เลย",
-      });
+      toast({ title: "คัดลอกลิงก์แล้ว", description: "สามารถนำไปวางในแชทได้เลย" });
       setTimeout(() => setCopiedLink(null), 2000);
     } catch {
-      toast({
-        variant: "destructive",
-        title: "คัดลอกลิงก์ไม่สำเร็จ",
-      });
+      toast({ variant: "destructive", title: "คัดลอกลิงก์ไม่สำเร็จ" });
     }
   };
 
   const handleDownload = (url?: string, filename?: string) => {
     if (!url) return;
-    const full = url.startsWith("http") ? url : `${API_BASE}${url}`;
-    
-    // Use fetch to download with auth, then create blob for proper Thai filename support
+    const full = getFullUrl(url);
+
     fetch(full, {
       headers: auth.getToken() ? { Authorization: `Bearer ${auth.getToken()}` } : {},
     })
@@ -603,7 +279,6 @@ export default function SharedDrive() {
         const blobUrl = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = blobUrl;
-        // Decode and encode filename to support Thai characters
         const decodedName = filename ? decodeURIComponent(filename) : full.split("/").pop() || "download";
         a.download = decodedName;
         document.body.appendChild(a);
@@ -612,12 +287,9 @@ export default function SharedDrive() {
         URL.revokeObjectURL(blobUrl);
       })
       .catch(() => {
-        // Fallback to direct link if fetch fails
         const a = document.createElement("a");
         a.href = full;
-        if (filename) {
-          a.download = decodeURIComponent(filename);
-        }
+        if (filename) a.download = decodeURIComponent(filename);
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -626,7 +298,7 @@ export default function SharedDrive() {
 
   const handleOpenExternal = (url?: string) => {
     if (!url) return;
-    const full = url.startsWith("http") ? url : `${API_BASE}${url}`;
+    const full = getFullUrl(url);
     window.open(full, "_blank", "noopener,noreferrer");
   };
 
@@ -638,10 +310,7 @@ export default function SharedDrive() {
         setVersionsData(null);
       }
       await loadEntries();
-      toast({
-        title: "ลบสำเร็จ",
-        description: "รายการถูกลบออกจาก Shared Drive แล้ว",
-      });
+      toast({ title: "ลบสำเร็จ", description: "รายการถูกลบออกจาก Shared Drive แล้ว" });
     } catch (e: any) {
       console.error("Delete error:", e);
       toast({
@@ -689,9 +358,7 @@ export default function SharedDrive() {
                   </SelectTrigger>
                   <SelectContent>
                     {teams.map((t) => (
-                      <SelectItem key={t.id} value={t.id}>
-                        {t.name}
-                      </SelectItem>
+                      <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -916,243 +583,22 @@ export default function SharedDrive() {
                 </Card>
               ) : viewMode === "grid" ? (
                 <ScrollArea className="h-full">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 pb-4">
-                    {filteredEntries.map((entry) => {
-                      const version = entry.latestVersion;
-                      const Icon = entry.isFolder ? Folder : iconForMime(version?.mimeType, entry.name);
-                      const fileColor = entry.isFolder ? "text-primary" : getFileColor(version?.mimeType, entry.name);
-
-                      return (
-                        <Card
-                          key={entry.id}
-                          className={cn(
-                            "group border-border/50 bg-card/60 hover:bg-card hover:border-border/80 transition-all duration-300 cursor-pointer",
-                            "hover:shadow-xl hover:shadow-black/10 hover:-translate-y-1.5",
-                            "ring-0 hover:ring-1 hover:ring-primary/20"
-                          )}
-                          onClick={() => handleOpenEntry(entry)}
-                        >
-                          <CardContent className="p-5">
-                            <div className="flex items-start justify-between mb-4">
-                              <div
-                                className={cn(
-                                  "w-14 h-14 rounded-xl flex items-center justify-center transition-all duration-300 shadow-sm shrink-0",
-                                  entry.isFolder
-                                    ? "bg-gradient-to-br from-primary/15 to-primary/5 group-hover:from-primary/20 group-hover:to-primary/10"
-                                    : "bg-gradient-to-br from-muted/60 to-muted/40 group-hover:from-muted/70 group-hover:to-muted/50",
-                                  "group-hover:scale-110 group-hover:shadow-md"
-                                )}
-                              >
-                                <Icon className={cn("w-7 h-7 transition-transform duration-300", fileColor)} />
-                              </div>
-                              <div className="flex flex-col items-end gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                                {!entry.isFolder && version && (
-                                  <Badge
-                                    variant="secondary"
-                                    className="text-[10px] px-2 py-0 h-5 bg-muted/80"
-                                  >
-                                    v{version.version}
-                                  </Badge>
-                                )}
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <Button
-                                      variant="outline"
-                                      size="icon"
-                                      className="h-7 w-7 border-border/60 hover:bg-muted/50"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setManageAccessEntry(entry);
-                                      }}
-                                    >
-                                      <Share2 className="w-3.5 h-3.5 text-muted-foreground" />
-                                    </Button>
-                                  </TooltipTrigger>
-                                  <TooltipContent>จัดการสิทธิ์</TooltipContent>
-                                </Tooltip>
-                              </div>
-                            </div>
-                            <h3 className="font-semibold text-sm text-foreground mb-1.5 line-clamp-2 group-hover:text-primary transition-colors duration-200">
-                              {entry.name}
-                            </h3>
-                            <div className="flex items-center gap-3 text-xs text-muted-foreground mt-2.5">
-                              {entry.isFolder ? (
-                                <span className="flex items-center gap-1">
-                                  <Folder className="w-3 h-3" />
-                                  <span>โฟลเดอร์</span>
-                                </span>
-                              ) : (
-                                <>
-                                  <span>{formatBytes(version?.size)}</span>
-                                  <span className="flex items-center gap-1">
-                                    <Clock className="w-3 h-3" />
-                                    {formatDate(entry.updatedAt)}
-                                  </span>
-                                </>
-                              )}
-                            </div>
-                          </CardContent>
-                        </Card>
-                      );
-                    })}
-                  </div>
+                  <DriveGrid
+                    entries={filteredEntries}
+                    onOpenEntry={handleOpenEntry}
+                    onManageAccess={setManageAccessEntry}
+                  />
                 </ScrollArea>
               ) : (
                 <ScrollArea className="h-full">
-                  <div className="space-y-1 pb-4">
-                    {filteredEntries.map((entry) => {
-                      const version = entry.latestVersion;
-                      const Icon = entry.isFolder ? Folder : iconForMime(version?.mimeType, entry.name);
-                      const fileColor = entry.isFolder ? "text-primary" : getFileColor(version?.mimeType, entry.name);
-
-                      return (
-                        <Card
-                          key={entry.id}
-                          className={cn(
-                            "group border-border/50 bg-card/60 hover:bg-card hover:border-border/80 transition-all duration-300 cursor-pointer",
-                            "hover:shadow-lg hover:shadow-black/8",
-                            "ring-0 hover:ring-1 hover:ring-primary/10"
-                          )}
-                          onClick={() => handleOpenEntry(entry)}
-                        >
-                          <CardContent className="p-4">
-                            <div className="flex items-center gap-4">
-                              <div
-                                className={cn(
-                                  "w-12 h-12 rounded-lg flex items-center justify-center transition-all duration-300 shadow-sm",
-                                  entry.isFolder
-                                    ? "bg-gradient-to-br from-primary/15 to-primary/5 group-hover:from-primary/20 group-hover:to-primary/10"
-                                    : "bg-gradient-to-br from-muted/60 to-muted/40 group-hover:from-muted/70 group-hover:to-muted/50",
-                                  "group-hover:scale-110 group-hover:shadow-md"
-                                )}
-                              >
-                                <Icon className={cn("w-6 h-6 transition-transform duration-300", fileColor)} />
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2 mb-1.5">
-                                  <h3 className="font-semibold text-sm text-foreground truncate group-hover:text-primary transition-colors duration-200">
-                                    {entry.name}
-                                  </h3>
-                                  {!entry.isFolder && version && (
-                                    <Badge
-                                      variant="secondary"
-                                      className="text-[10px] px-1.5 py-0 h-4 bg-muted/80"
-                                    >
-                                      v{version.version}
-                                    </Badge>
-                                  )}
-                                </div>
-                                <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                                  {entry.isFolder ? (
-                                    <span className="flex items-center gap-1">
-                                      <Folder className="w-3 h-3" />
-                                      <span>โฟลเดอร์</span>
-                                    </span>
-                                  ) : (
-                                    <>
-                                      <span>{formatBytes(version?.size)}</span>
-                                      <span className="flex items-center gap-1">
-                                        <Clock className="w-3 h-3" />
-                                        {formatDate(entry.updatedAt)}
-                                      </span>
-                                    </>
-                                  )}
-                                </div>
-                              </div>
-                              {!entry.isFolder && version && (
-                                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        className="h-8 w-8 hover:bg-muted"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          setManageAccessEntry(entry);
-                                        }}
-                                      >
-                                        <Share2 className="w-4 h-4" />
-                                      </Button>
-                                    </TooltipTrigger>
-                                    <TooltipContent>จัดการสิทธิ์</TooltipContent>
-                                  </Tooltip>
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        className="h-8 w-8"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          handleDownload(version.url, entry.name);
-                                        }}
-                                      >
-                                        <Download className="w-4 h-4" />
-                                      </Button>
-                                    </TooltipTrigger>
-                                    <TooltipContent>ดาวน์โหลด</TooltipContent>
-                                  </Tooltip>
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        className="h-8 w-8"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          handleCopyLink(version.url);
-                                        }}
-                                      >
-                                        <LinkIcon className="w-4 h-4" />
-                                      </Button>
-                                    </TooltipTrigger>
-                                    <TooltipContent>คัดลอกลิงก์</TooltipContent>
-                                  </Tooltip>
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        className="h-8 w-8"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          handleOpenExternal(version.url);
-                                        }}
-                                      >
-                                        <Eye className="w-4 h-4" />
-                                      </Button>
-                                    </TooltipTrigger>
-                                    <TooltipContent>เปิดในแท็บใหม่</TooltipContent>
-                                  </Tooltip>
-                                </div>
-                              )}
-                              {entry.isFolder && (
-                                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        className="h-8 w-8 hover:bg-muted"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          setManageAccessEntry(entry);
-                                        }}
-                                      >
-                                        <Share2 className="w-4 h-4" />
-                                      </Button>
-                                    </TooltipTrigger>
-                                    <TooltipContent>จัดการสิทธิ์</TooltipContent>
-                                  </Tooltip>
-                                </div>
-                              )}
-                            </div>
-                          </CardContent>
-                        </Card>
-                      );
-                    })}
-                  </div>
+                  <DriveList
+                    entries={filteredEntries}
+                    onOpenEntry={handleOpenEntry}
+                    onManageAccess={setManageAccessEntry}
+                    onDownload={handleDownload}
+                    onCopyLink={handleCopyLink}
+                    onOpenExternal={handleOpenExternal}
+                  />
                 </ScrollArea>
               )}
             </div>
@@ -1164,9 +610,7 @@ export default function SharedDrive() {
           open={showNewFolderDialog}
           onOpenChange={(open) => {
             setShowNewFolderDialog(open);
-            if (!open) {
-              setNewFolderName("");
-            }
+            if (!open) setNewFolderName("");
           }}
         >
           <DialogContent className="max-w-md">
@@ -1194,12 +638,7 @@ export default function SharedDrive() {
               </div>
             </div>
             <div className="flex justify-end gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-9"
-                onClick={() => setShowNewFolderDialog(false)}
-              >
+              <Button variant="outline" size="sm" className="h-9" onClick={() => setShowNewFolderDialog(false)}>
                 ยกเลิก
               </Button>
               <Button
@@ -1224,601 +663,26 @@ export default function SharedDrive() {
           </DialogContent>
         </Dialog>
 
-        {/* Preview / Versions Dialog */}
-        <Dialog
+        {/* File Preview Dialog */}
+        <FilePreviewDialog
+          entry={previewEntry}
           open={!!previewEntry}
           onOpenChange={(open) => {
             if (!open) {
               setPreviewEntry(null);
               setVersionsData(null);
-              setImageError(false);
-              setImageLoading(true);
             }
           }}
-        >
-          <DialogContent className="max-w-6xl h-[85vh] flex flex-col p-0 gap-0 overflow-hidden">
-            <DialogHeader className="px-6 py-5 border-b border-border/60 bg-gradient-to-r from-muted/30 to-transparent">
-              <div className="flex items-center justify-between">
-                <DialogTitle className="flex items-center gap-3.5">
-                  {previewEntry && (
-                    <>
-                      <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center shadow-sm ring-1 ring-primary/10">
-                        {(() => {
-                          const Icon = iconForMime(previewEntry.latestVersion?.mimeType, previewEntry.name);
-                          return <Icon className={cn("w-6 h-6", getFileColor(previewEntry.latestVersion?.mimeType, previewEntry.name))} />;
-                        })()}
-                      </div>
-                      <div>
-                        <div className="text-base font-bold text-foreground">{previewEntry.name}</div>
-                        {previewEntry.latestVersion && (
-                          <div className="text-xs text-muted-foreground mt-1 flex items-center gap-2">
-                            <span>{formatBytes(previewEntry.latestVersion.size)}</span>
-                            <span>·</span>
-                            <span className="truncate max-w-xs">{previewEntry.latestVersion.mimeType}</span>
-                          </div>
-                        )}
-                      </div>
-                    </>
-                  )}
-                </DialogTitle>
-                {previewEntry && previewEntry.latestVersion && (
-                  <div className="flex items-center gap-2">
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-9 gap-2 border-border/60 hover:bg-muted/50"
-                          onClick={() => setManageAccessEntry(previewEntry)}
-                        >
-                          <Share2 className="w-4 h-4" />
-                          <span>แชร์</span>
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>แชร์ให้ผู้ใช้ในทีม</TooltipContent>
-                    </Tooltip>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-9 gap-2 border-border/60 hover:bg-muted/50"
-                          onClick={() => handleCopyLink(previewEntry?.latestVersion?.url)}
-                        >
-                          {copiedLink === previewEntry.latestVersion.url ? (
-                            <>
-                              <Check className="w-4 h-4 text-primary" />
-                              <span>คัดลอกแล้ว</span>
-                            </>
-                          ) : (
-                            <>
-                              <Copy className="w-4 h-4" />
-                              <span>คัดลอกลิงก์</span>
-                            </>
-                          )}
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>คัดลอกลิงก์แชร์</TooltipContent>
-                    </Tooltip>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          size="sm"
-                          className="h-9 gap-2"
-                          onClick={() => handleDownload(previewEntry?.latestVersion?.url, previewEntry?.name)}
-                        >
-                          <Download className="w-4 h-4" />
-                          <span>ดาวน์โหลด</span>
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>ดาวน์โหลดไฟล์นี้</TooltipContent>
-                    </Tooltip>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="destructive"
-                          size="icon"
-                          className="h-9 w-9 bg-red-500 hover:bg-red-600 text-white"
-                          onClick={() => {
-                            if (!previewEntry) return;
-                            setEntryToDelete(previewEntry);
-                          }}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>ลบข้อมูลนี้</TooltipContent>
-                    </Tooltip>
-                  </div>
-                )}
-              </div>
-            </DialogHeader>
-            <div className="flex-1 grid grid-cols-1 lg:grid-cols-[1.5fr,1fr] gap-0 overflow-hidden">
-              {/* Preview Area */}
-              <div className="border-r border-border/60 bg-gradient-to-br from-muted/30 via-background to-muted/20 flex items-center justify-center overflow-hidden p-6">
-                {previewEntry && previewEntry.latestVersion && (
-                  (() => {
-                    const v = previewEntry.latestVersion;
-                    const src = v.url.startsWith("http") ? v.url : `${API_BASE}${v.url}`;
-                    if (v.mimeType.startsWith("image/")) {
-                      return (
-                        <div className="w-full h-full flex items-center justify-center relative">
-                          {imageLoading && (
-                            <div className="absolute inset-0 flex items-center justify-center">
-                              <div className="flex flex-col items-center gap-3">
-                                <RefreshCw className="w-8 h-8 text-muted-foreground animate-spin" />
-                                <p className="text-sm text-muted-foreground">กำลังโหลดภาพ...</p>
-                              </div>
-                            </div>
-                          )}
-                          {imageError ? (
-                            <div className="flex flex-col items-center gap-4 text-center p-8">
-                              <div className="w-20 h-20 rounded-2xl bg-muted/50 flex items-center justify-center">
-                                <ImageIcon className="w-10 h-10 text-muted-foreground" />
-                              </div>
-                              <div>
-                                <p className="text-sm font-medium text-foreground mb-1">ไม่สามารถแสดงภาพได้</p>
-                                <p className="text-xs text-muted-foreground mb-4">อาจเกิดจากปัญหา CORS หรือ URL ไม่ถูกต้อง</p>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  className="h-9 gap-2"
-                                  onClick={() => {
-                                    setImageError(false);
-                                    setImageLoading(true);
-                                    const img = new Image();
-                                    img.onload = () => setImageLoading(false);
-                                    img.onerror = () => {
-                                      setImageError(true);
-                                      setImageLoading(false);
-                                    };
-                                    img.src = src;
-                                  }}
-                                >
-                                  <RefreshCw className="w-4 h-4" />
-                                  ลองอีกครั้ง
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  className="h-9 gap-2 ml-2"
-                                  onClick={() => handleDownload(v.url, previewEntry.name)}
-                                >
-                                  <Download className="w-4 h-4" />
-                                  ดาวน์โหลด
-                                </Button>
-                              </div>
-                            </div>
-                          ) : (
-                            <img
-                              src={src}
-                              alt={previewEntry.name}
-                              className={cn(
-                                "max-h-full max-w-full object-contain rounded-xl shadow-2xl transition-opacity duration-300",
-                                imageLoading ? "opacity-0" : "opacity-100"
-                              )}
-                              onLoad={() => setImageLoading(false)}
-                              onError={() => {
-                                setImageError(true);
-                                setImageLoading(false);
-                              }}
-                              style={{ maxHeight: "calc(85vh - 200px)" }}
-                            />
-                          )}
-                        </div>
-                      );
-                    }
-                    if (isVideoLike(v.mimeType, previewEntry.name)) {
-                      return (
-                        <div className="w-full h-full flex items-center justify-center">
-                          <div className="w-full max-w-5xl rounded-2xl border border-border/60 bg-background/95 p-4 md:p-5 shadow-xl">
-                            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-                              <div className="min-w-0 flex items-center gap-3">
-                                <div className="h-10 w-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center border border-primary/20">
-                                  <FileVideo className="w-5 h-5" />
-                                </div>
-                                <div className="min-w-0">
-                                  <p className="text-sm font-semibold text-foreground truncate max-w-[440px]">{previewEntry.name}</p>
-                                  <p className="text-xs text-muted-foreground flex items-center gap-2 mt-0.5">
-                                    <span>{formatBytes(v.size)}</span>
-                                    <span>•</span>
-                                    <span className="truncate max-w-[220px]">{v.mimeType}</span>
-                                    <span>•</span>
-                                    <span>{formatDate(previewEntry.updatedAt)}</span>
-                                  </p>
-                                </div>
-                              </div>
-
-                            </div>
-
-                            <div className="relative overflow-hidden rounded-xl border border-black/15 bg-black">
-                              <video
-                                src={src}
-                                controls
-                                playsInline
-                                preload="metadata"
-                                className="w-full h-auto max-h-[calc(85vh-300px)] object-contain"
-                                style={{
-                                  imageRendering: "auto",
-                                  transform: "translateZ(0)",
-                                  backfaceVisibility: "hidden",
-                                }}
-                              />
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    }
-                    if (v.mimeType.startsWith("audio/")) {
-                      return (
-                        <div className="w-full h-full flex items-center justify-center">
-                          <div className="w-full max-w-xl p-8 rounded-xl border border-border/60 bg-background shadow-lg">
-                            <p className="text-sm font-medium mb-4 text-foreground">Audio Preview</p>
-                            <audio src={src} controls preload="metadata" className="w-full" />
-                          </div>
-                        </div>
-                      );
-                    }
-                    if (v.mimeType === "application/pdf") {
-                      return (
-                        <div className="flex flex-col w-full h-full bg-background rounded-xl overflow-hidden shadow-2xl border border-border/60">
-                          <div className="flex items-center justify-between px-5 py-3.5 border-b border-border/60 bg-gradient-to-r from-muted/50 to-muted/30">
-                            <div className="flex items-center gap-2">
-                              <FileText className="w-4 h-4 text-primary" />
-                              <span className="text-sm font-semibold text-foreground">PDF Preview</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="h-8 text-xs gap-1.5 border-border/60"
-                                onClick={() => window.open(src, "_blank")}
-                              >
-                                <Eye className="w-3.5 h-3.5" />
-                                เปิดในแท็บใหม่
-                              </Button>
-                              <Button
-                                size="sm"
-                                className="h-8 text-xs gap-1.5"
-                                onClick={() => handleDownload(v.url)}
-                              >
-                                <Download className="w-3.5 h-3.5" />
-                                ดาวน์โหลด
-                              </Button>
-                            </div>
-                          </div>
-                          <div className="flex-1 bg-muted/20">
-                            <iframe
-                              src={src}
-                              title={previewEntry.name}
-                              className="w-full h-full border-0"
-                              style={{ minHeight: "500px" }}
-                            />
-                          </div>
-                        </div>
-                      );
-                    }
-
-                    // Check Office documents BEFORE text files (Office files are ZIP-based, not text)
-                    if (isOfficeLike(v.mimeType, previewEntry.name)) {
-                      // Determine file type for appropriate icon and label
-                      const isWord = previewEntry.name.toLowerCase().endsWith('.doc') || previewEntry.name.toLowerCase().endsWith('.docx');
-                      const isExcel = previewEntry.name.toLowerCase().endsWith('.xls') || previewEntry.name.toLowerCase().endsWith('.xlsx');
-                      const isPowerPoint = previewEntry.name.toLowerCase().endsWith('.ppt') || previewEntry.name.toLowerCase().endsWith('.pptx');
-                      
-                      const OfficeIcon = isExcel ? FileSpreadsheet : FileText;
-                      const officeColor = isExcel ? "text-emerald-600" : isPowerPoint ? "text-orange-500" : "text-blue-600";
-                      const officeLabel = isExcel ? "Excel" : isPowerPoint ? "PowerPoint" : "Word";
-                      const officeDesc = isExcel ? "สเปรดชีต" : isPowerPoint ? "งานนำเสนอ" : "เอกสาร";
-                      
-                      // PowerPoint - no frontend library available, show fallback
-                      if (isPowerPoint) {
-                        return (
-                          <div className="w-full h-full flex flex-col rounded-xl border border-border/60 bg-background shadow-xl overflow-hidden">
-                            <div className="px-5 py-3.5 border-b border-border/60 bg-gradient-to-r from-muted/50 to-muted/20 flex items-center justify-between">
-                              <div className="flex items-center gap-2">
-                                <OfficeIcon className={cn("w-4 h-4", officeColor)} />
-                                <span className="text-sm font-semibold text-foreground">{officeLabel} Preview</span>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => handleOpenExternal(v.url)}>
-                                  <Eye className="w-3.5 h-3.5 mr-1" />
-                                  เปิดไฟล์ตรง
-                                </Button>
-                                <Button size="sm" className="h-8 text-xs" onClick={() => handleDownload(v.url, previewEntry.name)}>
-                                  <Download className="w-3.5 h-3.5 mr-1" />
-                                  ดาวน์โหลด
-                                </Button>
-                              </div>
-                            </div>
-                            <div className="flex-1 flex flex-col items-center justify-center p-8 bg-muted/20">
-                              <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-muted/60 to-muted/40 flex items-center justify-center shadow-lg mb-4">
-                                <OfficeIcon className={cn("w-10 h-10", officeColor)} />
-                              </div>
-                              <p className="text-base font-semibold text-foreground mb-1">{officeDesc} - {previewEntry.name}</p>
-                              <p className="text-sm text-muted-foreground text-center max-w-md mb-6">
-                                ไฟล์ PowerPoint ต้องเปิดดูผ่านแอปพลิเคชัน ให้ใช้ปุ่ม "เปิดไฟล์ตรง" หรือ "ดาวน์โหลด"
-                              </p>
-                              <div className="flex items-center gap-3">
-                                <Button variant="outline" className="h-10 gap-2" onClick={() => handleOpenExternal(v.url)}>
-                                  <Eye className="w-4 h-4" />
-                                  เปิดไฟล์ตรง
-                                </Button>
-                                <Button className="h-10 gap-2" onClick={() => handleDownload(v.url, previewEntry.name)}>
-                                  <Download className="w-4 h-4" />
-                                  ดาวน์โหลดไฟล์
-                                </Button>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      }
-                      
-                      // Word/Excel - show actual preview
-                      return (
-                        <div className="w-full h-full flex flex-col rounded-xl border border-border/60 bg-background shadow-xl overflow-hidden">
-                          <div className="px-5 py-3.5 border-b border-border/60 bg-gradient-to-r from-muted/50 to-muted/20 flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <OfficeIcon className={cn("w-4 h-4", officeColor)} />
-                              <span className="text-sm font-semibold text-foreground">{officeLabel} Preview</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => handleOpenExternal(v.url)}>
-                                <Eye className="w-3.5 h-3.5 mr-1" />
-                                เปิดไฟล์ตรง
-                              </Button>
-                              <Button size="sm" className="h-8 text-xs" onClick={() => handleDownload(v.url, previewEntry.name)}>
-                                <Download className="w-3.5 h-3.5 mr-1" />
-                                ดาวน์โหลด
-                              </Button>
-                            </div>
-                          </div>
-                          
-                          {officePreviewLoading ? (
-                            <div className="flex-1 flex items-center justify-center bg-muted/20">
-                              <div className="flex flex-col items-center gap-3">
-                                <RefreshCw className="w-8 h-8 text-muted-foreground animate-spin" />
-                                <p className="text-sm text-muted-foreground">กำลังโหลดตัวอย่าง{officeDesc}...</p>
-                              </div>
-                            </div>
-                          ) : officePreviewError ? (
-                            <div className="flex-1 flex flex-col items-center justify-center p-8 bg-muted/20">
-                              <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-muted/60 to-muted/40 flex items-center justify-center shadow-lg mb-4">
-                                <OfficeIcon className={cn("w-10 h-10 text-muted-foreground")} />
-                              </div>
-                              <p className="text-base font-semibold text-foreground mb-1">ไม่สามารถแสดงตัวอย่างได้</p>
-                              <p className="text-sm text-muted-foreground mb-4">{officePreviewError}</p>
-                              <div className="flex items-center gap-3">
-                                <Button variant="outline" className="h-10 gap-2" onClick={() => handleOpenExternal(v.url)}>
-                                  <Eye className="w-4 h-4" />
-                                  เปิดไฟล์ตรง
-                                </Button>
-                                <Button className="h-10 gap-2" onClick={() => handleDownload(v.url, previewEntry.name)}>
-                                  <Download className="w-4 h-4" />
-                                  ดาวน์โหลดไฟล์
-                                </Button>
-                              </div>
-                            </div>
-                          ) : officePreview ? (
-                            <ScrollArea className="flex-1">
-                              <div 
-                                className="p-6 prose prose-sm dark:prose-invert max-w-none"
-                                dangerouslySetInnerHTML={{ __html: officePreview }}
-                              />
-                            </ScrollArea>
-                          ) : (
-                            <div className="flex-1 flex flex-col items-center justify-center p-8 bg-muted/20">
-                              <p className="text-sm text-muted-foreground">ไม่มีเนื้อหาแสดง</p>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    }
-
-                    // Text preview comes AFTER Office check
-                    if (isTextLike(v.mimeType, previewEntry.name)) {
-                      if (textPreviewLoading) {
-                        return (
-                          <div className="w-full h-full flex items-center justify-center">
-                            <div className="flex flex-col items-center gap-3 text-muted-foreground">
-                              <RefreshCw className="w-8 h-8 animate-spin" />
-                              <p className="text-sm">กำลังโหลดตัวอย่างไฟล์ข้อความ...</p>
-                            </div>
-                          </div>
-                        );
-                      }
-
-                      if (textPreviewError) {
-                        return (
-                          <div className="flex flex-col items-center gap-4 text-center p-10">
-                            <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-muted/60 to-muted/40 flex items-center justify-center shadow-lg">
-                              <FileCode className="w-12 h-12 text-muted-foreground" />
-                            </div>
-                            <div>
-                              <p className="text-base font-semibold text-foreground mb-1.5">ไม่สามารถแสดง Text Preview ได้</p>
-                              <p className="text-sm text-muted-foreground">{textPreviewError}</p>
-                            </div>
-                            <Button
-                              size="sm"
-                              className="h-10 gap-2 px-6"
-                              onClick={() => handleDownload(v.url, previewEntry.name)}
-                            >
-                              <Download className="w-4 h-4" />
-                              ดาวน์โหลดไฟล์
-                            </Button>
-                          </div>
-                        );
-                      }
-
-                      return (
-                        <div className="w-full h-full flex flex-col rounded-xl border border-border/60 bg-background shadow-xl overflow-hidden">
-                          <div className="px-4 py-2.5 border-b border-border/50 flex items-center justify-between bg-muted/20">
-                            <span className="text-xs font-medium text-muted-foreground">Text Preview (สูงสุด 200,000 ตัวอักษร)</span>
-                            <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => handleDownload(v.url, previewEntry.name)}>
-                              <Download className="w-3.5 h-3.5 mr-1" />
-                              ดาวน์โหลดเต็มไฟล์
-                            </Button>
-                          </div>
-                          <pre className="flex-1 overflow-auto p-4 text-xs leading-relaxed font-mono whitespace-pre-wrap break-words text-foreground bg-background">
-{textPreview || "(ไฟล์ว่าง)"}
-                          </pre>
-                        </div>
-                      );
-                    }
-
-                    return (
-                      <div className="flex flex-col items-center gap-5 text-center p-10 w-full">
-                        <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-muted/60 to-muted/40 flex items-center justify-center shadow-lg">
-                          <FileIcon className="w-12 h-12 text-muted-foreground" />
-                        </div>
-                        <div>
-                          <p className="text-base font-semibold text-foreground mb-1.5">ยังไม่มี Preview สำหรับไฟล์ประเภทนี้</p>
-                          <p className="text-sm text-muted-foreground">รองรับการดูรายละเอียดไฟล์ + ดาวน์โหลดได้เหมือน Google Drive</p>
-                        </div>
-
-                        <div className="w-full max-w-lg rounded-xl border border-border/60 bg-card/60 p-4 text-left space-y-2">
-                          <div className="flex justify-between text-xs">
-                            <span className="text-muted-foreground">ชื่อไฟล์</span>
-                            <span className="font-medium text-foreground truncate max-w-[65%]" title={previewEntry.name}>{previewEntry.name}</span>
-                          </div>
-                          <div className="flex justify-between text-xs">
-                            <span className="text-muted-foreground">ประเภท (MIME)</span>
-                            <span className="font-medium text-foreground truncate max-w-[65%]" title={v.mimeType}>{v.mimeType}</span>
-                          </div>
-                          <div className="flex justify-between text-xs">
-                            <span className="text-muted-foreground">ขนาด</span>
-                            <span className="font-medium text-foreground">{formatBytes(v.size)}</span>
-                          </div>
-                          <div className="flex justify-between text-xs">
-                            <span className="text-muted-foreground">อัปเดตล่าสุด</span>
-                            <span className="font-medium text-foreground">{formatDate(previewEntry.updatedAt)}</span>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-10 gap-2 px-5"
-                            onClick={() => window.open(src, "_blank")}
-                          >
-                            <Eye className="w-4 h-4" />
-                            เปิดในแท็บใหม่
-                          </Button>
-                          <Button
-                            size="sm"
-                            className="h-10 gap-2 px-6"
-                            onClick={() => handleDownload(v.url, previewEntry.name)}
-                          >
-                            <Download className="w-4 h-4" />
-                            ดาวน์โหลดไฟล์
-                          </Button>
-                        </div>
-                      </div>
-                    );
-                  })()
-                )}
-              </div>
-
-              {/* Versions Sidebar */}
-              <div className="flex flex-col bg-gradient-to-b from-background to-muted/10">
-                <div className="px-6 py-4 border-b border-border/60 bg-muted/20">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
-                      <History className="w-4 h-4 text-primary" />
-                    </div>
-                    <span className="text-sm font-semibold text-foreground">ประวัติเวอร์ชัน</span>
-                  </div>
-                </div>
-                <ScrollArea className="flex-1">
-                  <div className="divide-y divide-border/40">
-                    {loadingVersions && (
-                      <div className="px-6 py-10 text-center">
-                        <RefreshCw className="w-6 h-6 text-muted-foreground animate-spin mx-auto mb-3" />
-                        <p className="text-xs text-muted-foreground">กำลังโหลดประวัติเวอร์ชัน...</p>
-                      </div>
-                    )}
-                    {!loadingVersions && versionsData && versionsData.versions.length === 0 && (
-                      <div className="px-6 py-10 text-center">
-                        <div className="w-12 h-12 rounded-xl bg-muted/50 flex items-center justify-center mx-auto mb-3">
-                          <History className="w-6 h-6 text-muted-foreground" />
-                        </div>
-                        <p className="text-xs text-muted-foreground">ยังไม่มีเวอร์ชันอื่น</p>
-                      </div>
-                    )}
-                    {!loadingVersions &&
-                      versionsData &&
-                      versionsData.versions.map((v, idx) => (
-                        <div
-                          key={v.id}
-                          className={cn(
-                            "px-6 py-4 hover:bg-muted/40 transition-all duration-200 group",
-                            idx === 0 && "bg-gradient-to-r from-primary/10 via-primary/5 to-transparent border-l-2 border-primary"
-                          )}
-                        >
-                          <div className="flex items-start gap-3">
-                            <Badge
-                              variant={idx === 0 ? "default" : "secondary"}
-                              className={cn(
-                                "h-7 px-2.5 text-xs shrink-0 font-semibold",
-                                idx === 0 && "bg-primary text-primary-foreground shadow-sm"
-                              )}
-                            >
-                              v{v.version}
-                            </Badge>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 mb-1.5">
-                                <span className="text-xs font-semibold text-foreground">
-                                  {formatBytes(v.size)}
-                                </span>
-                                <span className="text-[10px] text-muted-foreground">·</span>
-                                <span className="text-[10px] text-muted-foreground truncate">{v.mimeType}</span>
-                              </div>
-                              <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-                                <Clock className="w-3 h-3" />
-                                <span>{formatDate(v.createdAt)}</span>
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-8 w-8 hover:bg-muted"
-                                    onClick={() => handleDownload(v.url, versionsData?.name)}
-                                  >
-                                    <Download className="w-4 h-4" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>ดาวน์โหลด</TooltipContent>
-                              </Tooltip>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-8 w-8 hover:bg-muted"
-                                    onClick={() => handleCopyLink(v.url)}
-                                  >
-                                    {copiedLink === v.url ? (
-                                      <Check className="w-4 h-4 text-primary" />
-                                    ) : (
-                                      <LinkIcon className="w-4 h-4" />
-                                    )}
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>คัดลอกลิงก์</TooltipContent>
-                              </Tooltip>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                  </div>
-                </ScrollArea>
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
+          versionsData={versionsData}
+          loadingVersions={loadingVersions}
+          copiedLink={copiedLink}
+          onCopyLink={handleCopyLink}
+          onDownload={handleDownload}
+          onOpenExternal={handleOpenExternal}
+          onDelete={(entry) => setEntryToDelete(entry)}
+          onManageAccess={setManageAccessEntry}
+          onLoadVersions={loadVersions}
+        />
 
         {/* Delete Confirmation Alert Dialog */}
         <AlertDialog open={!!entryToDelete} onOpenChange={(open) => !open && setEntryToDelete(null)}>
@@ -1845,7 +709,7 @@ export default function SharedDrive() {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
-      </div>
+
         {/* Manage Access Dialog */}
         <ManageAccessDialog
           entry={manageAccessEntry}
@@ -1853,232 +717,7 @@ export default function SharedDrive() {
           onOpenChange={(open) => !open && setManageAccessEntry(null)}
           teamId={selectedTeamId}
         />
+      </div>
     </TooltipProvider>
-  );
-}
-
-function ManageAccessDialog({
-  entry,
-  open,
-  onOpenChange,
-  teamId,
-}: {
-  entry: DriveEntry | null;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  teamId: string;
-}) {
-  const [permissions, setPermissions] = useState<any[]>([]);
-  const [members, setMembers] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [addingUser, setAddingUser] = useState<string>("");
-  const [addingPerm, setAddingPerm] = useState<string>("view");
-  const { toast } = useToast();
-
-  useEffect(() => {
-    if (open && entry && teamId) {
-      loadData();
-    }
-
-  }, [open, entry, teamId]);
-
-  const loadData = async () => {
-    if (!entry) return;
-    setLoading(true);
-    try {
-      const permsRes = await apiGet<any[]>(`/drive/entries/${entry.id}/permissions`).catch(() => []);
-      const mbsRes = await apiGet<any>(`/teams/${teamId}/members`).catch(() => []);
-      
-      setPermissions(Array.isArray(permsRes) ? permsRes : []);
-      
-      // Members might be returned under .data or directly
-      const mbsList = Array.isArray(mbsRes) ? mbsRes : mbsRes?.data || [];
-      // Combine user info properly
-      const formattedMembers = mbsList.map((m: any) => m.user || m);
-      setMembers(formattedMembers);
-    } catch (e) {
-      console.error(e);
-      toast({ variant: "destructive", title: "โหลดข้อมูลผู้ใช้ไม่สำเร็จ" });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleAddPermission = async () => {
-    if (!entry || !addingUser) return;
-    try {
-      await apiPost(`/drive/entries/${entry.id}/permissions`, {
-        userId: addingUser,
-        permission: addingPerm,
-      });
-      toast({ title: "เพิ่มสิทธิ์สำเร็จ" });
-      setAddingUser("");
-      await loadData();
-    } catch (e: any) {
-      toast({
-        variant: "destructive",
-        title: "แก้ไขสิทธิ์ไม่สำเร็จ",
-        description: e.message,
-      });
-    }
-  };
-
-  const handleRemovePermission = async (userId: string) => {
-    if (!entry) return;
-    try {
-      await apiDelete(`/drive/entries/${entry.id}/permissions/${userId}`);
-      toast({ title: "ลบสิทธิ์สำเร็จ" });
-      await loadData();
-    } catch (e: any) {
-      toast({
-        variant: "destructive",
-        title: "ลบสิทธิ์ไม่สำเร็จ",
-        description: e.message,
-      });
-    }
-  };
-
-  // Filter members who already have permissions
-  const availableMembers = members.filter(
-    (m) => !permissions.find((p) => p.userId === m.id)
-  );
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Users className="w-5 h-5 text-primary" />
-            <span>จัดการสิทธิ์การเข้าถึง</span>
-          </DialogTitle>
-        </DialogHeader>
-
-        {loading ? (
-          <div className="py-8 text-center flex flex-col items-center justify-center">
-            <RefreshCw className="w-6 h-6 text-muted-foreground animate-spin mb-3" />
-            <span className="text-sm text-muted-foreground">กำลังโหลดข้อมูล...</span>
-          </div>
-        ) : (
-          <div className="space-y-6 py-2 pb-4">
-            <div className="bg-muted/30 p-4 rounded-xl border border-border/50">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-background flex items-center justify-center shadow-sm">
-                  {entry?.isFolder ? (
-                    <Folder className="w-5 h-5 text-primary" />
-                  ) : (
-                    <FileIcon className="w-5 h-5 text-muted-foreground" />
-                  )}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-sm truncate">{entry?.name}</p>
-                  <p className="text-xs text-muted-foreground">ใครก็ตามที่ได้รับสิทธิ์จะสามารถเห็นโฟลเดอร์/ไฟล์นี้ได้</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              <label className="text-sm font-medium">เพิ่มสมาชิก (ให้สิทธิ์)</label>
-              <div className="flex items-center gap-2">
-                <Select value={addingUser} onValueChange={setAddingUser}>
-                  <SelectTrigger className="flex-1">
-                    <SelectValue placeholder="ค้นหาสมาชิกในทีม..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {availableMembers.length === 0 ? (
-                      <SelectItem value="none" disabled>ไม่มีสมาชิกให้เพิ่ม</SelectItem>
-                    ) : (
-                      availableMembers.map((m) => (
-                        <SelectItem key={m.id} value={m.id}>
-                          {m.name} ({m.email})
-                        </SelectItem>
-                      ))
-                    )}
-                  </SelectContent>
-                </Select>
-
-                <Select value={addingPerm} onValueChange={setAddingPerm}>
-                  <SelectTrigger className="w-28">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="view">ดูได้ (View)</SelectItem>
-                    <SelectItem value="edit">แก้ไข (Edit)</SelectItem>
-                  </SelectContent>
-                </Select>
-
-                <Button
-                  size="icon"
-                  disabled={!addingUser || addingUser === "none"}
-                  onClick={handleAddPermission}
-                >
-                  <UserPlus className="w-4 h-4" />
-                </Button>
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              <label className="text-sm font-medium">ผู้ที่มีสิทธิ์ ({permissions.length})</label>
-              <ScrollArea className="max-h-[250px] pr-3">
-                {permissions.length === 0 ? (
-                  <div className="text-center py-6 border border-dashed rounded-lg">
-                    <p className="text-sm text-muted-foreground">ไม่มีผู้ได้รับสิทธิ์ส่วนตัว</p>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {permissions.map((p) => (
-                      <div key={p.id} className="flex items-center justify-between p-2 rounded-lg hover:bg-muted/50 border border-transparent hover:border-border/50 transition-colors">
-                        <div className="flex items-center gap-3 min-w-0">
-                          <Avatar className="w-8 h-8">
-                            <AvatarImage src={p.user?.avatar || ""} />
-                            <AvatarFallback>{p.user?.name?.charAt(0) || "U"}</AvatarFallback>
-                          </Avatar>
-                          <div className="min-w-0">
-                            <p className="text-sm font-medium truncate">{p.user?.name}</p>
-                            <p className="text-[10px] text-muted-foreground truncate">{p.user?.email}</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2 pl-2">
-                          <Select
-                            value={p.permission}
-                            onValueChange={async (newPerm) => {
-                              try {
-                                await apiPost(`/drive/entries/${entry!.id}/permissions`, {
-                                  userId: p.userId,
-                                  permission: newPerm,
-                                });
-                                await loadData();
-                                toast({ title: "อัปเดตสิทธิ์สำเร็จ" });
-                              } catch {
-                                toast({ variant: "destructive", title: "อัปเดตไม่สำเร็จ" });
-                              }
-                            }}
-                          >
-                            <SelectTrigger className="h-7 text-xs w-[80px] border-0 shadow-none bg-transparent hover:bg-muted focus:ring-0">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="view">View</SelectItem>
-                              <SelectItem value="edit">Edit</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                            onClick={() => handleRemovePermission(p.userId)}
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </ScrollArea>
-            </div>
-          </div>
-        )}
-      </DialogContent>
-    </Dialog>
   );
 }

@@ -1,35 +1,21 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
 import {
-  FileBarChart,
-  TrendingUp,
+  BarChart3,
+  Download,
   Users,
   Calendar,
   CheckSquare,
-  Loader2,
-  Activity,
-  BarChart3,
-  Download,
   MessageSquare,
-  AlertTriangle,
-  Trophy,
   Target,
-  Zap,
-  Clock,
-  Filter,
+  Trophy,
+  Activity,
+  TrendingUp,
   PieChart,
   LineChart,
-  ArrowUpRight,
-  ArrowDownRight,
-  Minus,
-  Sparkles,
-  FileSpreadsheet,
-  FileText,
-  FileJson,
-  FileType,
-  ChevronDown,
+  AlertTriangle,
+  Zap,
   User,
-  BarChart2,
-  TrendingDown,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -48,8 +34,6 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuTrigger,
-  DropdownMenuSeparator,
-  DropdownMenuCheckboxItem,
 } from "@/components/ui/dropdown-menu";
 import {
   BarChart,
@@ -67,106 +51,26 @@ import {
   Area,
   AreaChart,
   Legend,
-  RadialBarChart,
-  RadialBar,
   ComposedChart,
 } from "recharts";
-import {
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
-} from "@/components/ui/chart";
 import { reportsApi, exportUtils, reportTransformers, getDateRange, getDateRangeLabel, toIsoDate } from "@/lib/reports";
 import type { DateRangeKey, ExportFormat, PersonalReportData, TeamProductivityReport, MeetingReport, TaskReport, TeamWorkloadReport, PerformanceDashboard, TeamOption } from "@/lib/reports";
-
-type ReportTab = "overview" | "personal" | "team" | "performance";
-
-// ─── Chart Colors ─────────────────────────────────────────────────────────────
-
-const CHART_COLORS = {
-  emerald: "#10b981",
-  blue: "#3b82f6",
-  violet: "#8b5cf6",
-  amber: "#f59e0b",
-  red: "#ef4444",
-  cyan: "#06b6d4",
-  pink: "#ec4899",
-  orange: "#f97316",
-  teal: "#14b8a6",
-  indigo: "#6366f1",
-};
-
-const STATUS_COLORS: Record<string, string> = {
-  done: CHART_COLORS.emerald,
-  in_progress: CHART_COLORS.blue,
-  review: CHART_COLORS.amber,
-  todo: "#94a3b8",
-};
-
-const PRIORITY_COLORS: Record<string, string> = {
-  urgent: CHART_COLORS.red,
-  high: CHART_COLORS.orange,
-  medium: CHART_COLORS.blue,
-  low: "#94a3b8",
-};
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function getProductivityColor(score: number) {
-  if (score >= 80) return "text-emerald-500";
-  if (score >= 50) return "text-blue-500";
-  if (score >= 30) return "text-amber-500";
-  return "text-red-500";
-}
-
-function getProductivityGradient(score: number) {
-  if (score >= 80) return "from-emerald-500 to-teal-500";
-  if (score >= 50) return "from-blue-500 to-cyan-500";
-  if (score >= 30) return "from-amber-500 to-yellow-500";
-  return "from-red-500 to-rose-500";
-}
-
-function getTrendIcon(trend?: 'up' | 'down' | 'stable') {
-  if (trend === 'up') return ArrowUpRight;
-  if (trend === 'down') return ArrowDownRight;
-  return Minus;
-}
-
-function getTrendColor(trend?: 'up' | 'down' | 'stable') {
-  if (trend === 'up') return "text-emerald-500";
-  if (trend === 'down') return "text-red-500";
-  return "text-muted-foreground";
-}
-
-const priorityColor: Record<string, string> = {
-  urgent: "bg-red-500",
-  high: "bg-orange-500",
-  medium: "bg-blue-500",
-  low: "bg-slate-400",
-};
-
-const priorityLabel: Record<string, string> = {
-  urgent: "เร่งด่วน",
-  high: "สูง",
-  medium: "ปานกลาง",
-  low: "ต่ำ",
-};
-
-const statusColor: Record<string, string> = {
-  done: "bg-emerald-500",
-  in_progress: "bg-blue-500",
-  review: "bg-amber-500",
-  todo: "bg-slate-400",
-};
-
-const statusLabel: Record<string, string> = {
-  done: "เสร็จแล้ว",
-  in_progress: "กำลังทำ",
-  review: "รอรีวิว",
-  todo: "ยังไม่เริ่ม",
-};
-
-// ─── Main Component ──────────────────────────────────────────────────────────
+import {
+  KpiCard,
+  ProductivityScoreCard,
+  StatusBarRow,
+  MiniStat,
+  EmptyState,
+  CHART_COLORS,
+  statusLabel,
+  statusColor,
+  priorityColor,
+  priorityLabel,
+  getProductivityColor,
+  getTrendIcon,
+  getTrendColor,
+} from "@/components/reports";
+import type { ReportTab } from "@/components/reports";
 
 export default function Reports() {
   const { toast } = useToast();
@@ -208,7 +112,6 @@ export default function Reports() {
           apiGet<PersonalReportData>(`/reports?range=${dateRange}`).catch(() => ({} as PersonalReportData)),
         ]);
 
-        // Filter out "Personal Recordings" - it's a personal folder, not a team
         const filteredTeams = (teamsRes || [])
           .filter((t: any) => t.name.toLowerCase() !== "personal recordings")
           .map((t: any) => ({ id: t.id, name: t.name }));
@@ -219,7 +122,6 @@ export default function Reports() {
           setSelectedTeamId(filteredTeams[0].id);
         }
 
-        // Preload for overview
         await Promise.all([
           apiGet<MeetingReport>(
             `/reports/meetings?startDate=${encodeURIComponent(toIsoDate(start))}&endDate=${encodeURIComponent(toIsoDate(end))}`
@@ -239,7 +141,6 @@ export default function Reports() {
       }
     };
     loadBase();
-
   }, [dateRange]);
 
   // Load tab-specific
@@ -273,7 +174,6 @@ export default function Reports() {
       }
     };
     loadTabData();
-
   }, [activeTab, selectedTeamId, dateRange]);
 
   // Export
@@ -282,11 +182,10 @@ export default function Reports() {
       const { start, end } = getDateRange(dateRange);
       const filenameBase = `${activeTab}_report_${new Date().toISOString().slice(0, 10)}`;
 
-      // Try server-side export first
       const tryServerExport = async () => {
         const startIso = toIsoDate(start);
         const endIso = toIsoDate(end);
-        
+
         if (activeTab === "team" && !selectedTeamId) {
           throw new Error("กรุณาเลือกทีมเพื่อออกรายงาน");
         }
@@ -306,7 +205,6 @@ export default function Reports() {
           query.set("startDate", startIso);
           query.set("endDate", endIso);
         } else if (activeTab === "overview" || activeTab === "personal") {
-          // Overview/personal reports use range parameter only
           query.set("startDate", startIso);
           query.set("endDate", endIso);
         }
@@ -314,7 +212,7 @@ export default function Reports() {
         const url = `/reports/export?${query.toString()}`;
         const res = await apiFetch(url, { method: "GET" });
         if (!res.ok) throw new Error("Server export not available");
-        
+
         const blob = await res.blob();
         const extension = format === "xlsx" ? "xlsx" : format;
         const fileUrl = window.URL.createObjectURL(blob);
@@ -327,7 +225,6 @@ export default function Reports() {
         window.URL.revokeObjectURL(fileUrl);
       };
 
-      // Client-side export fallback
       const clientExport = () => {
         let data: Record<string, any>[] = [];
         let exportData: any = null;
@@ -404,12 +301,10 @@ export default function Reports() {
         }
       };
 
-      // Try server export first, fallback to client
       try {
         await tryServerExport();
         toast({ title: "ส่งออกสำเร็จ", description: `ดาวน์โหลด ${format.toUpperCase()} เรียบร้อยแล้ว` });
       } catch {
-        // Fallback to client-side export
         clientExport();
         toast({ title: "ส่งออกสำเร็จ", description: `ดาวน์โหลด ${format.toUpperCase()} เรียบร้อยแล้ว (client-side)` });
       }
@@ -418,8 +313,6 @@ export default function Reports() {
       toast({ title: "เกิดข้อผิดพลาด", description: error?.message || "ส่งออกไฟล์ไม่สำเร็จ", variant: "destructive" });
     }
   }, [activeTab, dateRange, selectedTeamId, personalReport, teamReport, teamWorkload, performance, currentRangeLabel, toast]);
-
-  // ─── Render ──────────────────────────────────────────────────────────────
 
   return (
     <TooltipProvider>
@@ -440,7 +333,6 @@ export default function Reports() {
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                {/* Date Range Filter */}
                 <Select value={dateRange} onValueChange={(v) => setDateRange(v as DateRangeKey)}>
                   <SelectTrigger className="w-[160px] h-9 text-xs">
                     <SelectValue />
@@ -453,7 +345,6 @@ export default function Reports() {
                   </SelectContent>
                 </Select>
 
-                {/* Export */}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="default" size="sm" className="h-9 gap-2 bg-gradient-to-r from-red-500 to-rose-500 hover:from-red-600 hover:to-rose-600 text-white shadow-lg shadow-red-500/20">
@@ -477,7 +368,6 @@ export default function Reports() {
         {/* Content */}
         <div className="flex-1 overflow-y-auto">
           <div className="px-6 py-4 space-y-4">
-            {/* Tabs */}
             <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as ReportTab)}>
               <TabsList className="bg-muted/50 h-10">
                 <TabsTrigger value="overview" className="text-xs gap-1.5 px-4">
@@ -503,41 +393,18 @@ export default function Reports() {
                 </div>
               ) : (
                 <>
-                  {/* ─── Tab: ภาพรวม ──────────────────────────────────────────── */}
+                  {/* Tab: ภาพรวม */}
                   <TabsContent value="overview" className="mt-4 space-y-4">
-                    {/* KPI Cards */}
                     {personalReport && (
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                        <KpiCard
-                          title="งานที่เสร็จแล้ว"
-                          value={personalReport.tasksCompleted ?? 0}
-                          suffix="งาน"
-                          icon={CheckSquare}
-                          gradient="from-emerald-500 to-teal-500"
-                          shadowColor="shadow-emerald-500/20"
-                        />
-                        <KpiCard
-                          title="การประชุมที่เข้าร่วม"
-                          value={personalReport.meetingsAttended ?? 0}
-                          suffix="การประชุม"
-                          icon={Calendar}
-                          gradient="from-blue-500 to-cyan-500"
-                          shadowColor="shadow-blue-500/20"
-                        />
-                        <KpiCard
-                          title="ข้อความที่ส่ง"
-                          value={personalReport.messagesSent ?? 0}
-                          suffix="ข้อความ"
-                          icon={MessageSquare}
-                          gradient="from-violet-500 to-purple-500"
-                          shadowColor="shadow-violet-500/20"
-                        />
+                        <KpiCard title="งานที่เสร็จแล้ว" value={personalReport.tasksCompleted ?? 0} suffix="งาน" icon={CheckSquare} gradient="from-emerald-500 to-teal-500" shadowColor="shadow-emerald-500/20" />
+                        <KpiCard title="การประชุมที่เข้าร่วม" value={personalReport.meetingsAttended ?? 0} suffix="การประชุม" icon={Calendar} gradient="from-blue-500 to-cyan-500" shadowColor="shadow-blue-500/20" />
+                        <KpiCard title="ข้อความที่ส่ง" value={personalReport.messagesSent ?? 0} suffix="ข้อความ" icon={MessageSquare} gradient="from-violet-500 to-purple-500" shadowColor="shadow-violet-500/20" />
                         <ProductivityScoreCard score={personalReport.productivityScore ?? 0} />
                       </div>
                     )}
 
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                      {/* Task Status Breakdown */}
                       {taskReport && (
                         <Card className="border-border/50 bg-card/80 backdrop-blur-sm lg:col-span-1">
                           <CardHeader className="pb-3">
@@ -557,20 +424,13 @@ export default function Reports() {
                                 in_progress: taskReport.summary.inProgressTasks,
                                 todo: Math.max(0, taskReport.summary.totalTasks - taskReport.summary.completedTasks - taskReport.summary.inProgressTasks),
                               }).map(([status, count]) => (
-                                <StatusBarRow
-                                  key={status}
-                                  label={statusLabel[status] || status}
-                                  count={count as number}
-                                  total={taskReport.summary.totalTasks}
-                                  color={statusColor[status] || "bg-slate-400"}
-                                />
+                                <StatusBarRow key={status} label={statusLabel[status] || status} count={count as number} total={taskReport.summary.totalTasks} color={statusColor[status] || "bg-slate-400"} />
                               ))}
                             </div>
                           </CardContent>
                         </Card>
                       )}
 
-                      {/* Top Performers */}
                       {performance && performance.taskCompletionRates.length > 0 && (
                         <Card className="border-border/50 bg-card/80 backdrop-blur-sm lg:col-span-1">
                           <CardHeader className="pb-3">
@@ -580,34 +440,22 @@ export default function Reports() {
                             </CardTitle>
                           </CardHeader>
                           <CardContent className="space-y-3">
-                            {performance.taskCompletionRates
-                              .slice()
-                              .sort((a, b) => b.completionRate - a.completionRate)
-                              .slice(0, 5)
-                              .map((r, i) => (
-                                <div key={r.userId} className="flex items-center gap-3">
-                                  <div className={cn(
-                                    "w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white",
-                                    i === 0 ? "bg-amber-500" : i === 1 ? "bg-slate-400" : i === 2 ? "bg-orange-600" : "bg-muted-foreground/40"
-                                  )}>
-                                    {i + 1}
-                                  </div>
-                                  <div className="flex-1 min-w-0">
-                                    <div className="text-xs font-medium truncate">{r.userName}</div>
-                                    <div className="flex items-center gap-2 mt-1">
-                                      <Progress value={r.completionRate} className="h-1.5 flex-1" />
-                                      <span className="text-[10px] text-muted-foreground font-medium w-10 text-right">
-                                        {r.completionRate.toFixed(0)}%
-                                      </span>
-                                    </div>
+                            {performance.taskCompletionRates.slice().sort((a, b) => b.completionRate - a.completionRate).slice(0, 5).map((r, i) => (
+                              <div key={r.userId} className="flex items-center gap-3">
+                                <div className={cn("w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white", i === 0 ? "bg-amber-500" : i === 1 ? "bg-slate-400" : i === 2 ? "bg-orange-600" : "bg-muted-foreground/40")}>{i + 1}</div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="text-xs font-medium truncate">{r.userName}</div>
+                                  <div className="flex items-center gap-2 mt-1">
+                                    <Progress value={r.completionRate} className="h-1.5 flex-1" />
+                                    <span className="text-[10px] text-muted-foreground font-medium w-10 text-right">{r.completionRate.toFixed(0)}%</span>
                                   </div>
                                 </div>
-                              ))}
+                              </div>
+                            ))}
                           </CardContent>
                         </Card>
                       )}
 
-                      {/* Meeting Overview */}
                       {meetingReport && (
                         <Card className="border-border/50 bg-card/80 backdrop-blur-sm lg:col-span-1">
                           <CardHeader className="pb-3">
@@ -627,15 +475,12 @@ export default function Reports() {
                               <div>
                                 <div className="text-[10px] text-muted-foreground mb-2 font-medium uppercase tracking-wider">ประชุมตามทีม</div>
                                 <div className="space-y-1.5">
-                                  {Object.entries(meetingReport.meetingsByTeam)
-                                    .sort((a, b) => (b[1] as number) - (a[1] as number))
-                                    .slice(0, 4)
-                                    .map(([team, count]) => (
-                                      <div key={team} className="flex items-center justify-between text-xs">
-                                        <span className="text-muted-foreground truncate mr-2">{team}</span>
-                                        <Badge variant="secondary" className="text-[10px] h-5 px-2">{count as number}</Badge>
-                                      </div>
-                                    ))}
+                                  {Object.entries(meetingReport.meetingsByTeam).sort((a, b) => (b[1] as number) - (a[1] as number)).slice(0, 4).map(([team, count]) => (
+                                    <div key={team} className="flex items-center justify-between text-xs">
+                                      <span className="text-muted-foreground truncate mr-2">{team}</span>
+                                      <Badge variant="secondary" className="text-[10px] h-5 px-2">{count as number}</Badge>
+                                    </div>
+                                  ))}
                                 </div>
                               </div>
                             )}
@@ -644,7 +489,6 @@ export default function Reports() {
                       )}
                     </div>
 
-                    {/* Team Metrics */}
                     {personalReport?.teamMetrics && personalReport.teamMetrics.filter(t => t.teamName.toLowerCase() !== 'personal recordings').length > 0 && (
                       <Card className="border-border/50 bg-card/80 backdrop-blur-sm">
                         <CardHeader className="pb-3">
@@ -659,18 +503,9 @@ export default function Reports() {
                               <div key={t.teamName} className="p-3 rounded-xl bg-muted/30 border border-border/40">
                                 <div className="font-medium text-xs mb-2">{t.teamName}</div>
                                 <div className="flex gap-4 text-[11px] text-muted-foreground">
-                                  <div className="flex items-center gap-1">
-                                    <CheckSquare className="w-3 h-3 text-emerald-500" />
-                                    <span>{t.tasksCompleted ?? 0} งาน</span>
-                                  </div>
-                                  <div className="flex items-center gap-1">
-                                    <Calendar className="w-3 h-3 text-blue-500" />
-                                    <span>{t.meetingsAttended ?? 0} ประชุม</span>
-                                  </div>
-                                  <div className="flex items-center gap-1">
-                                    <MessageSquare className="w-3 h-3 text-violet-500" />
-                                    <span>{t.messagesSent ?? 0} แชท</span>
-                                  </div>
+                                  <div className="flex items-center gap-1"><CheckSquare className="w-3 h-3 text-emerald-500" /><span>{t.tasksCompleted ?? 0} งาน</span></div>
+                                  <div className="flex items-center gap-1"><Calendar className="w-3 h-3 text-blue-500" /><span>{t.meetingsAttended ?? 0} ประชุม</span></div>
+                                  <div className="flex items-center gap-1"><MessageSquare className="w-3 h-3 text-violet-500" /><span>{t.messagesSent ?? 0} แชท</span></div>
                                 </div>
                               </div>
                             ))}
@@ -680,68 +515,32 @@ export default function Reports() {
                     )}
                   </TabsContent>
 
-                  {/* ─── Tab: รายงานส่วนตัว ─────────────────────────────────────── */}
+                  {/* Tab: รายงานส่วนตัว */}
                   <TabsContent value="personal" className="mt-4 space-y-4">
                     {personalReport ? (
                       <>
-                        {/* Personal KPI Cards */}
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                          <KpiCard
-                            title="งานที่เสร็จแล้ว"
-                            value={personalReport.tasksCompleted ?? 0}
-                            suffix="งาน"
-                            icon={CheckSquare}
-                            gradient="from-emerald-500 to-teal-500"
-                            shadowColor="shadow-emerald-500/20"
-                          />
-                          <KpiCard
-                            title="การประชุมที่เข้าร่วม"
-                            value={personalReport.meetingsAttended ?? 0}
-                            suffix="ครั้ง"
-                            icon={Calendar}
-                            gradient="from-blue-500 to-cyan-500"
-                            shadowColor="shadow-blue-500/20"
-                          />
-                          <KpiCard
-                            title="ข้อความที่ส่ง"
-                            value={personalReport.messagesSent ?? 0}
-                            suffix="ข้อความ"
-                            icon={MessageSquare}
-                            gradient="from-violet-500 to-purple-500"
-                            shadowColor="shadow-violet-500/20"
-                          />
+                          <KpiCard title="งานที่เสร็จแล้ว" value={personalReport.tasksCompleted ?? 0} suffix="งาน" icon={CheckSquare} gradient="from-emerald-500 to-teal-500" shadowColor="shadow-emerald-500/20" />
+                          <KpiCard title="การประชุมที่เข้าร่วม" value={personalReport.meetingsAttended ?? 0} suffix="ครั้ง" icon={Calendar} gradient="from-blue-500 to-cyan-500" shadowColor="shadow-blue-500/20" />
+                          <KpiCard title="ข้อความที่ส่ง" value={personalReport.messagesSent ?? 0} suffix="ข้อความ" icon={MessageSquare} gradient="from-violet-500 to-purple-500" shadowColor="shadow-violet-500/20" />
                           <ProductivityScoreCard score={personalReport.productivityScore ?? 0} />
                         </div>
 
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                          {/* Task Completion Rate Card */}
                           <Card className="border-border/50 bg-card/80 backdrop-blur-sm">
                             <CardHeader className="pb-3">
                               <CardTitle className="text-sm font-semibold flex items-center gap-2">
                                 <Target className="w-4 h-4 text-emerald-500" />
                                 อัตราการทำงานสำเร็จ
                               </CardTitle>
-                              <CardDescription className="text-xs">
-                                เปรียบเทียบงานที่ได้รับมอบหมายกับงานที่ทำเสร็จ
-                              </CardDescription>
+                              <CardDescription className="text-xs">เปรียบเทียบงานที่ได้รับมอบหมายกับงานที่ทำเสร็จ</CardDescription>
                             </CardHeader>
                             <CardContent>
                               <div className="flex items-center justify-center py-4">
                                 <div className="relative w-40 h-40">
                                   <ResponsiveContainer width="100%" height="100%">
                                     <RechartsPieChart>
-                                      <Pie
-                                        data={[
-                                          { name: 'เสร็จแล้ว', value: personalReport.tasksCompleted ?? 0, color: CHART_COLORS.emerald },
-                                          { name: 'ยังไม่เสร็จ', value: Math.max(0, (100 - (personalReport.taskCompletionRate ?? 0))), color: '#e5e7eb' },
-                                        ]}
-                                        cx="50%"
-                                        cy="50%"
-                                        innerRadius={50}
-                                        outerRadius={70}
-                                        paddingAngle={2}
-                                        dataKey="value"
-                                      >
+                                      <Pie data={[{ name: 'เสร็จแล้ว', value: personalReport.tasksCompleted ?? 0, color: CHART_COLORS.emerald }, { name: 'ยังไม่เสร็จ', value: Math.max(0, (100 - (personalReport.taskCompletionRate ?? 0))), color: '#e5e7eb' }]} cx="50%" cy="50%" innerRadius={50} outerRadius={70} paddingAngle={2} dataKey="value">
                                         <Cell fill={CHART_COLORS.emerald} />
                                         <Cell fill="#e5e7eb" />
                                       </Pie>
@@ -749,9 +548,7 @@ export default function Reports() {
                                   </ResponsiveContainer>
                                   <div className="absolute inset-0 flex items-center justify-center">
                                     <div className="text-center">
-                                      <div className={cn("text-2xl font-bold", getProductivityColor(personalReport.taskCompletionRate ?? 0))}>
-                                        {Math.round(personalReport.taskCompletionRate ?? 0)}%
-                                      </div>
+                                      <div className={cn("text-2xl font-bold", getProductivityColor(personalReport.taskCompletionRate ?? 0))}>{Math.round(personalReport.taskCompletionRate ?? 0)}%</div>
                                       <div className="text-[10px] text-muted-foreground">Completion</div>
                                     </div>
                                   </div>
@@ -766,16 +563,13 @@ export default function Reports() {
                             </CardContent>
                           </Card>
 
-                          {/* Activity Stats */}
                           <Card className="border-border/50 bg-card/80 backdrop-blur-sm">
                             <CardHeader className="pb-3">
                               <CardTitle className="text-sm font-semibold flex items-center gap-2">
                                 <Activity className="w-4 h-4 text-blue-500" />
                                 สถิติการทำงาน
                               </CardTitle>
-                              <CardDescription className="text-xs">
-                                ข้อมูลการทำงานใน{currentRangeLabel}
-                              </CardDescription>
+                              <CardDescription className="text-xs">ข้อมูลการทำงานใน{currentRangeLabel}</CardDescription>
                             </CardHeader>
                             <CardContent className="space-y-4">
                               <div className="grid grid-cols-2 gap-3">
@@ -784,35 +578,24 @@ export default function Reports() {
                                   <div className="text-[10px] text-muted-foreground">วันที่ทำงาน</div>
                                 </div>
                                 <div className="p-3 rounded-lg bg-muted/30">
-                                  <div className="text-lg font-bold text-foreground">
-                                    {personalReport.avgTaskCompletionTime ? `${personalReport.avgTaskCompletionTime} ชม.` : '-'}
-                                  </div>
+                                  <div className="text-lg font-bold text-foreground">{personalReport.avgTaskCompletionTime ? `${personalReport.avgTaskCompletionTime} ชม.` : '-'}</div>
                                   <div className="text-[10px] text-muted-foreground">เวลาทำงานเฉลี่ย</div>
                                 </div>
                               </div>
                               <div className="space-y-2">
                                 <div className="flex items-center justify-between text-xs">
                                   <span className="text-muted-foreground">งาน/วันเฉลี่ย</span>
-                                  <span className="font-medium">
-                                    {personalReport.activeDays && personalReport.activeDays > 0
-                                      ? ((personalReport.tasksCompleted ?? 0) / personalReport.activeDays).toFixed(1)
-                                      : '-'}
-                                  </span>
+                                  <span className="font-medium">{personalReport.activeDays && personalReport.activeDays > 0 ? ((personalReport.tasksCompleted ?? 0) / personalReport.activeDays).toFixed(1) : '-'}</span>
                                 </div>
                                 <div className="flex items-center justify-between text-xs">
                                   <span className="text-muted-foreground">ข้อความ/วันเฉลี่ย</span>
-                                  <span className="font-medium">
-                                    {personalReport.activeDays && personalReport.activeDays > 0
-                                      ? ((personalReport.messagesSent ?? 0) / personalReport.activeDays).toFixed(1)
-                                      : '-'}
-                                  </span>
+                                  <span className="font-medium">{personalReport.activeDays && personalReport.activeDays > 0 ? ((personalReport.messagesSent ?? 0) / personalReport.activeDays).toFixed(1) : '-'}</span>
                                 </div>
                               </div>
                             </CardContent>
                           </Card>
                         </div>
 
-                        {/* Team Contributions */}
                         {personalReport.teamMetrics && personalReport.teamMetrics.filter(t => t.teamName.toLowerCase() !== 'personal recordings').length > 0 && (
                           <Card className="border-border/50 bg-card/80 backdrop-blur-sm">
                             <CardHeader className="pb-3">
@@ -828,24 +611,15 @@ export default function Reports() {
                                     <div className="font-medium text-sm mb-3">{team.teamName}</div>
                                     <div className="space-y-2">
                                       <div className="flex items-center justify-between text-xs">
-                                        <div className="flex items-center gap-1.5 text-muted-foreground">
-                                          <CheckSquare className="w-3 h-3 text-emerald-500" />
-                                          <span>งานที่ทำ</span>
-                                        </div>
+                                        <div className="flex items-center gap-1.5 text-muted-foreground"><CheckSquare className="w-3 h-3 text-emerald-500" /><span>งานที่ทำ</span></div>
                                         <span className="font-medium">{team.tasksCompleted ?? 0}</span>
                                       </div>
                                       <div className="flex items-center justify-between text-xs">
-                                        <div className="flex items-center gap-1.5 text-muted-foreground">
-                                          <Calendar className="w-3 h-3 text-blue-500" />
-                                          <span>ประชุม</span>
-                                        </div>
+                                        <div className="flex items-center gap-1.5 text-muted-foreground"><Calendar className="w-3 h-3 text-blue-500" /><span>ประชุม</span></div>
                                         <span className="font-medium">{team.meetingsAttended ?? 0}</span>
                                       </div>
                                       <div className="flex items-center justify-between text-xs">
-                                        <div className="flex items-center gap-1.5 text-muted-foreground">
-                                          <MessageSquare className="w-3 h-3 text-violet-500" />
-                                          <span>ข้อความ</span>
-                                        </div>
+                                        <div className="flex items-center gap-1.5 text-muted-foreground"><MessageSquare className="w-3 h-3 text-violet-500" /><span>ข้อความ</span></div>
                                         <span className="font-medium">{team.messagesSent ?? 0}</span>
                                       </div>
                                     </div>
@@ -856,12 +630,11 @@ export default function Reports() {
                           </Card>
                         )}
 
-                        {/* Weekly Trend Chart */}
                         {personalReport.weeklyTrend && personalReport.weeklyTrend.length > 0 && (
                           <Card className="border-border/50 bg-card/80 backdrop-blur-sm">
                             <CardHeader className="pb-3">
                               <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                                <BarChart2 className="w-4 h-4 text-primary" />
+                                <TrendingUp className="w-4 h-4 text-primary" />
                                 แนวโน้มการทำงานรายสัปดาห์
                               </CardTitle>
                             </CardHeader>
@@ -872,14 +645,7 @@ export default function Reports() {
                                     <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                                     <XAxis dataKey="week" tick={{ fontSize: 10 }} stroke="#94a3b8" />
                                     <YAxis tick={{ fontSize: 10 }} stroke="#94a3b8" />
-                                    <RechartsTooltip
-                                      contentStyle={{
-                                        backgroundColor: 'hsl(var(--card))',
-                                        border: '1px solid hsl(var(--border))',
-                                        borderRadius: '8px',
-                                        fontSize: '12px',
-                                      }}
-                                    />
+                                    <RechartsTooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px', fontSize: '12px' }} />
                                     <Legend wrapperStyle={{ fontSize: '11px' }} />
                                     <Bar dataKey="tasks" name="งาน" fill={CHART_COLORS.emerald} radius={[4, 4, 0, 0]} />
                                     <Bar dataKey="meetings" name="ประชุม" fill={CHART_COLORS.blue} radius={[4, 4, 0, 0]} />
@@ -896,9 +662,8 @@ export default function Reports() {
                     )}
                   </TabsContent>
 
-                  {/* ─── Tab: ทีม & งาน ───────────────────────────────────────── */}
+                  {/* Tab: ทีม & งาน */}
                   <TabsContent value="team" className="mt-4 space-y-4">
-                    {/* Team Selector */}
                     {teams.length > 0 && (
                       <div className="flex items-center gap-3">
                         <Select value={selectedTeamId} onValueChange={setSelectedTeamId}>
@@ -917,7 +682,6 @@ export default function Reports() {
 
                     {teamReport && selectedTeam ? (
                       <>
-                        {/* Team Summary Cards */}
                         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                           <KpiCard title="สมาชิกทีม" value={teamReport.summary.members} icon={Users} gradient="from-primary to-blue-500" shadowColor="shadow-primary/20" />
                           <KpiCard title="งานทั้งหมด" value={teamReport.summary.tasks.total} icon={CheckSquare} gradient="from-blue-500 to-cyan-500" shadowColor="shadow-blue-500/20" />
@@ -925,9 +689,7 @@ export default function Reports() {
                           <KpiCard title="จำนวนประชุม" value={teamReport.summary.meetings.total} icon={Calendar} gradient="from-violet-500 to-purple-500" shadowColor="shadow-violet-500/20" />
                         </div>
 
-                        {/* Task Status Distribution & Trend Charts */}
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                          {/* Task Status Pie Chart */}
                           <Card className="border-border/50 bg-card/80 backdrop-blur-sm">
                             <CardHeader className="pb-3">
                               <CardTitle className="text-sm font-semibold flex items-center gap-2">
@@ -939,42 +701,19 @@ export default function Reports() {
                               <div className="h-48">
                                 <ResponsiveContainer width="100%" height="100%">
                                   <RechartsPieChart>
-                                    <Pie
-                                      data={[
-                                        { name: 'เสร็จแล้ว', value: teamReport.summary.tasks.completed, color: CHART_COLORS.emerald },
-                                        { name: 'กำลังทำ', value: teamReport.summary.tasks.inProgress, color: CHART_COLORS.blue },
-                                        { name: 'ยังไม่เริ่ม', value: teamReport.summary.tasks.todo, color: '#94a3b8' },
-                                      ].filter(d => d.value > 0)}
-                                      cx="50%"
-                                      cy="50%"
-                                      innerRadius={40}
-                                      outerRadius={65}
-                                      paddingAngle={3}
-                                      dataKey="value"
-                                    >
-                                      {[
-                                        { color: CHART_COLORS.emerald },
-                                        { color: CHART_COLORS.blue },
-                                        { color: '#94a3b8' },
-                                      ].map((entry, index) => (
+                                    <Pie data={[{ name: 'เสร็จแล้ว', value: teamReport.summary.tasks.completed, color: CHART_COLORS.emerald }, { name: 'กำลังทำ', value: teamReport.summary.tasks.inProgress, color: CHART_COLORS.blue }, { name: 'ยังไม่เริ่ม', value: teamReport.summary.tasks.todo, color: '#94a3b8' }].filter(d => d.value > 0)} cx="50%" cy="50%" innerRadius={40} outerRadius={65} paddingAngle={3} dataKey="value">
+                                      {[{ color: CHART_COLORS.emerald }, { color: CHART_COLORS.blue }, { color: '#94a3b8' }].map((entry, index) => (
                                         <Cell key={`cell-${index}`} fill={entry.color} />
                                       ))}
                                     </Pie>
-                                    <RechartsTooltip
-                                      formatter={(value: number, name: string) => [`${value} งาน`, name]}
-                                    />
-                                    <Legend
-                                      verticalAlign="bottom"
-                                      height={36}
-                                      formatter={(value, entry) => `${value} (${entry.payload?.value || 0})`}
-                                    />
+                                    <RechartsTooltip formatter={(value: number, name: string) => [`${value} งาน`, name]} />
+                                    <Legend verticalAlign="bottom" height={36} formatter={(value, entry) => `${value} (${entry.payload?.value || 0})`} />
                                   </RechartsPieChart>
                                 </ResponsiveContainer>
                               </div>
                             </CardContent>
                           </Card>
 
-                          {/* Task Trend Chart */}
                           {teamReport.taskTrend && teamReport.taskTrend.length > 0 && (
                             <Card className="border-border/50 bg-card/80 backdrop-blur-sm">
                               <CardHeader className="pb-3">
@@ -990,30 +729,9 @@ export default function Reports() {
                                       <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                                       <XAxis dataKey="date" tick={{ fontSize: 9 }} stroke="#94a3b8" />
                                       <YAxis tick={{ fontSize: 9 }} stroke="#94a3b8" />
-                                      <RechartsTooltip
-                                        contentStyle={{
-                                          backgroundColor: 'hsl(var(--card))',
-                                          border: '1px solid hsl(var(--border))',
-                                          borderRadius: '8px',
-                                          fontSize: '11px',
-                                        }}
-                                      />
-                                      <Area
-                                        type="monotone"
-                                        dataKey="completed"
-                                        name="เสร็จแล้ว"
-                                        stroke={CHART_COLORS.emerald}
-                                        fill={CHART_COLORS.emerald}
-                                        fillOpacity={0.3}
-                                      />
-                                      <Area
-                                        type="monotone"
-                                        dataKey="created"
-                                        name="สร้างใหม่"
-                                        stroke={CHART_COLORS.blue}
-                                        fill={CHART_COLORS.blue}
-                                        fillOpacity={0.3}
-                                      />
+                                      <RechartsTooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px', fontSize: '11px' }} />
+                                      <Area type="monotone" dataKey="completed" name="เสร็จแล้ว" stroke={CHART_COLORS.emerald} fill={CHART_COLORS.emerald} fillOpacity={0.3} />
+                                      <Area type="monotone" dataKey="created" name="สร้างใหม่" stroke={CHART_COLORS.blue} fill={CHART_COLORS.blue} fillOpacity={0.3} />
                                     </AreaChart>
                                   </ResponsiveContainer>
                                 </div>
@@ -1022,7 +740,6 @@ export default function Reports() {
                           )}
                         </div>
 
-                        {/* Member Workload */}
                         {teamWorkload && teamWorkload.workload.length > 0 && (
                           <Card className="border-border/50 bg-card/80 backdrop-blur-sm">
                             <CardHeader className="pb-3">
@@ -1041,28 +758,16 @@ export default function Reports() {
                                         <div className="text-xs font-medium">{w.userName}</div>
                                         <div className="flex gap-2">
                                           <Badge variant="secondary" className="text-[10px] h-5">{w.totalTasks} งาน</Badge>
-                                          {w.overdue > 0 && (
-                                            <Badge variant="destructive" className="text-[10px] h-5 gap-1">
-                                              <AlertTriangle className="w-2.5 h-2.5" /> {w.overdue} ค้าง
-                                            </Badge>
-                                          )}
+                                          {w.overdue > 0 && <Badge variant="destructive" className="text-[10px] h-5 gap-1"><AlertTriangle className="w-2.5 h-2.5" /> {w.overdue} ค้าง</Badge>}
                                         </div>
                                       </div>
                                       <div className="flex items-center gap-2">
                                         <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden flex">
-                                          {w.completed > 0 && (
-                                            <div className="bg-emerald-500 h-full" style={{ width: `${(w.completed / Math.max(w.totalTasks, 1)) * 100}%` }} />
-                                          )}
-                                          {w.inProgress > 0 && (
-                                            <div className="bg-blue-500 h-full" style={{ width: `${(w.inProgress / Math.max(w.totalTasks, 1)) * 100}%` }} />
-                                          )}
-                                          {w.todo > 0 && (
-                                            <div className="bg-slate-400 h-full" style={{ width: `${(w.todo / Math.max(w.totalTasks, 1)) * 100}%` }} />
-                                          )}
+                                          {w.completed > 0 && <div className="bg-emerald-500 h-full" style={{ width: `${(w.completed / Math.max(w.totalTasks, 1)) * 100}%` }} />}
+                                          {w.inProgress > 0 && <div className="bg-blue-500 h-full" style={{ width: `${(w.inProgress / Math.max(w.totalTasks, 1)) * 100}%` }} />}
+                                          {w.todo > 0 && <div className="bg-slate-400 h-full" style={{ width: `${(w.todo / Math.max(w.totalTasks, 1)) * 100}%` }} />}
                                         </div>
-                                        <span className="text-[10px] text-muted-foreground font-medium w-10 text-right">
-                                          {completionRate.toFixed(0)}%
-                                        </span>
+                                        <span className="text-[10px] text-muted-foreground font-medium w-10 text-right">{completionRate.toFixed(0)}%</span>
                                       </div>
                                       <div className="flex gap-3 mt-2 text-[10px] text-muted-foreground">
                                         <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-emerald-500" />{w.completed} เสร็จ</span>
@@ -1077,7 +782,6 @@ export default function Reports() {
                           </Card>
                         )}
 
-                        {/* Overdue Tasks */}
                         {taskReport && taskReport.overdueTasks.length > 0 && (
                           <Card className="border-border/50 bg-card/80 backdrop-blur-sm border-l-4 border-l-red-500">
                             <CardHeader className="pb-3">
@@ -1097,9 +801,7 @@ export default function Reports() {
                                         {t.dueDate && <span>· กำหนด: {new Date(t.dueDate).toLocaleDateString("th-TH")}</span>}
                                       </div>
                                     </div>
-                                    <Badge className={cn("text-[10px] h-5 text-white", priorityColor[t.priority] || "bg-slate-400")}>
-                                      {priorityLabel[t.priority] || t.priority}
-                                    </Badge>
+                                    <Badge className={cn("text-[10px] h-5 text-white", priorityColor[t.priority] || "bg-slate-400")}>{priorityLabel[t.priority] || t.priority}</Badge>
                                   </div>
                                 ))}
                               </div>
@@ -1112,9 +814,8 @@ export default function Reports() {
                     )}
                   </TabsContent>
 
-                  {/* ─── Tab: ประสิทธิภาพ ─────────────────────────────────────── */}
+                  {/* Tab: ประสิทธิภาพ */}
                   <TabsContent value="performance" className="mt-4 space-y-4">
-                    {/* Team filter for performance */}
                     {teams.length > 0 && (
                       <div className="flex items-center gap-3">
                         <Select value={selectedTeamId || "all"} onValueChange={(v) => setSelectedTeamId(v === "all" ? undefined : v)}>
@@ -1134,58 +835,50 @@ export default function Reports() {
 
                     {performance ? (
                       <>
-                        {/* Summary Stats */}
                         {performance.summary && (
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                          <Card className="border-border/50 bg-card/80 backdrop-blur-sm">
-                            <CardContent className="pt-4">
-                              <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center shadow-lg shadow-emerald-500/20">
-                                  <Target className="w-5 h-5 text-white" />
-                                </div>
-                                <div>
-                                  <div className="text-xs text-muted-foreground">Avg Completion Rate</div>
-                                  <div className={cn("text-xl font-bold", getProductivityColor(performance.summary.avgTaskCompletionRate ?? 0))}>
-                                    {(performance.summary.avgTaskCompletionRate ?? 0).toFixed(1)}%
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <Card className="border-border/50 bg-card/80 backdrop-blur-sm">
+                              <CardContent className="pt-4">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center shadow-lg shadow-emerald-500/20">
+                                    <Target className="w-5 h-5 text-white" />
+                                  </div>
+                                  <div>
+                                    <div className="text-xs text-muted-foreground">Avg Completion Rate</div>
+                                    <div className={cn("text-xl font-bold", getProductivityColor(performance.summary.avgTaskCompletionRate ?? 0))}>{(performance.summary.avgTaskCompletionRate ?? 0).toFixed(1)}%</div>
                                   </div>
                                 </div>
-                              </div>
-                            </CardContent>
-                          </Card>
-                          <Card className="border-border/50 bg-card/80 backdrop-blur-sm">
-                            <CardContent className="pt-4">
-                              <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center shadow-lg shadow-blue-500/20">
-                                  <Calendar className="w-5 h-5 text-white" />
-                                </div>
-                                <div>
-                                  <div className="text-xs text-muted-foreground">Avg Attendance Rate</div>
-                                  <div className={cn("text-xl font-bold", getProductivityColor(performance.summary.avgMeetingAttendanceRate ?? 0))}>
-                                    {(performance.summary.avgMeetingAttendanceRate ?? 0).toFixed(1)}%
+                              </CardContent>
+                            </Card>
+                            <Card className="border-border/50 bg-card/80 backdrop-blur-sm">
+                              <CardContent className="pt-4">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center shadow-lg shadow-blue-500/20">
+                                    <Calendar className="w-5 h-5 text-white" />
+                                  </div>
+                                  <div>
+                                    <div className="text-xs text-muted-foreground">Avg Attendance Rate</div>
+                                    <div className={cn("text-xl font-bold", getProductivityColor(performance.summary.avgMeetingAttendanceRate ?? 0))}>{(performance.summary.avgMeetingAttendanceRate ?? 0).toFixed(1)}%</div>
                                   </div>
                                 </div>
-                              </div>
-                            </CardContent>
-                          </Card>
-                          <Card className="border-border/50 bg-card/80 backdrop-blur-sm">
-                            <CardContent className="pt-4">
-                              <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-purple-500 flex items-center justify-center shadow-lg shadow-violet-500/20">
-                                  <Zap className="w-5 h-5 text-white" />
-                                </div>
-                                <div>
-                                  <div className="text-xs text-muted-foreground">Total Interactions</div>
-                                  <div className="text-xl font-bold text-foreground">
-                                    {performance.summary.totalInteractions ?? 0}
+                              </CardContent>
+                            </Card>
+                            <Card className="border-border/50 bg-card/80 backdrop-blur-sm">
+                              <CardContent className="pt-4">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-purple-500 flex items-center justify-center shadow-lg shadow-violet-500/20">
+                                    <Zap className="w-5 h-5 text-white" />
+                                  </div>
+                                  <div>
+                                    <div className="text-xs text-muted-foreground">Total Interactions</div>
+                                    <div className="text-xl font-bold text-foreground">{performance.summary.totalInteractions ?? 0}</div>
                                   </div>
                                 </div>
-                              </div>
-                            </CardContent>
-                          </Card>
-                        </div>
+                              </CardContent>
+                            </Card>
+                          </div>
                         )}
 
-                        {/* Performance Trend Chart */}
                         {performance.trend && performance.trend.length > 0 && (
                           <Card className="border-border/50 bg-card/80 backdrop-blur-sm">
                             <CardHeader className="pb-3">
@@ -1201,14 +894,7 @@ export default function Reports() {
                                     <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                                     <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="#94a3b8" />
                                     <YAxis tick={{ fontSize: 10 }} stroke="#94a3b8" />
-                                    <RechartsTooltip
-                                      contentStyle={{
-                                        backgroundColor: 'hsl(var(--card))',
-                                        border: '1px solid hsl(var(--border))',
-                                        borderRadius: '8px',
-                                        fontSize: '12px',
-                                      }}
-                                    />
+                                    <RechartsTooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px', fontSize: '12px' }} />
                                     <Legend wrapperStyle={{ fontSize: '11px' }} />
                                     <Bar dataKey="completionRate" name="Completion %" fill={CHART_COLORS.emerald} radius={[4, 4, 0, 0]} />
                                     <Bar dataKey="attendanceRate" name="Attendance %" fill={CHART_COLORS.blue} radius={[4, 4, 0, 0]} />
@@ -1221,7 +907,6 @@ export default function Reports() {
                         )}
 
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                          {/* Task Completion Rate */}
                           <Card className="border-border/50 bg-card/80 backdrop-blur-sm">
                             <CardHeader className="pb-3">
                               <CardTitle className="text-sm font-semibold flex items-center gap-2">
@@ -1230,111 +915,76 @@ export default function Reports() {
                               </CardTitle>
                             </CardHeader>
                             <CardContent className="space-y-3">
-                              {performance.taskCompletionRates
-                                .slice()
-                                .sort((a, b) => b.completionRate - a.completionRate)
-                                .map((r) => {
-                                  const TrendIcon = getTrendIcon(r.trend);
-                                  return (
-                                    <div key={r.userId} className="space-y-1">
-                                      <div className="flex items-center justify-between text-xs">
-                                        <span className="font-medium truncate mr-2">{r.userName}</span>
-                                        <div className="flex items-center gap-2">
-                                          {r.trend && (
-                                            <TrendIcon className={cn("w-3 h-3", getTrendColor(r.trend))} />
-                                          )}
-                                          <span className="text-muted-foreground">
-                                            {r.completedTasks}/{r.totalTasks} ({r.completionRate.toFixed(0)}%)
-                                          </span>
-                                        </div>
-                                      </div>
-                                      <div className="h-2 bg-muted rounded-full overflow-hidden">
-                                        <div
-                                          className={cn(
-                                            "h-full rounded-full transition-all duration-500",
-                                            r.completionRate >= 80 ? "bg-emerald-500" :
-                                            r.completionRate >= 50 ? "bg-blue-500" :
-                                            r.completionRate >= 30 ? "bg-amber-500" : "bg-red-500"
-                                          )}
-                                          style={{ width: `${r.completionRate}%` }}
-                                        />
+                              {performance.taskCompletionRates.slice().sort((a, b) => b.completionRate - a.completionRate).map((r) => {
+                                const TrendIcon = getTrendIcon(r.trend);
+                                return (
+                                  <div key={r.userId} className="space-y-1">
+                                    <div className="flex items-center justify-between text-xs">
+                                      <span className="font-medium truncate mr-2">{r.userName}</span>
+                                      <div className="flex items-center gap-2">
+                                        {r.trend && <TrendIcon className={cn("w-3 h-3", getTrendColor(r.trend))} />}
+                                        <span className="text-muted-foreground">{r.completedTasks}/{r.totalTasks} ({r.completionRate.toFixed(0)}%)</span>
                                       </div>
                                     </div>
-                                  );
-                                })}
+                                    <div className="h-2 bg-muted rounded-full overflow-hidden">
+                                      <div className={cn("h-full rounded-full transition-all duration-500", r.completionRate >= 80 ? "bg-emerald-500" : r.completionRate >= 50 ? "bg-blue-500" : r.completionRate >= 30 ? "bg-amber-500" : "bg-red-500")} style={{ width: `${r.completionRate}%` }} />
+                                    </div>
+                                  </div>
+                                );
+                              })}
                             </CardContent>
                           </Card>
 
-                        {/* Collaboration Activity */}
-                        <Card className="border-border/50 bg-card/80 backdrop-blur-sm">
-                          <CardHeader className="pb-3">
-                            <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                              <Zap className="w-4 h-4 text-amber-500" />
-                              กิจกรรมการทำงานร่วมกัน
-                            </CardTitle>
-                          </CardHeader>
-                          <CardContent>
-                            <div className="space-y-2.5">
-                              {performance.collaborationActivity
-                                .slice()
-                                .sort((a, b) => b.totalInteractions - a.totalInteractions)
-                                .map((w) => (
-                                  <div key={w.userId} className="p-2.5 rounded-lg bg-muted/20 border border-border/30">
-                                    <div className="flex items-center justify-between mb-1.5">
-                                      <span className="text-xs font-medium">{w.userName}</span>
-                                      <Badge variant="secondary" className="text-[10px] h-5 font-bold">
-                                        {w.totalInteractions} รวม
-                                      </Badge>
-                                    </div>
-                                    <div className="flex gap-3 text-[10px] text-muted-foreground">
-                                      <span className="flex items-center gap-1">
-                                        <CheckSquare className="w-2.5 h-2.5 text-emerald-500" /> {w.completedTasks} งาน
-                                      </span>
-                                      <span className="flex items-center gap-1">
-                                        <Calendar className="w-2.5 h-2.5 text-blue-500" /> {w.attendedMeetings} ประชุม
-                                      </span>
-                                      <span className="flex items-center gap-1">
-                                        <MessageSquare className="w-2.5 h-2.5 text-violet-500" /> {w.messagesSent} แชท
-                                      </span>
-                                    </div>
-                                  </div>
-                                ))}
-                            </div>
-                          </CardContent>
-                        </Card>
-
-                        {/* Meeting Attendance */}
-                        {performance.meetingAttendanceRates && performance.meetingAttendanceRates.length > 0 && (
-                          <Card className="border-border/50 bg-card/80 backdrop-blur-sm lg:col-span-2">
+                          <Card className="border-border/50 bg-card/80 backdrop-blur-sm">
                             <CardHeader className="pb-3">
                               <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                                <Calendar className="w-4 h-4 text-blue-500" />
-                                อัตราเข้าร่วมประชุม (Meeting Attendance)
+                                <Zap className="w-4 h-4 text-amber-500" />
+                                กิจกรรมการทำงานร่วมกัน
                               </CardTitle>
                             </CardHeader>
                             <CardContent>
-                              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                                {performance.meetingAttendanceRates
-                                  .slice()
-                                  .sort((a, b) => b.attendanceRate - a.attendanceRate)
-                                  .map((r) => (
-                                    <div key={r.userId} className="p-3 rounded-lg bg-muted/20 border border-border/30">
-                                      <div className="flex items-center justify-between mb-1.5">
-                                        <span className="text-xs font-medium truncate mr-2">{r.userName}</span>
-                                        <span className={cn("text-xs font-bold", r.attendanceRate >= 80 ? "text-emerald-500" : r.attendanceRate >= 50 ? "text-blue-500" : "text-amber-500")}>
-                                          {r.attendanceRate.toFixed(0)}%
-                                        </span>
-                                      </div>
-                                      <Progress value={r.attendanceRate} className="h-1.5" />
-                                      <div className="text-[10px] text-muted-foreground mt-1">
-                                        {r.attendedMeetings}/{r.totalMeetings} ครั้ง
-                                      </div>
+                              <div className="space-y-2.5">
+                                {performance.collaborationActivity.slice().sort((a, b) => b.totalInteractions - a.totalInteractions).map((w) => (
+                                  <div key={w.userId} className="p-2.5 rounded-lg bg-muted/20 border border-border/30">
+                                    <div className="flex items-center justify-between mb-1.5">
+                                      <span className="text-xs font-medium">{w.userName}</span>
+                                      <Badge variant="secondary" className="text-[10px] h-5 font-bold">{w.totalInteractions} รวม</Badge>
                                     </div>
-                                  ))}
+                                    <div className="flex gap-3 text-[10px] text-muted-foreground">
+                                      <span className="flex items-center gap-1"><CheckSquare className="w-2.5 h-2.5 text-emerald-500" /> {w.completedTasks} งาน</span>
+                                      <span className="flex items-center gap-1"><Calendar className="w-2.5 h-2.5 text-blue-500" /> {w.attendedMeetings} ประชุม</span>
+                                      <span className="flex items-center gap-1"><MessageSquare className="w-2.5 h-2.5 text-violet-500" /> {w.messagesSent} แชท</span>
+                                    </div>
+                                  </div>
+                                ))}
                               </div>
                             </CardContent>
                           </Card>
-                        )}
+
+                          {performance.meetingAttendanceRates && performance.meetingAttendanceRates.length > 0 && (
+                            <Card className="border-border/50 bg-card/80 backdrop-blur-sm lg:col-span-2">
+                              <CardHeader className="pb-3">
+                                <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                                  <Calendar className="w-4 h-4 text-blue-500" />
+                                  อัตราเข้าร่วมประชุม (Meeting Attendance)
+                                </CardTitle>
+                              </CardHeader>
+                              <CardContent>
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                                  {performance.meetingAttendanceRates.slice().sort((a, b) => b.attendanceRate - a.attendanceRate).map((r) => (
+                                    <div key={r.userId} className="p-3 rounded-lg bg-muted/20 border border-border/30">
+                                      <div className="flex items-center justify-between mb-1.5">
+                                        <span className="text-xs font-medium truncate mr-2">{r.userName}</span>
+                                        <span className={cn("text-xs font-bold", r.attendanceRate >= 80 ? "text-emerald-500" : r.attendanceRate >= 50 ? "text-blue-500" : "text-amber-500")}>{r.attendanceRate.toFixed(0)}%</span>
+                                      </div>
+                                      <Progress value={r.attendanceRate} className="h-1.5" />
+                                      <div className="text-[10px] text-muted-foreground mt-1">{r.attendedMeetings}/{r.totalMeetings} ครั้ง</div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </CardContent>
+                            </Card>
+                          )}
                         </div>
                       </>
                     ) : (
@@ -1348,98 +998,5 @@ export default function Reports() {
         </div>
       </div>
     </TooltipProvider>
-  );
-}
-
-// ─── Sub Components ──────────────────────────────────────────────────────────
-
-function KpiCard({ title, value, suffix, icon: Icon, gradient, shadowColor }: {
-  title: string;
-  value: string | number;
-  suffix?: string;
-  icon: React.ElementType;
-  gradient: string;
-  shadowColor: string;
-}) {
-  return (
-    <Card className="border-border/50 bg-card/80 backdrop-blur-sm hover:bg-card hover:border-border/80 transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5">
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-sm font-medium text-muted-foreground">{title}</CardTitle>
-          <div className={cn("w-9 h-9 rounded-xl flex items-center justify-center bg-gradient-to-br shadow-lg", gradient, shadowColor)}>
-            <Icon className="w-4.5 h-4.5 text-white" />
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent>
-        <div className="text-2xl font-bold text-foreground flex items-baseline gap-1">
-          <span>{value}</span>
-          {suffix && <span className="text-xs text-muted-foreground font-normal">{suffix}</span>}
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function ProductivityScoreCard({ score }: { score: number }) {
-  return (
-    <Card className={cn(
-      "border-border/50 bg-card/80 backdrop-blur-sm hover:bg-card hover:border-border/80 transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5",
-      "bg-gradient-to-br from-background via-background to-primary/5"
-    )}>
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-sm font-medium text-muted-foreground">คะแนนประสิทธิภาพ</CardTitle>
-          <div className={cn("w-9 h-9 rounded-xl flex items-center justify-center bg-gradient-to-br shadow-lg", getProductivityGradient(score), "shadow-primary/20")}>
-            <TrendingUp className="w-4.5 h-4.5 text-white" />
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent>
-        <div className={cn("text-2xl font-bold mb-2", getProductivityColor(score))}>{Math.round(score)}%</div>
-        <Progress value={score} className="h-2" />
-        <div className="flex items-center gap-1 text-[10px] text-muted-foreground mt-2">
-          <Activity className="w-3 h-3" />
-          <span>ยิ่งเข้าใกล้ 100% แสดงว่าทำงานได้คุ้มค่ามากขึ้น</span>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function StatusBarRow({ label, count, total, color }: { label: string; count: number; total: number; color: string }) {
-  const pct = total > 0 ? (count / total) * 100 : 0;
-  return (
-    <div className="flex items-center gap-3">
-      <div className={cn("w-2.5 h-2.5 rounded-full", color)} />
-      <span className="text-xs text-muted-foreground w-20 truncate">{label}</span>
-      <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
-        <div className={cn("h-full rounded-full transition-all duration-500", color)} style={{ width: `${pct}%` }} />
-      </div>
-      <span className="text-[10px] text-muted-foreground font-medium w-12 text-right">{count} ({pct.toFixed(0)}%)</span>
-    </div>
-  );
-}
-
-function MiniStat({ label, value }: { label: string; value: string | number }) {
-  return (
-    <div className="text-center p-2 rounded-lg bg-muted/30">
-      <div className="text-lg font-bold text-foreground">{value}</div>
-      <div className="text-[10px] text-muted-foreground">{label}</div>
-    </div>
-  );
-}
-
-function EmptyState({ message }: { message: string }) {
-  return (
-    <Card className="border-border/50 bg-card/80 backdrop-blur-sm">
-      <CardContent className="flex flex-col items-center justify-center py-16">
-        <div className="w-16 h-16 rounded-2xl bg-muted/50 flex items-center justify-center mb-4">
-          <FileBarChart className="w-8 h-8 text-muted-foreground" />
-        </div>
-        <h3 className="text-lg font-semibold text-foreground mb-1">ไม่มีข้อมูลรายงาน</h3>
-        <p className="text-sm text-muted-foreground text-center max-w-md">{message}</p>
-      </CardContent>
-    </Card>
   );
 }
