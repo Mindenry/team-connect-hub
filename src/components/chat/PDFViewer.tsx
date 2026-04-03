@@ -76,15 +76,16 @@ export function PDFViewer({ url, name, variant = "default" }: PDFViewerProps) {
         <div className="flex-1 w-full bg-gray-100 dark:bg-black relative">
           <iframe
             src={`${url}#view=FitH`}
-            className="w-full h-full border-none"
+            className="w-full h-full border-none relative z-10"
             title={name}
             loading="lazy"
           />
-          {/* Optional overlay hint if PDF fails to load due to Cloudinary 401 */}
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none opacity-50 flex flex-col items-center">
-            <FileText className="w-10 h-10 mb-2" />
-            <span className="text-sm font-medium">Loading document...</span>
-            <span className="text-xs text-center mt-2 max-w-[250px]">If it doesn't load (401 Error), Cloudinary security settings may block PDF embedding. Please click the download button above.</span>
+          {/* Loading placeholder - shows while iframe loads */}
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <div className="flex flex-col items-center text-gray-400 dark:text-gray-500">
+              <FileText className="w-12 h-12 mb-3 animate-pulse" />
+              <span className="text-sm font-medium">Loading PDF...</span>
+            </div>
           </div>
         </div>
       </div>
