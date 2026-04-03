@@ -12,6 +12,7 @@ export interface SocketParticipant {
   peerId: string;
   name: string;
   avatar?: string;
+  userId?: string;
   state: ParticipantState;
   isSpeaking?: boolean;
 }
@@ -24,6 +25,8 @@ export interface UIMappedParticipant {
   microphoneEnabled: boolean;
   screenShareEnabled: boolean;
   metadata?: string;
+  avatar?: string;
+  userId?: string;
   isSpeaking: boolean;
   isScreenShareTile?: boolean;
   screenShareIdentity?: string;

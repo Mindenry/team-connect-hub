@@ -16,8 +16,8 @@ export function ParticipantsPanel({
 }: ParticipantsPanelProps) {
   // Sort participants: host first, then hand raised, then local user, then alphabetically
   const sortedParticipants = [...participants].sort((a, b) => {
-    const aIsHost = hostUserId ? a.identity === hostUserId : false;
-    const bIsHost = hostUserId ? b.identity === hostUserId : false;
+    const aIsHost = hostUserId ? a.userId === hostUserId : false;
+    const bIsHost = hostUserId ? b.userId === hostUserId : false;
     if (aIsHost !== bIsHost) return aIsHost ? -1 : 1;
 
     const aRaised = !!a.isHandRaised;
@@ -46,7 +46,7 @@ export function ParticipantsPanel({
           .slice(0, 2)
           .toUpperCase();
         
-        const isHost = hostUserId === p.identity;
+        const isHost = hostUserId === p.userId;
 
         return (
           <div
@@ -55,7 +55,7 @@ export function ParticipantsPanel({
           >
             <div className="relative">
               <Avatar className="w-8 h-8">
-                <AvatarImage src={p.metadata || undefined} />
+                <AvatarImage src={p.avatar || undefined} />
                 <AvatarFallback className="bg-[#3d3d3d] text-white text-xs">
                   {initials}
                 </AvatarFallback>

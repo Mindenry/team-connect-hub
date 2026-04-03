@@ -429,7 +429,7 @@ function MeetingRoomUI({ meetingId: propMeetingId }: any) {
     const mapped: UIMappedParticipant[] = livekitParticipants.map((p) => {
       const socketP = participants.find((x) => x.peerId === p.identity);
       const sp = socketP?.state || { isMuted: true, isCameraOn: false, isScreenSharing: false, isHandRaised: false };
-      return { identity: p.identity, name: p.name || p.identity, isLocal: p.isLocal, cameraEnabled: p.isCameraEnabled, microphoneEnabled: p.isMicrophoneEnabled, screenShareEnabled: p.isScreenShareEnabled, metadata: p.metadata, isSpeaking: p.isSpeaking, isHandRaised: sp.isHandRaised || false };
+      return { identity: p.identity, name: p.name || p.identity, isLocal: p.isLocal, cameraEnabled: p.isCameraEnabled, microphoneEnabled: p.isMicrophoneEnabled, screenShareEnabled: p.isScreenShareEnabled, metadata: p.metadata, avatar: socketP?.avatar, userId: socketP?.userId, isSpeaking: p.isSpeaking, isHandRaised: sp.isHandRaised || false };
     });
     tracks.filter((t) => t.source === Track.Source.ScreenShare).forEach((t) => {
       if (!mapped.some((p) => p.identity === `screen-${t.participant.identity}`)) {
@@ -507,17 +507,17 @@ function MeetingRoomUI({ meetingId: propMeetingId }: any) {
                   const main = allParticipants.find((p) => p.identity === mainViewId);
                   if (!main) return null;
                   if (main.isScreenShareTile) return <ScreenShareTile participant={main} tracks={tracks} isPinned={!!effectivePinnedId} onUnpin={() => setPinnedParticipantId(null)} />;
-                  return <ParticipantTile participant={main} tracks={tracks} mirrorVideo={mirrorVideo} isSpotlight />;
+                  return <ParticipantTile participant={main} tracks={tracks} mirrorVideo={mirrorVideo} isSpotlight hostUserId={effectiveHostUserId} onClick={() => setPinnedParticipantId(null)} />;
                 })()}
               </div>
               <div className="w-52 p-2 flex flex-col gap-2 overflow-y-auto">
                 {hasScreenShare && mainViewId && !allParticipants.find((p) => p.identity === mainViewId)?.isScreenShareTile && allParticipants.filter((p) => p.isScreenShareTile).map((p) => <ScreenShareTile key={p.identity} participant={p} tracks={tracks} isSidebar onClick={() => handleTileClick(p.identity)} />)}
-                {allParticipants.filter((p) => !p.isScreenShareTile && p.identity !== mainViewId).map((p) => <ParticipantTile key={p.identity} participant={p} tracks={tracks} mirrorVideo={mirrorVideo} isSidebar onClick={() => handleTileClick(p.identity)} />)}
+                {allParticipants.filter((p) => !p.isScreenShareTile && p.identity !== mainViewId).map((p) => <ParticipantTile key={p.identity} participant={p} tracks={tracks} mirrorVideo={mirrorVideo} isSidebar hostUserId={effectiveHostUserId} onClick={() => handleTileClick(p.identity)} />)}
               </div>
             </div>
           ) : (
             <div className="grid h-full w-full gap-4 p-8" style={{ gridTemplateColumns: `repeat(${gridLayout.cols}, 1fr)`, gridTemplateRows: `repeat(${gridLayout.rows}, 1fr)` }}>
-              {allParticipants.filter((p) => !p.isScreenShareTile).map((p) => <ParticipantTile key={p.identity} participant={p} tracks={tracks} mirrorVideo={mirrorVideo} onClick={totalParticipants > 1 ? () => handleTileClick(p.identity) : undefined} />)}
+              {allParticipants.filter((p) => !p.isScreenShareTile).map((p) => <ParticipantTile key={p.identity} participant={p} tracks={tracks} mirrorVideo={mirrorVideo} hostUserId={effectiveHostUserId} onClick={totalParticipants > 1 ? () => handleTileClick(p.identity) : undefined} />)}
             </div>
           )}
         </div>

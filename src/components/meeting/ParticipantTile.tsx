@@ -1,6 +1,7 @@
 import { Track } from "livekit-client";
 import { VideoTrack } from "@livekit/components-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
 import { MicOff, VideoOff, Hand, Pin, PinOff, Monitor, ScreenShare } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { UIMappedParticipant } from "./types";
@@ -12,6 +13,7 @@ interface ParticipantTileProps {
   isPinned?: boolean;
   isSpotlight?: boolean;
   isSidebar?: boolean;
+  hostUserId?: string | null;
   onClick?: () => void;
 }
 
@@ -22,6 +24,7 @@ export function ParticipantTile({
   isPinned = false,
   isSpotlight = false,
   isSidebar = false,
+  hostUserId,
   onClick,
 }: ParticipantTileProps) {
   const videoTrack = tracks.find(
@@ -55,18 +58,21 @@ export function ParticipantTile({
   );
 
   const cameraOn = canRenderCamera(videoTrack) || (!videoTrack && hasCameraTrack);
+  const isHost = hostUserId && participant.userId === hostUserId;
 
   // Spotlight mode (main view)
   if (isSpotlight) {
     return (
       <div
         className={cn(
-          "relative rounded-2xl overflow-hidden bg-[#202124] transition-all duration-300",
+          "relative rounded-2xl overflow-hidden bg-[#202124] transition-all duration-300 cursor-pointer",
           participant.isSpeaking
             ? "ring-4 ring-green-500 shadow-[0_0_30px_rgba(34,197,94,0.3)] m-1"
-            : "ring-1 ring-white/10 m-1",
+            : "ring-1 ring-white/10 m-1 hover:ring-white/30",
         )}
         style={{ height: "calc(100% - 8px)" }}
+        onClick={onClick}
+        title={onClick ? "Click to return to grid view" : undefined}
       >
         <div className="absolute inset-0 w-full h-full flex items-center justify-center bg-[#202124]">
           {cameraOn ? (
@@ -80,6 +86,7 @@ export function ParticipantTile({
           ) : (
             <div className="flex flex-col items-center justify-center">
               <Avatar className="w-32 h-32 bg-[#3c4043] ring-1 ring-white/10 shadow-xl">
+                <AvatarImage src={participant.avatar} />
                 <AvatarFallback className="text-5xl text-white font-medium bg-[#3c4043]">
                   {initials}
                 </AvatarFallback>
@@ -102,6 +109,11 @@ export function ParticipantTile({
               {participant.name}
               {participant.isLocal && " (You)"}
             </span>
+            {isHost && (
+              <Badge className="h-5 px-1.5 bg-blue-500/20 text-blue-300 border-0 text-[10px]">
+                Host
+              </Badge>
+            )}
           </div>
 
           {/* Status Badges */}
@@ -148,6 +160,7 @@ export function ParticipantTile({
           ) : (
             <div className="flex flex-col items-center justify-center text-white">
               <Avatar className="w-12 h-12 bg-[#3c4043] ring-1 ring-white/10 shadow-md">
+                <AvatarImage src={participant.avatar} />
                 <AvatarFallback className="text-[14px] bg-[#3c4043] text-[#e8eaed]">
                   {initials}
                 </AvatarFallback>
@@ -168,11 +181,16 @@ export function ParticipantTile({
 
         {/* Name and Indicators Pill */}
         <div className="absolute bottom-2 left-2 flex items-center gap-1.5 z-20">
-          <div className="bg-black/60 backdrop-blur-md px-2.5 py-1.5 rounded-lg flex items-center shadow-md border border-white/10 max-w-[120px]">
+          <div className="bg-black/60 backdrop-blur-md px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 shadow-md border border-white/10 max-w-[120px]">
             <span className="text-white text-[11px] font-medium truncate">
               {participant.name.split(" ")[0]}
               {participant.isLocal && " (You)"}
             </span>
+            {isHost && (
+              <Badge className="h-4 px-1 bg-blue-500/20 text-blue-300 border-0 text-[8px]">
+                Host
+              </Badge>
+            )}
           </div>
           {!participant.microphoneEnabled && (
             <div className="bg-[#ea4335]/90 backdrop-blur-md rounded-full p-1.5 shadow-md border border-red-500/30">
@@ -221,7 +239,7 @@ export function ParticipantTile({
         ) : (
           <div className="flex flex-col items-center justify-center">
             <Avatar className="w-24 h-24 bg-[#3c4043] ring-1 ring-white/10 shadow-lg">
-              <AvatarImage src={participant.metadata} />
+              <AvatarImage src={participant.avatar} />
               <AvatarFallback className="text-3xl font-medium text-[#e8eaed] bg-[#3c4043]">
                 {initials}
               </AvatarFallback>
@@ -235,11 +253,16 @@ export function ParticipantTile({
 
       {/* Name and Indicators Pill */}
       <div className="absolute bottom-3 left-3 flex items-center gap-2 z-20">
-        <div className="bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-xl flex items-center shadow-md border border-white/10 max-w-[200px]">
+        <div className="bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-xl flex items-center gap-2 shadow-md border border-white/10 max-w-[200px]">
           <span className="text-white text-sm font-medium truncate">
             {participant.name}
             {participant.isLocal && " (You)"}
           </span>
+          {isHost && (
+            <Badge className="h-5 px-1.5 bg-blue-500/20 text-blue-300 border-0 text-[10px]">
+              Host
+            </Badge>
+          )}
         </div>
 
         {/* Status Badges */}
