@@ -393,7 +393,7 @@ function MeetingRoomUI({ meetingId: propMeetingId }: any) {
     try {
       const formData = new FormData();
       formData.append("file", file);
-      const res = await fetch(`${API_BASE}/upload?folder=meeting-chat&filename=${file.name}`, { method: "POST", body: formData, headers: await auth.getAuthHeaders() });
+      const res = await fetch(`${API_BASE}/api/upload?folder=meeting-chat&filename=${encodeURIComponent(file.name)}`, { method: "POST", body: formData, headers: await auth.getAuthHeaders() });
       if (!res.ok) throw new Error("Upload failed");
       const parsed = await res.json();
       const data = parsed.data || parsed;

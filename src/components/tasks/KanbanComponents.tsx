@@ -41,16 +41,19 @@ export function KanbanCard({ task, index, onDropIndexChange, onClick }: KanbanCa
   };
 
   return (
-    <motion.div layout initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="cursor-grab active:cursor-grabbing">
-      <div draggable onDragStart={handleDragStart} onDragOver={handleDragOver} onDragLeave={handleDragLeave} className="contents">
-        <Card
-          className={cn(
-            "group border-border/50 bg-card/80 hover:bg-card hover:border-border/80 transition-all duration-200 cursor-pointer",
-            "hover:shadow-md hover:shadow-black/5 hover:-translate-y-0.5",
-            overdue && "border-red-500/30 bg-red-500/5"
-          )}
-          onClick={onClick}
-        >
+    <motion.div layout initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}>
+      <Card
+        draggable
+        onDragStart={handleDragStart}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        className={cn(
+          "group border-border/50 bg-card/80 hover:bg-card hover:border-border/80 transition-all duration-200 cursor-grab active:cursor-grabbing",
+          "hover:shadow-md hover:shadow-black/5 hover:-translate-y-0.5",
+          overdue && "border-red-500/30 bg-red-500/5"
+        )}
+        onClick={onClick}
+      >
           <CardContent className="p-3 space-y-2">
             <div className="flex items-center gap-1.5 flex-wrap">
               <Badge className={cn("text-[10px] px-1.5 py-0 h-5 font-medium border", pCfg.color)}>{pCfg.label}</Badge>
@@ -90,8 +93,7 @@ export function KanbanCard({ task, index, onDropIndexChange, onClick }: KanbanCa
               )}
             </div>
           </CardContent>
-        </Card>
-      </div>
+      </Card>
     </motion.div>
   );
 }
