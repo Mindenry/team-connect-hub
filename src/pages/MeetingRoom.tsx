@@ -183,7 +183,7 @@ function MeetingRoomUI({ meetingId: propMeetingId }: any) {
 
       if (meetingId && !isQuickHuddle) {
         try {
-          const res = await fetch(`${API_BASE}/meetings/${meetingId}`, { headers: getAuthHeaders() });
+          const res = await fetch(`${API_BASE}/api/meetings/${meetingId}`, { headers: getAuthHeaders() });
           if (res.ok) {
             const text = await res.text();
             if (text) {
@@ -374,7 +374,7 @@ function MeetingRoomUI({ meetingId: propMeetingId }: any) {
     if (!effectiveIsHost || !meetingId || isQuickHuddle) { leaveMeeting(); return; }
     if (hasSentLeaveRef.current) return;
     setEndingMeeting(true);
-    try { await fetch(`${API_BASE}/meetings/${meetingId}/end`, { method: "POST", headers: { "Content-Type": "application/json", ...getAuthHeaders() }, body: JSON.stringify({}) }).catch(() => {}); } catch {}
+    try { await fetch(`${API_BASE}/api/meetings/${meetingId}/end`, { method: "POST", headers: { "Content-Type": "application/json", ...getAuthHeaders() }, body: JSON.stringify({}) }).catch(() => {}); } catch {}
     hasSentLeaveRef.current = true;
     socketRef.current.emit("meeting:leave", { meetingId: meetingCode, peerId: peerId.current });
     clearCurrentMeeting();
@@ -393,7 +393,9 @@ function MeetingRoomUI({ meetingId: propMeetingId }: any) {
     try {
       const formData = new FormData();
       formData.append("file", file);
-      const res = await fetch(`${API_BASE}/api/upload?folder=meeting-chat&filename=${encodeURIComponent(file.name)}`, { method: "POST", body: formData, headers: await auth.getAuthHeaders() });
+      // Don't set Content-Type for FormData - let browser set multipart/form-data with boundary
+      const authHeaders = await auth.getAuthHeaders();
+      const res = await fetch(`${API_BASE}/api/upload?folder=meeting-chat&filename=${encodeURIComponent(file.name)}`, { method: "POST", body: formData, headers: authHeaders });
       if (!res.ok) throw new Error("Upload failed");
       const parsed = await res.json();
       const data = parsed.data || parsed;

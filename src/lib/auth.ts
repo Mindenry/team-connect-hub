@@ -94,10 +94,9 @@ export const auth = {
       token = await auth.refreshAccessToken();
     }
 
-    return {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    };
+    // Return only Authorization header - let caller set Content-Type based on request type
+    // (FormData must NOT have Content-Type, JSON should have "application/json")
+    return token ? { Authorization: `Bearer ${token}` } : {};
   },
 };
 
