@@ -179,6 +179,7 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
       if (currentMeetingInfo) {
         socket.emit("meeting:rejoin", {
           ...currentMeetingInfo,
+          peerAvatar: currentUser?.avatar,
           userId: currentMeetingInfo.userId || currentUser?.id,
         });
       }

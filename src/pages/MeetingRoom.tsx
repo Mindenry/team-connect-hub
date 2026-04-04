@@ -225,7 +225,7 @@ function MeetingRoomUI({ meetingId: propMeetingId }: any) {
     if (loading) return;
     const socket = socketRef.current;
 
-    socket.emit("meeting:join", { meetingId: meetingCode, peerId: peerId.current, peerName: userName, userId: currentUser?.id, state: { isMuted, isCameraOn, isScreenSharing, isHandRaised } });
+    socket.emit("meeting:join", { meetingId: meetingCode, peerId: peerId.current, peerName: userName, peerAvatar: currentUser?.avatar, userId: currentUser?.id, state: { isMuted, isCameraOn, isScreenSharing, isHandRaised } });
     setCurrentMeeting({ meetingId: meetingCode, peerId: peerId.current, peerName: userName, userId: currentUser?.id, state: { isMuted, isCameraOn, isScreenSharing, isHandRaised } });
 
     const handleUpdate = (data: any) => {
