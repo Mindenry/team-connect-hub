@@ -12,22 +12,23 @@ import { useState } from "react";
 // ─────────────────────────────────────────────────────────────
 // Constants
 // ─────────────────────────────────────────────────────────────
-const HOUR_HEIGHT       = 64;
-const TOTAL_HOURS       = 24;
-const GRID_HEIGHT       = TOTAL_HOURS * HOUR_HEIGHT;
-const GUTTER_WIDTH      = 56;
-const MAX_VISIBLE_COLS  = 3;   // max side-by-side columns before overflow kicks in
-const MIN_EVENT_HEIGHT  = 22;
+const HOUR_HEIGHT      = 64;
+const TOTAL_HOURS      = 24;
+const GRID_HEIGHT      = TOTAL_HOURS * HOUR_HEIGHT;
+const GUTTER_WIDTH     = 52;   // left time label column (px)
+const DAY_MIN_WIDTH    = 120;  // minimum px width per day column → enables horizontal scroll
+const MAX_VISIBLE_COLS = 3;    // max side-by-side event columns before overflow pill
+const MIN_EVENT_H      = 22;
 
 // ─────────────────────────────────────────────────────────────
-// Pixel helpers
+// Helpers
 // ─────────────────────────────────────────────────────────────
 function topPx(date: Date) {
   return (date.getHours() * 60 + date.getMinutes()) / 60 * HOUR_HEIGHT;
 }
 function heightPx(start: Date, end: Date) {
   const mins = (end.getTime() - start.getTime()) / 60_000;
-  return Math.max((mins / 60) * HOUR_HEIGHT, MIN_EVENT_HEIGHT);
+  return Math.max((mins / 60) * HOUR_HEIGHT, MIN_EVENT_H);
 }
 function makeDayId(date: Date) {
   const y = date.getFullYear();
@@ -37,15 +38,12 @@ function makeDayId(date: Date) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// Layout: greedy interval coloring capped at MAX_VISIBLE_COLS
+// Layout — greedy interval coloring, capped at MAX_VISIBLE_COLS
 // ─────────────────────────────────────────────────────────────
-interface PositionedEvent extends CalendarEvent {
-  col: number;
-  colCount: number;
-}
+interface PositionedEvent extends CalendarEvent { col: number; colCount: number; }
 interface LayoutResult {
-  visible: PositionedEvent[];
-  overflow: Map<string, CalendarEvent[]>; // slotKey -> hidden events
+  visible:  PositionedEvent[];
+  overflow: Map<string, CalendarEvent[]>;
 }
 
 function overlaps(a: CalendarEvent, b: CalendarEvent) {
@@ -53,11 +51,11 @@ function overlaps(a: CalendarEvent, b: CalendarEvent) {
 }
 
 function layoutEvents(events: CalendarEvent[]): LayoutResult {
-  if (events.length === 0) return { visible: [], overflow: new Map() };
+  if (!events.length) return { visible: [], overflow: new Map() };
 
   const sorted = [...events].sort((a, b) => {
     const dt = a.start.getTime() - b.start.getTime();
-    if (dt !== 0) return dt;
+    if (dt) return dt;
     return (b.end.getTime() - b.start.getTime()) - (a.end.getTime() - a.start.getTime());
   });
 
@@ -70,8 +68,7 @@ function layoutEvents(events: CalendarEvent[]): LayoutResult {
       if (colEnds[c] <= ev.start.getTime()) { placed = c; break; }
     }
     if (placed === -1 && colEnds.length < MAX_VISIBLE_COLS) {
-      placed = colEnds.length;
-      colEnds.push(0);
+      placed = colEnds.length; colEnds.push(0);
     }
     colOf.set(ev.id, placed);
     if (placed >= 0) colEnds[placed] = ev.end.getTime();
@@ -86,7 +83,6 @@ function layoutEvents(events: CalendarEvent[]): LayoutResult {
     else positioned.push({ ...ev, col, colCount: 1 });
   }
 
-  // true colCount per event = max col index in its overlap group + 1
   for (const ev of positioned) {
     let maxCol = ev.col;
     for (const other of positioned) {
@@ -95,7 +91,6 @@ function layoutEvents(events: CalendarEvent[]): LayoutResult {
     ev.colCount = maxCol + 1;
   }
 
-  // group overflow by start minute so we render one pill per burst
   const overflow = new Map<string, CalendarEvent[]>();
   for (const ev of overflowed) {
     const key = `${ev.start.getHours()}:${ev.start.getMinutes()}`;
@@ -107,36 +102,34 @@ function layoutEvents(events: CalendarEvent[]): LayoutResult {
 }
 
 // ─────────────────────────────────────────────────────────────
-// Overflow pill — click to see hidden events
+// Overflow pill
 // ─────────────────────────────────────────────────────────────
 function OverflowPill({ events, top }: { events: CalendarEvent[]; top: number }) {
   const [open, setOpen] = useState(false);
   return (
     <div style={{ position: "absolute", top: `${top + 2}px`, right: "3px", zIndex: 30 }}>
       <button
-        onClick={(e) => { e.stopPropagation(); setOpen((o) => !o); }}
+        onClick={(e) => { e.stopPropagation(); setOpen(o => !o); }}
         className="flex items-center gap-1 rounded-full bg-background border border-border/70 shadow-sm px-2 py-0.5 text-[9px] font-semibold text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
       >
         <MoreHorizontal className="w-2.5 h-2.5" />
         +{events.length}
       </button>
-
       <AnimatePresence>
         {open && (
           <>
-            {/* backdrop */}
             <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
             <motion.div
-              initial={{ opacity: 0, scale: 0.92, y: -6 }}
+              initial={{ opacity: 0, scale: 0.93, y: -4 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.92, y: -6 }}
-              transition={{ duration: 0.15 }}
+              exit={{ opacity: 0, scale: 0.93, y: -4 }}
+              transition={{ duration: 0.14 }}
               className="absolute right-0 top-7 z-50 w-56 rounded-xl border border-border/60 bg-popover/95 backdrop-blur shadow-2xl p-2 space-y-1.5"
             >
               <p className="text-[10px] font-semibold text-muted-foreground px-1 pb-1 border-b border-border/40">
                 {events.length} รายการซ่อนอยู่
               </p>
-              {events.map((ev) => (
+              {events.map(ev => (
                 <div key={ev.id} className={cn(
                   "rounded-lg px-2 py-1.5 text-[10px] border flex items-start gap-1.5",
                   ev.type === "meeting"
@@ -162,6 +155,10 @@ function OverflowPill({ events, top }: { events: CalendarEvent[]; top: number })
                   </div>
                 </div>
               ))}
+              <button onClick={() => setOpen(false)}
+                className="w-full text-[10px] text-muted-foreground hover:text-foreground text-center mt-1 pt-1 border-t border-border/40">
+                ปิด
+              </button>
             </motion.div>
           </>
         )}
@@ -211,7 +208,6 @@ function TimedEventCard({ event, refreshKey }: { event: PositionedEvent; refresh
       )}
     >
       {h < 28 ? (
-        // micro — title only, no icon
         <div className="px-1.5 h-full flex items-center overflow-hidden">
           <span className="text-[9px] font-semibold truncate leading-none">{event.title}</span>
         </div>
@@ -264,11 +260,9 @@ function AllDayChip({ event }: { event: CalendarEvent }) {
       transition={{ duration: 0.1 }}
       className={cn(
         "rounded px-1.5 py-0.5 text-[10px] font-semibold mb-0.5 flex items-center gap-1 truncate border shadow-sm",
-        isHoliday
-          ? "bg-gradient-to-r from-red-100 to-red-50 border-red-200/70 text-red-800 cursor-default"
-          : isTask
-            ? "bg-gradient-to-r from-amber-100 to-amber-50 border-amber-200/70 text-amber-900 cursor-grab active:cursor-grabbing"
-            : "bg-gradient-to-r from-primary/20 to-primary/10 border-primary/30 text-primary cursor-grab active:cursor-grabbing",
+        isHoliday ? "bg-gradient-to-r from-red-100 to-red-50 border-red-200/70 text-red-800 cursor-default"
+          : isTask ? "bg-gradient-to-r from-amber-100 to-amber-50 border-amber-200/70 text-amber-900 cursor-grab active:cursor-grabbing"
+                   : "bg-gradient-to-r from-primary/20 to-primary/10 border-primary/30 text-primary cursor-grab active:cursor-grabbing",
         isDragging && "ring-2 ring-primary/50"
       )}
     >
@@ -296,7 +290,7 @@ function DroppableAllDay({ date, children }: { date: Date; children: React.React
 }
 
 // ─────────────────────────────────────────────────────────────
-// Grid lines
+// Grid decorations
 // ─────────────────────────────────────────────────────────────
 function HourLines() {
   return (
@@ -306,7 +300,7 @@ function HourLines() {
           style={{ top: `${i * HOUR_HEIGHT}px` }} />
       ))}
       {Array.from({ length: TOTAL_HOURS }, (_, i) => (
-        <div key={`h${i}`} className="absolute left-3 right-0 border-t border-border/10 border-dashed"
+        <div key={`hh${i}`} className="absolute left-3 right-0 border-t border-border/10 border-dashed"
           style={{ top: `${i * HOUR_HEIGHT + HOUR_HEIGHT / 2}px` }} />
       ))}
     </div>
@@ -324,10 +318,15 @@ function NowIndicator() {
   );
 }
 
+// ─────────────────────────────────────────────────────────────
+// Fixed left time gutter (sticky)
+// ─────────────────────────────────────────────────────────────
 function TimeGutter() {
   return (
-    <div className="relative bg-muted/10 border-r border-border/40 select-none shrink-0"
-      style={{ width: `${GUTTER_WIDTH}px`, height: `${GRID_HEIGHT}px` }}>
+    <div
+      className="relative bg-card border-r border-border/40 select-none shrink-0"
+      style={{ width: `${GUTTER_WIDTH}px`, height: `${GRID_HEIGHT}px` }}
+    >
       {Array.from({ length: TOTAL_HOURS }, (_, i) => (
         <div key={i}
           className="absolute right-2 text-[10px] font-medium text-muted-foreground/50 -translate-y-2.5"
@@ -340,16 +339,23 @@ function TimeGutter() {
 }
 
 // ─────────────────────────────────────────────────────────────
-// Day column header
+// Day column header (sticky top row)
 // ─────────────────────────────────────────────────────────────
 function DayColumnHeader({ date, isToday, allDayEvents, meetings, tasks, holidays }: {
   date: Date; isToday: boolean; allDayEvents: CalendarEvent[];
   meetings: number; tasks: number; holidays: number;
 }) {
   return (
-    <div className="flex flex-col border-r border-border/30 last:border-r-0 min-w-0">
-      <div className={cn("flex items-center gap-1 px-2 py-1.5 border-b border-border/40 flex-wrap", isToday && "bg-primary/5")}>
-        <span className={cn("text-xs font-bold truncate", isToday ? "text-primary" : "text-foreground")}>
+    <div
+      className="flex flex-col border-r border-border/30 last:border-r-0"
+      style={{ minWidth: `${DAY_MIN_WIDTH}px` }}
+    >
+      {/* date row */}
+      <div className={cn(
+        "flex items-center gap-1 px-2 py-2 border-b border-border/40",
+        isToday && "bg-primary/5"
+      )}>
+        <span className={cn("text-xs font-bold", isToday ? "text-primary" : "text-foreground")}>
           {date.toLocaleDateString("th-TH", { weekday: "short", day: "numeric" })}
         </span>
         {isToday && <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse shrink-0" />}
@@ -359,9 +365,10 @@ function DayColumnHeader({ date, isToday, allDayEvents, meetings, tasks, holiday
           {tasks    > 0 && <span className="text-[9px] bg-amber-100 text-amber-700 rounded px-1 border border-amber-200/50">{tasks}</span>}
         </div>
       </div>
+      {/* all-day row */}
       <div className="px-1 py-0.5 border-b border-border/30 min-h-[28px] bg-muted/10">
         <DroppableAllDay date={date}>
-          {allDayEvents.map((ev) => <AllDayChip key={ev.id} event={ev} />)}
+          {allDayEvents.map(ev => <AllDayChip key={ev.id} event={ev} />)}
         </DroppableAllDay>
       </div>
     </div>
@@ -369,34 +376,32 @@ function DayColumnHeader({ date, isToday, allDayEvents, meetings, tasks, holiday
 }
 
 // ─────────────────────────────────────────────────────────────
-// Day time body — droppable, events, overflow pills
+// Day time body
 // ─────────────────────────────────────────────────────────────
 function DayTimeBody({ date, allEvents, isCurrentDay, refreshKey }: {
   date: Date; allEvents: CalendarEvent[]; isCurrentDay: boolean; refreshKey: number;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: `day-${makeDayId(date)}-time` });
-  const timed = allEvents.filter((e) => !e.allDay && e.type !== "holiday");
+  const timed = allEvents.filter(e => !e.allDay && e.type !== "holiday");
   const { visible, overflow } = layoutEvents(timed);
 
   return (
     <div
       ref={setNodeRef}
-      style={{ height: `${GRID_HEIGHT}px`, position: "relative", width: "100%" }}
+      style={{ height: `${GRID_HEIGHT}px`, position: "relative", minWidth: `${DAY_MIN_WIDTH}px` }}
       className={cn(
-        "transition-colors duration-200",
+        "border-r border-border/20 last:border-r-0 transition-colors duration-200",
         isOver       && "bg-primary/5",
         isCurrentDay && "bg-primary/[0.025]"
       )}
     >
       <HourLines />
       {isCurrentDay && <NowIndicator />}
-
-      {visible.map((ev) => (
+      {visible.map(ev => (
         <TimedEventCard key={`${ev.id}-${refreshKey}`} event={ev} refreshKey={refreshKey} />
       ))}
-
-      {Array.from(overflow.entries()).map(([slotKey, evs]) => (
-        <OverflowPill key={slotKey} events={evs} top={topPx(evs[0].start)} />
+      {Array.from(overflow.entries()).map(([key, evs]) => (
+        <OverflowPill key={key} events={evs} top={topPx(evs[0].start)} />
       ))}
     </div>
   );
@@ -414,43 +419,62 @@ export interface TimeGridProps {
 
 export function TimeGrid({ days, eventsByDay, refreshKey = 0, isToday }: TimeGridProps) {
   const today = new Date();
-  const gridStyle: CSSProperties = {
-    display: "grid",
-    gridTemplateColumns: `${GUTTER_WIDTH}px repeat(${days.length}, minmax(0, 1fr))`,
-  };
 
   return (
     <div className="flex flex-col flex-1 min-h-0 overflow-hidden rounded-xl border border-border/50 bg-card shadow-lg">
 
-      {/* sticky header */}
-      <div className="border-b border-border/50 bg-card/95 shrink-0" style={gridStyle}>
-        <div className="border-r border-border/40 bg-muted/20" style={{ width: `${GUTTER_WIDTH}px` }} />
-        {days.map((day) => {
-          const key = dateKey(day);
-          const all = eventsByDay.get(key) ?? [];
-          return (
-            <DayColumnHeader
-              key={key}
-              date={day}
-              isToday={isToday(day)}
-              allDayEvents={all.filter((e) => e.allDay)}
-              meetings={all.filter((e) => e.type === "meeting").length}
-              tasks={all.filter((e) => e.type === "task").length}
-              holidays={all.filter((e) => e.type === "holiday").length}
-            />
-          );
-        })}
-      </div>
-
-      {/* scrollable body */}
-      <div className="flex-1 overflow-y-auto min-h-0 scroll-smooth">
-        <div style={gridStyle}>
-          <TimeGutter />
-          {days.map((day) => {
+      {/* ── Sticky header row: gutter corner + day headers ── */}
+      <div className="flex shrink-0 border-b border-border/50 bg-card/95 overflow-hidden">
+        {/* gutter corner */}
+        <div
+          className="shrink-0 border-r border-border/40 bg-muted/20"
+          style={{ width: `${GUTTER_WIDTH}px` }}
+        />
+        {/* day headers — scroll in sync via shared wrapper below */}
+        <div className="flex flex-1 overflow-x-hidden" id="timegrid-header-scroll">
+          {days.map(day => {
             const key = dateKey(day);
             const all = eventsByDay.get(key) ?? [];
             return (
-              <div key={key} className="border-r border-border/20 last:border-r-0 min-w-0">
+              <DayColumnHeader
+                key={key}
+                date={day}
+                isToday={isToday(day)}
+                allDayEvents={all.filter(e => e.allDay)}
+                meetings={all.filter(e => e.type === "meeting").length}
+                tasks={all.filter(e => e.type === "task").length}
+                holidays={all.filter(e => e.type === "holiday").length}
+              />
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ── Scrollable body: vertical + horizontal ── */}
+      <div
+        className="flex flex-1 min-h-0 overflow-auto scroll-smooth"
+        onScroll={(e) => {
+          // sync header horizontal scroll
+          const headerEl = document.getElementById("timegrid-header-scroll");
+          if (headerEl) headerEl.scrollLeft = (e.target as HTMLElement).scrollLeft;
+        }}
+      >
+        {/* sticky time gutter */}
+        <div className="sticky left-0 z-10 shrink-0">
+          <TimeGutter />
+        </div>
+
+        {/* day columns — flex so they expand equally but respect min-width */}
+        <div className="flex flex-1 min-w-0">
+          {days.map(day => {
+            const key = dateKey(day);
+            const all = eventsByDay.get(key) ?? [];
+            return (
+              <div
+                key={key}
+                className="flex-1"
+                style={{ minWidth: `${DAY_MIN_WIDTH}px` }}
+              >
                 <DayTimeBody
                   date={day}
                   allEvents={all}
