@@ -31,7 +31,7 @@ export function EventCardBase({ event, className, style, draggable, dragAttribut
       animate={{ opacity: isDragging ? 0.6 : 1, scale: isDragging ? 0.95 : 1 }}
       transition={{ duration: 0.1 }}
       className={cn(
-        "group rounded-md px-2 py-1.5 text-xs mb-1 shadow-sm border transition-all duration-200 overflow-hidden",
+        "group rounded-md px-2.5 py-1.5 text-xs mb-1 shadow-sm border transition-all duration-200",
         "hover:shadow-md hover:-translate-y-0.5",
         "ring-0 hover:ring-1 hover:ring-current/20",
         isHoliday
@@ -47,18 +47,18 @@ export function EventCardBase({ event, className, style, draggable, dragAttribut
         <div className={cn("w-4 h-4 rounded flex items-center justify-center shrink-0 transition-all duration-200 group-hover:scale-110", isHoliday ? "bg-red-200/70" : isMeeting ? "bg-primary/25" : "bg-amber-200/70")}>
           {isHoliday ? <Sparkles className="w-2.5 h-2.5 text-red-700" /> : isMeeting ? <Video className="w-2.5 h-2.5 text-primary" /> : <CheckSquare className="w-2.5 h-2.5 text-amber-700" />}
         </div>
-        <div className="flex-1 min-w-0 overflow-hidden">
-          <div className="font-semibold text-[11px] leading-tight line-clamp-2 break-words">{event.title}</div>
+        <div className="flex-1 min-w-0">
+          <div className="font-semibold text-[10px] leading-tight truncate">{event.title}</div>
           {!event.allDay && (
-            <div className="flex items-center gap-1 text-[10px] text-muted-foreground/80 mt-0.5 whitespace-nowrap">
-              <Clock className="w-2.5 h-2.5 shrink-0" />
+            <div className="flex items-center gap-1 text-[9px] text-muted-foreground/75 mt-0.5">
+              <Clock className="w-2 h-2 shrink-0" />
               <span>{event.start.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} - {event.end.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
             </div>
           )}
-          {event.allDay && <div className="text-[10px] text-muted-foreground/75 font-medium mt-0.5">ทั้งวัน</div>}
+          {event.allDay && <div className="text-[9px] text-muted-foreground/70 font-medium mt-0.5">ทั้งวัน</div>}
           {(event.teamName || event.assigneeName) && (
-            <div className="flex items-center gap-1 text-[10px] text-muted-foreground/75 mt-0.5 min-w-0">
-              {event.teamName && <><Users className="w-2.5 h-2.5 shrink-0" /><span className="truncate">{event.teamName}</span></>}
+            <div className="flex items-center gap-1 text-[9px] text-muted-foreground/70 mt-0.5">
+              {event.teamName && <><Users className="w-2 h-2 shrink-0" /><span className="truncate">{event.teamName}</span></>}
               {!event.teamName && event.assigneeName && <span className="truncate">{event.assigneeName}</span>}
             </div>
           )}
@@ -78,57 +78,6 @@ export function DraggableEventCard({ event }: DraggableEventCardProps) {
   return <EventCardBase event={event} style={style} draggable dragAttributes={attributes} dragListeners={listeners} setNodeRef={setNodeRef} isDragging={isDragging} />;
 }
 
-export function StaticEventCard({ event, hourHeight = 48, startHour = 7, left = 0, width = 100 }: { event: CalendarEvent; hourHeight?: number; startHour?: number; left?: number; width?: number }) {
-  const startMinutes = event.start.getHours() * 60 + event.start.getMinutes();
-  const endMinutes = event.end.getHours() * 60 + event.end.getMinutes();
-  const startOffsetMinutes = startHour * 60;
-  
-  const top = Math.max(0, ((startMinutes - startOffsetMinutes) / 60) * hourHeight);
-  const durationMinutes = Math.max(30, endMinutes - startMinutes);
-  const height = (durationMinutes / 60) * hourHeight;
-  const isCompact = height < 50;
-  
-  const style: CSSProperties = {
-    position: "absolute",
-    top: `${top}px`,
-    height: `${Math.max(height, 32)}px`,
-    left: `${left}%`,
-    width: `${width}%`,
-    zIndex: 10,
-  };
-  
-  return <EventCardBase event={event} style={style} className={cn("mb-0", isCompact && "py-1")} />;
-}
-
-// Simple overlap detection - returns column index and total columns for each event
-export function getEventColumns(events: CalendarEvent[]): Map<string, { column: number; total: number }> {
-  const result = new Map<string, { column: number; total: number }>();
-  if (events.length === 0) return result;
-  
-  const sorted = [...events].sort((a, b) => a.start.getTime() - b.start.getTime());
-  const columns: { end: Date }[] = [];
-  
-  for (const ev of sorted) {
-    let placed = false;
-    for (let i = 0; i < columns.length; i++) {
-      if (columns[i].end <= ev.start) {
-        columns[i] = { end: ev.end };
-        result.set(ev.id, { column: i, total: columns.length });
-        placed = true;
-        break;
-      }
-    }
-    if (!placed) {
-      columns.push({ end: ev.end });
-      result.set(ev.id, { column: columns.length - 1, total: columns.length });
-    }
-  }
-  
-  // Update total for all events to final column count
-  const total = columns.length;
-  for (const [id, data] of result) {
-    result.set(id, { ...data, total });
-  }
-  
-  return result;
+export function StaticEventCard({ event }: { event: CalendarEvent }) {
+  return <EventCardBase event={event} />;
 }
