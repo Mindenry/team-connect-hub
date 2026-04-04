@@ -12,13 +12,13 @@ import { useState } from "react";
 // ─────────────────────────────────────────────────────────────
 // Constants
 // ─────────────────────────────────────────────────────────────
-const HOUR_HEIGHT      = 64;
+const HOUR_HEIGHT      = 80;   // taller rows → more room to read event detail
 const TOTAL_HOURS      = 24;
 const GRID_HEIGHT      = TOTAL_HOURS * HOUR_HEIGHT;
-const GUTTER_WIDTH     = 52;   // left time label column (px)
-const DAY_MIN_WIDTH    = 120;  // minimum px width per day column → enables horizontal scroll
-const MAX_VISIBLE_COLS = 3;    // max side-by-side event columns before overflow pill
-const MIN_EVENT_H      = 22;
+const GUTTER_WIDTH     = 56;   // left time label column
+const DAY_MIN_WIDTH    = 160;  // minimum px per day column (week: 7×160 = 1120px min)
+const MAX_VISIBLE_COLS = 3;    // max side-by-side columns before overflow pill
+const MIN_EVENT_H      = 24;
 
 // ─────────────────────────────────────────────────────────────
 // Helpers
@@ -38,18 +38,16 @@ function makeDayId(date: Date) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// Layout — greedy interval coloring, capped at MAX_VISIBLE_COLS
+// Layout — greedy interval coloring capped at MAX_VISIBLE_COLS
 // ─────────────────────────────────────────────────────────────
 interface PositionedEvent extends CalendarEvent { col: number; colCount: number; }
 interface LayoutResult {
   visible:  PositionedEvent[];
   overflow: Map<string, CalendarEvent[]>;
 }
-
 function overlaps(a: CalendarEvent, b: CalendarEvent) {
   return a.start < b.end && a.end > b.start;
 }
-
 function layoutEvents(events: CalendarEvent[]): LayoutResult {
   if (!events.length) return { visible: [], overflow: new Map() };
 
@@ -107,12 +105,12 @@ function layoutEvents(events: CalendarEvent[]): LayoutResult {
 function OverflowPill({ events, top }: { events: CalendarEvent[]; top: number }) {
   const [open, setOpen] = useState(false);
   return (
-    <div style={{ position: "absolute", top: `${top + 2}px`, right: "3px", zIndex: 30 }}>
+    <div style={{ position: "absolute", top: `${top + 2}px`, right: "4px", zIndex: 30 }}>
       <button
         onClick={(e) => { e.stopPropagation(); setOpen(o => !o); }}
         className="flex items-center gap-1 rounded-full bg-background border border-border/70 shadow-sm px-2 py-0.5 text-[9px] font-semibold text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
       >
-        <MoreHorizontal className="w-2.5 h-2.5" />
+        <MoreHorizontal className="w-3 h-3" />
         +{events.length}
       </button>
       <AnimatePresence>
@@ -124,39 +122,39 @@ function OverflowPill({ events, top }: { events: CalendarEvent[]; top: number })
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.93, y: -4 }}
               transition={{ duration: 0.14 }}
-              className="absolute right-0 top-7 z-50 w-56 rounded-xl border border-border/60 bg-popover/95 backdrop-blur shadow-2xl p-2 space-y-1.5"
+              className="absolute right-0 top-7 z-50 w-60 rounded-xl border border-border/60 bg-popover/95 backdrop-blur shadow-2xl p-2 space-y-1.5"
             >
               <p className="text-[10px] font-semibold text-muted-foreground px-1 pb-1 border-b border-border/40">
                 {events.length} รายการซ่อนอยู่
               </p>
               {events.map(ev => (
                 <div key={ev.id} className={cn(
-                  "rounded-lg px-2 py-1.5 text-[10px] border flex items-start gap-1.5",
+                  "rounded-lg px-2 py-1.5 text-[10px] border flex items-start gap-2",
                   ev.type === "meeting"
                     ? "bg-primary/10 border-primary/30 text-primary"
                     : "bg-amber-50 border-amber-200/70 text-amber-900"
                 )}>
                   {ev.type === "meeting"
-                    ? <Video className="w-2.5 h-2.5 mt-0.5 shrink-0" />
-                    : <CheckSquare className="w-2.5 h-2.5 mt-0.5 shrink-0" />}
+                    ? <Video className="w-3 h-3 mt-0.5 shrink-0" />
+                    : <CheckSquare className="w-3 h-3 mt-0.5 shrink-0" />}
                   <div className="min-w-0">
                     <div className="font-semibold truncate leading-tight">{ev.title}</div>
-                    <div className="text-[9px] opacity-60 flex items-center gap-0.5 mt-0.5">
-                      <Clock className="w-2 h-2" />
+                    <div className="text-[9px] opacity-60 flex items-center gap-1 mt-0.5">
+                      <Clock className="w-2.5 h-2.5" />
                       {ev.start.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                       {" – "}
                       {ev.end.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                     </div>
-                    {ev.teamName && (
-                      <div className="text-[9px] opacity-50 flex items-center gap-0.5 mt-0.5">
-                        <Users className="w-2 h-2" />{ev.teamName}
+                    {(ev.teamName || ev.assigneeName) && (
+                      <div className="text-[9px] opacity-50 flex items-center gap-1 mt-0.5">
+                        <Users className="w-2.5 h-2.5" />{ev.teamName ?? ev.assigneeName}
                       </div>
                     )}
                   </div>
                 </div>
               ))}
               <button onClick={() => setOpen(false)}
-                className="w-full text-[10px] text-muted-foreground hover:text-foreground text-center mt-1 pt-1 border-t border-border/40">
+                className="w-full text-[10px] text-muted-foreground hover:text-foreground text-center pt-1 border-t border-border/40">
                 ปิด
               </button>
             </motion.div>
@@ -168,7 +166,7 @@ function OverflowPill({ events, top }: { events: CalendarEvent[]; top: number })
 }
 
 // ─────────────────────────────────────────────────────────────
-// Timed event card (draggable, absolute)
+// Timed event card
 // ─────────────────────────────────────────────────────────────
 function TimedEventCard({ event, refreshKey }: { event: PositionedEvent; refreshKey?: number }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: event.id });
@@ -199,39 +197,59 @@ function TimedEventCard({ event, refreshKey }: { event: PositionedEvent; refresh
       animate={{ opacity: isDragging ? 0.3 : 1 }}
       transition={{ duration: 0.1 }}
       className={cn(
-        "rounded-md border overflow-hidden select-none",
-        "cursor-grab active:cursor-grabbing shadow-sm hover:shadow-md hover:ring-1 transition-all duration-150",
+        "rounded-lg border overflow-hidden select-none",
+        "cursor-grab active:cursor-grabbing shadow-sm hover:shadow-lg hover:ring-2 transition-all duration-150",
         isMtg
-          ? "bg-gradient-to-b from-primary/30 to-primary/15 border-primary/50 text-primary hover:ring-primary/40"
-          : "bg-gradient-to-b from-amber-200/80 to-amber-100/60 border-amber-300/80 text-amber-900 hover:ring-amber-300/60",
-        isDragging && "ring-2 ring-primary/60 shadow-2xl"
+          ? "bg-gradient-to-b from-primary/25 to-primary/10 border-primary/40 text-primary hover:ring-primary/30 hover:border-primary/60"
+          : "bg-gradient-to-b from-amber-100 to-amber-50 border-amber-300/70 text-amber-900 hover:ring-amber-300/50 hover:border-amber-400",
+        isDragging && "ring-2 ring-primary/60 shadow-2xl scale-[1.02]"
       )}
     >
-      {h < 28 ? (
-        <div className="px-1.5 h-full flex items-center overflow-hidden">
-          <span className="text-[9px] font-semibold truncate leading-none">{event.title}</span>
+      {h < 32 ? (
+        // micro — single line
+        <div className="px-2 h-full flex items-center gap-1.5 overflow-hidden">
+          <div className={cn("w-1.5 h-1.5 rounded-full shrink-0", isMtg ? "bg-primary" : "bg-amber-500")} />
+          <span className="text-[10px] font-semibold truncate">{event.title}</span>
         </div>
-      ) : (
-        <div className="px-1.5 py-1 flex items-start gap-1 h-full overflow-hidden">
-          <div className={cn("w-3 h-3 rounded flex items-center justify-center shrink-0 mt-0.5",
-            isMtg ? "bg-primary/30" : "bg-amber-300/60")}>
+      ) : h < 56 ? (
+        // compact — title + time
+        <div className="px-2 py-1 flex items-start gap-1.5 overflow-hidden">
+          <div className={cn("w-3.5 h-3.5 rounded flex items-center justify-center shrink-0 mt-0.5",
+            isMtg ? "bg-primary/25" : "bg-amber-200")}>
             {isMtg ? <Video className="w-2 h-2" /> : <CheckSquare className="w-2 h-2 text-amber-700" />}
           </div>
           <div className="flex-1 min-w-0">
-            <div className="font-semibold text-[10px] leading-tight truncate">{event.title}</div>
-            {h >= 44 && (
-              <div className="flex items-center gap-0.5 text-[9px] opacity-70 mt-0.5">
-                <Clock className="w-2 h-2 shrink-0" />
-                <span className="truncate">
-                  {event.start.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                  {" – "}
-                  {event.end.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                </span>
-              </div>
-            )}
-            {h >= 62 && (event.teamName || event.assigneeName) && (
-              <div className="flex items-center gap-0.5 text-[9px] opacity-60 mt-0.5">
-                <Users className="w-2 h-2 shrink-0" />
+            <div className="font-semibold text-[11px] leading-tight truncate">{event.title}</div>
+            <div className="flex items-center gap-0.5 text-[10px] opacity-65 mt-0.5">
+              <Clock className="w-2.5 h-2.5 shrink-0" />
+              <span className="truncate">
+                {event.start.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                {" – "}
+                {event.end.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+              </span>
+            </div>
+          </div>
+        </div>
+      ) : (
+        // full — title + time + team
+        <div className="px-2 py-1.5 flex items-start gap-1.5 h-full overflow-hidden">
+          <div className={cn("w-4 h-4 rounded-md flex items-center justify-center shrink-0 mt-0.5",
+            isMtg ? "bg-primary/25" : "bg-amber-200")}>
+            {isMtg ? <Video className="w-2.5 h-2.5" /> : <CheckSquare className="w-2.5 h-2.5 text-amber-700" />}
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="font-semibold text-[11px] leading-snug truncate">{event.title}</div>
+            <div className="flex items-center gap-0.5 text-[10px] opacity-65 mt-0.5">
+              <Clock className="w-2.5 h-2.5 shrink-0" />
+              <span className="truncate">
+                {event.start.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                {" – "}
+                {event.end.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+              </span>
+            </div>
+            {(event.teamName || event.assigneeName) && (
+              <div className="flex items-center gap-0.5 text-[10px] opacity-50 mt-0.5">
+                <Users className="w-2.5 h-2.5 shrink-0" />
                 <span className="truncate">{event.teamName ?? event.assigneeName}</span>
               </div>
             )}
@@ -259,7 +277,7 @@ function AllDayChip({ event }: { event: CalendarEvent }) {
       animate={{ opacity: isDragging ? 0.5 : 1 }}
       transition={{ duration: 0.1 }}
       className={cn(
-        "rounded px-1.5 py-0.5 text-[10px] font-semibold mb-0.5 flex items-center gap-1 truncate border shadow-sm",
+        "rounded-md px-2 py-0.5 text-[10px] font-semibold mb-0.5 flex items-center gap-1 truncate border shadow-sm",
         isHoliday ? "bg-gradient-to-r from-red-100 to-red-50 border-red-200/70 text-red-800 cursor-default"
           : isTask ? "bg-gradient-to-r from-amber-100 to-amber-50 border-amber-200/70 text-amber-900 cursor-grab active:cursor-grabbing"
                    : "bg-gradient-to-r from-primary/20 to-primary/10 border-primary/30 text-primary cursor-grab active:cursor-grabbing",
@@ -281,7 +299,7 @@ function DroppableAllDay({ date, children }: { date: Date; children: React.React
   const { setNodeRef, isOver } = useDroppable({ id: `day-${makeDayId(date)}` });
   return (
     <div ref={setNodeRef} className={cn(
-      "min-h-[28px] px-1 py-0.5 rounded border border-transparent transition-colors duration-150",
+      "min-h-[30px] px-1 py-0.5 rounded border border-transparent transition-colors duration-150",
       isOver && "bg-primary/10 border-primary/30"
     )}>
       {children}
@@ -296,11 +314,11 @@ function HourLines() {
   return (
     <div className="absolute inset-0 pointer-events-none">
       {Array.from({ length: TOTAL_HOURS + 1 }, (_, i) => (
-        <div key={i} className="absolute left-0 right-0 border-t border-border/20"
+        <div key={i} className="absolute left-0 right-0 border-t border-border/25"
           style={{ top: `${i * HOUR_HEIGHT}px` }} />
       ))}
       {Array.from({ length: TOTAL_HOURS }, (_, i) => (
-        <div key={`hh${i}`} className="absolute left-3 right-0 border-t border-border/10 border-dashed"
+        <div key={`hh${i}`} className="absolute left-4 right-0 border-t border-border/10 border-dashed"
           style={{ top: `${i * HOUR_HEIGHT + HOUR_HEIGHT / 2}px` }} />
       ))}
     </div>
@@ -312,24 +330,24 @@ function NowIndicator() {
   return (
     <div className="absolute left-0 right-0 z-20 pointer-events-none flex items-center"
       style={{ top: `${top}px` }}>
-      <div className="w-2 h-2 rounded-full bg-destructive shadow shrink-0 -ml-1" />
-      <div className="flex-1 border-t-2 border-destructive/70" />
+      <div className="w-2.5 h-2.5 rounded-full bg-destructive shadow-md shrink-0 -ml-1.5 border-2 border-background" />
+      <div className="flex-1 border-t-2 border-destructive/80" />
     </div>
   );
 }
 
 // ─────────────────────────────────────────────────────────────
-// Fixed left time gutter (sticky)
+// Time gutter (sticky left)
 // ─────────────────────────────────────────────────────────────
 function TimeGutter() {
   return (
     <div
-      className="relative bg-card border-r border-border/40 select-none shrink-0"
+      className="relative bg-card/90 border-r border-border/40 select-none shrink-0 backdrop-blur"
       style={{ width: `${GUTTER_WIDTH}px`, height: `${GRID_HEIGHT}px` }}
     >
       {Array.from({ length: TOTAL_HOURS }, (_, i) => (
         <div key={i}
-          className="absolute right-2 text-[10px] font-medium text-muted-foreground/50 -translate-y-2.5"
+          className="absolute right-2 text-[10px] font-medium text-muted-foreground/50 -translate-y-2.5 tabular-nums"
           style={{ top: `${i * HOUR_HEIGHT}px` }}>
           {`${i.toString().padStart(2, "0")}:00`}
         </div>
@@ -339,7 +357,7 @@ function TimeGutter() {
 }
 
 // ─────────────────────────────────────────────────────────────
-// Day column header (sticky top row)
+// Day column header
 // ─────────────────────────────────────────────────────────────
 function DayColumnHeader({ date, isToday, allDayEvents, meetings, tasks, holidays }: {
   date: Date; isToday: boolean; allDayEvents: CalendarEvent[];
@@ -348,25 +366,27 @@ function DayColumnHeader({ date, isToday, allDayEvents, meetings, tasks, holiday
   return (
     <div
       className="flex flex-col border-r border-border/30 last:border-r-0"
-      style={{ minWidth: `${DAY_MIN_WIDTH}px` }}
+      style={{ minWidth: `${DAY_MIN_WIDTH}px`, flex: "1 0 0" }}
     >
       {/* date row */}
       <div className={cn(
-        "flex items-center gap-1 px-2 py-2 border-b border-border/40",
+        "flex items-center gap-2 px-3 py-2 border-b border-border/40",
         isToday && "bg-primary/5"
       )}>
-        <span className={cn("text-xs font-bold", isToday ? "text-primary" : "text-foreground")}>
-          {date.toLocaleDateString("th-TH", { weekday: "short", day: "numeric" })}
-        </span>
-        {isToday && <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse shrink-0" />}
-        <div className="flex items-center gap-0.5 ml-auto shrink-0">
-          {holidays > 0 && <span className="text-[9px] bg-red-100 text-red-700 rounded px-1 border border-red-200/50">🎉{holidays}</span>}
-          {meetings > 0 && <span className="text-[9px] bg-primary/10 text-primary rounded px-1 border border-primary/20">{meetings}</span>}
-          {tasks    > 0 && <span className="text-[9px] bg-amber-100 text-amber-700 rounded px-1 border border-amber-200/50">{tasks}</span>}
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span className={cn("text-sm font-bold", isToday ? "text-primary" : "text-foreground")}>
+            {date.toLocaleDateString("th-TH", { weekday: "short", day: "numeric" })}
+          </span>
+          {isToday && <div className="w-2 h-2 rounded-full bg-primary animate-pulse shrink-0" />}
+        </div>
+        <div className="flex items-center gap-1 ml-auto shrink-0">
+          {holidays > 0 && <span className="text-[10px] bg-red-100 text-red-700 rounded-full px-1.5 py-0.5 border border-red-200/60 font-semibold">🎉{holidays}</span>}
+          {meetings > 0 && <span className="text-[10px] bg-primary/10 text-primary rounded-full px-1.5 py-0.5 border border-primary/20 font-semibold">{meetings}</span>}
+          {tasks    > 0 && <span className="text-[10px] bg-amber-100 text-amber-700 rounded-full px-1.5 py-0.5 border border-amber-200/60 font-semibold">{tasks}</span>}
         </div>
       </div>
       {/* all-day row */}
-      <div className="px-1 py-0.5 border-b border-border/30 min-h-[28px] bg-muted/10">
+      <div className="px-1.5 py-1 border-b border-border/30 min-h-[32px] bg-muted/10">
         <DroppableAllDay date={date}>
           {allDayEvents.map(ev => <AllDayChip key={ev.id} event={ev} />)}
         </DroppableAllDay>
@@ -388,7 +408,7 @@ function DayTimeBody({ date, allEvents, isCurrentDay, refreshKey }: {
   return (
     <div
       ref={setNodeRef}
-      style={{ height: `${GRID_HEIGHT}px`, position: "relative", minWidth: `${DAY_MIN_WIDTH}px` }}
+      style={{ height: `${GRID_HEIGHT}px`, position: "relative", minWidth: `${DAY_MIN_WIDTH}px`, flex: "1 0 0" }}
       className={cn(
         "border-r border-border/20 last:border-r-0 transition-colors duration-200",
         isOver       && "bg-primary/5",
@@ -419,19 +439,27 @@ export interface TimeGridProps {
 
 export function TimeGrid({ days, eventsByDay, refreshKey = 0, isToday }: TimeGridProps) {
   const today = new Date();
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const headerScrollRef = useRef<HTMLDivElement>(null);
+
+  const syncHeaderScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    if (headerScrollRef.current)
+      headerScrollRef.current.scrollLeft = (e.currentTarget).scrollLeft;
+  };
 
   return (
-    <div className="flex flex-col flex-1 min-h-0 overflow-hidden rounded-xl border border-border/50 bg-card shadow-lg">
+    <div className="flex flex-col w-full h-full min-h-0 overflow-hidden rounded-xl border border-border/50 bg-card shadow-xl">
 
-      {/* ── Sticky header row: gutter corner + day headers ── */}
-      <div className="flex shrink-0 border-b border-border/50 bg-card/95 overflow-hidden">
+      {/* ── Sticky header ── */}
+      <div className="flex shrink-0 border-b border-border/50 bg-card/95 backdrop-blur">
         {/* gutter corner */}
+        <div className="shrink-0 border-r border-border/40 bg-muted/20" style={{ width: `${GUTTER_WIDTH}px` }} />
+        {/* header columns — hidden scrollbar, synced with body */}
         <div
-          className="shrink-0 border-r border-border/40 bg-muted/20"
-          style={{ width: `${GUTTER_WIDTH}px` }}
-        />
-        {/* day headers — scroll in sync via shared wrapper below */}
-        <div className="flex flex-1 overflow-x-hidden" id="timegrid-header-scroll">
+          ref={headerScrollRef}
+          className="flex flex-1 overflow-x-hidden"
+          style={{ scrollbarWidth: "none" }}
+        >
           {days.map(day => {
             const key = dateKey(day);
             const all = eventsByDay.get(key) ?? [];
@@ -450,38 +478,30 @@ export function TimeGrid({ days, eventsByDay, refreshKey = 0, isToday }: TimeGri
         </div>
       </div>
 
-      {/* ── Scrollable body: vertical + horizontal ── */}
+      {/* ── Scrollable body (vertical + horizontal) ── */}
       <div
-        className="flex flex-1 min-h-0 overflow-auto scroll-smooth"
-        onScroll={(e) => {
-          // sync header horizontal scroll
-          const headerEl = document.getElementById("timegrid-header-scroll");
-          if (headerEl) headerEl.scrollLeft = (e.target as HTMLElement).scrollLeft;
-        }}
+        ref={scrollRef}
+        className="flex flex-1 min-h-0 overflow-auto"
+        onScroll={syncHeaderScroll}
       >
         {/* sticky time gutter */}
-        <div className="sticky left-0 z-10 shrink-0">
+        <div className="sticky left-0 z-10 shrink-0 shadow-[2px_0_8px_rgba(0,0,0,0.04)]">
           <TimeGutter />
         </div>
 
-        {/* day columns — flex so they expand equally but respect min-width */}
-        <div className="flex flex-1 min-w-0">
+        {/* day columns flex row — fill available width, scroll if needed */}
+        <div className="flex flex-1">
           {days.map(day => {
             const key = dateKey(day);
             const all = eventsByDay.get(key) ?? [];
             return (
-              <div
+              <DayTimeBody
                 key={key}
-                className="flex-1"
-                style={{ minWidth: `${DAY_MIN_WIDTH}px` }}
-              >
-                <DayTimeBody
-                  date={day}
-                  allEvents={all}
-                  isCurrentDay={isToday(day) && isSameDay(day, today)}
-                  refreshKey={refreshKey}
-                />
-              </div>
+                date={day}
+                allEvents={all}
+                isCurrentDay={isToday(day) && isSameDay(day, today)}
+                refreshKey={refreshKey}
+              />
             );
           })}
         </div>

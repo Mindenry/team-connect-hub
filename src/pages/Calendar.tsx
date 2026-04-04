@@ -372,15 +372,15 @@ export default function TeamCalendar() {
 
         {/* ── Main calendar area ── */}
         <div className="flex-1 overflow-hidden flex flex-col min-h-0">
-          <div className="max-w-[1920px] mx-auto px-3 sm:px-4 md:px-6 lg:px-8 py-3 sm:py-4 h-full flex flex-col min-h-0">
-            {loading ? (
-              <div className="flex-1 flex items-center justify-center">
-                <div className="flex flex-col items-center gap-3">
-                  <Loader2 className="w-8 h-8 text-primary animate-spin" />
-                  <span className="text-sm text-muted-foreground font-medium">กำลังโหลดปฏิทิน...</span>
-                </div>
+          {loading ? (
+            <div className="flex-1 flex items-center justify-center">
+              <div className="flex flex-col items-center gap-3">
+                <Loader2 className="w-8 h-8 text-primary animate-spin" />
+                <span className="text-sm text-muted-foreground font-medium">กำลังโหลดปฏิทิน...</span>
               </div>
-            ) : error ? (
+            </div>
+          ) : error ? (
+            <div className="px-4 py-4">
               <Card className="border-destructive/50 bg-destructive/5">
                 <CardContent className="flex flex-col items-center justify-center py-12">
                   <div className="w-16 h-16 rounded-2xl bg-destructive/10 flex items-center justify-center mb-4"><X className="w-8 h-8 text-destructive" /></div>
@@ -388,13 +388,20 @@ export default function TeamCalendar() {
                   <p className="text-sm text-muted-foreground">{error}</p>
                 </CardContent>
               </Card>
-            ) : (
-              <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-                <AnimatePresence mode="wait">
-                  {/* ─── MONTH VIEW ─── */}
-                  {view === "month" && (
-                    <motion.div key="month" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -16 }} transition={{ duration: 0.2 }}
-                      className="grid grid-cols-7 gap-1 sm:gap-2 md:gap-3 overflow-x-auto">
+            </div>
+          ) : (
+            <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+              <AnimatePresence mode="wait">
+
+                {/* ─── MONTH VIEW — has padding like before ─── */}
+                {view === "month" && (
+                  <motion.div
+                    key="month"
+                    initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -16 }}
+                    transition={{ duration: 0.2 }}
+                    className="flex-1 overflow-auto px-3 sm:px-4 md:px-6 lg:px-8 py-3 sm:py-4"
+                  >
+                    <div className="grid grid-cols-7 gap-1 sm:gap-2 md:gap-3">
                       {["อา", "จ", "อ", "พ", "พฤ", "ศ", "ส"].map((day) => (
                         <div key={day} className="text-center py-1.5 sm:py-2 text-[9px] sm:text-[10px] md:text-xs font-bold text-muted-foreground uppercase tracking-wider bg-muted/30 rounded-md">{day}</div>
                       ))}
@@ -431,35 +438,36 @@ export default function TeamCalendar() {
                           </motion.div>
                         );
                       })}
-                    </motion.div>
-                  )}
+                    </div>
+                  </motion.div>
+                )}
 
-                  {/* ─── DAY / WEEK VIEW (TimeGrid) ─── */}
-                  {(view === "day" || view === "week") && (
-                    <motion.div
-                      key={view}
-                      initial={{ opacity: 0, x: view === "day" ? -20 : 20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      exit={{ opacity: 0, x: view === "day" ? 20 : -20 }}
-                      transition={{ duration: 0.2 }}
-                      className="flex-1 min-h-0 flex flex-col"
-                    >
-                      <TimeGrid
-                        days={view === "day" ? [currentDate] : visibleDays}
-                        eventsByDay={eventsByDay}
-                        refreshKey={refreshKey}
-                        isToday={isToday}
-                      />
-                    </motion.div>
-                  )}
-                </AnimatePresence>
+                {/* ─── DAY / WEEK VIEW — full width, no padding ─── */}
+                {(view === "day" || view === "week") && (
+                  <motion.div
+                    key={view}
+                    initial={{ opacity: 0, x: view === "day" ? -16 : 16 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: view === "day" ? 16 : -16 }}
+                    transition={{ duration: 0.2 }}
+                    className="flex-1 min-h-0 flex flex-col w-full"
+                  >
+                    <TimeGrid
+                      days={view === "day" ? [currentDate] : visibleDays}
+                      eventsByDay={eventsByDay}
+                      refreshKey={refreshKey}
+                      isToday={isToday}
+                    />
+                  </motion.div>
+                )}
 
-                <DragOverlay>
-                  {activeEvent ? <div className="opacity-90"><DraggableEventCard event={activeEvent} /></div> : null}
-                </DragOverlay>
-              </DndContext>
-            )}
-          </div>
+              </AnimatePresence>
+
+              <DragOverlay>
+                {activeEvent ? <div className="opacity-90 pointer-events-none"><DraggableEventCard event={activeEvent} /></div> : null}
+              </DragOverlay>
+            </DndContext>
+          )}
         </div>
       </div>
     </TooltipProvider>
