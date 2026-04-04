@@ -106,22 +106,28 @@ export function getEventColumns(events: CalendarEvent[]): Map<string, { column: 
   if (events.length === 0) return result;
   
   const sorted = [...events].sort((a, b) => a.start.getTime() - b.start.getTime());
-  const columns: { end: Date; id: string }[] = [];
+  const columns: { end: Date }[] = [];
   
   for (const ev of sorted) {
     let placed = false;
     for (let i = 0; i < columns.length; i++) {
       if (columns[i].end <= ev.start) {
-        columns[i] = { end: ev.end, id: ev.id };
+        columns[i] = { end: ev.end };
+        result.set(ev.id, { column: i, total: columns.length });
         placed = true;
         break;
       }
     }
-    if (!placed) columns.push({ end: ev.end, id: ev.id });
+    if (!placed) {
+      columns.push({ end: ev.end });
+      result.set(ev.id, { column: columns.length - 1, total: columns.length });
+    }
   }
   
-  for (let i = 0; i < columns.length; i++) {
-    result.set(columns[i].id, { column: i, total: columns.length });
+  // Update total for all events to final column count
+  const total = columns.length;
+  for (const [id, data] of result) {
+    result.set(id, { ...data, total });
   }
   
   return result;

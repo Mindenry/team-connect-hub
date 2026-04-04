@@ -500,7 +500,7 @@ export default function TeamCalendar() {
                         const summary = workloadSummary.get(key) ?? { meetings: 0, tasks: 0, holidays: 0 };
                         const currentHour = new Date().getHours();
                         const currentMinute = new Date().getMinutes();
-                        const currentTimeOffset = ((currentHour - 7) * 60 + currentMinute) / 60 * 56; // 56px per hour
+                        const currentTimeOffset = currentHour * 56 + (currentMinute / 60) * 56; // 56px per hour, starting from 00:00
 
                         return (
                           <div className="h-full flex flex-col lg:flex-row gap-4">
@@ -549,8 +549,8 @@ export default function TeamCalendar() {
                                 <div className="flex-1 flex min-h-0 overflow-hidden">
                                   {/* Time Labels */}
                                   <div className="w-14 sm:w-16 flex flex-col shrink-0 border-r border-border/30 bg-muted/10">
-                                    {Array.from({ length: 15 }).map((_, i) => {
-                                      const hour = 7 + i;
+                                    {Array.from({ length: 24 }).map((_, i) => {
+                                      const hour = i;
                                       return (
                                         <div key={hour} className="h-14 flex items-start justify-end pr-2 pt-1">
                                           <span className="text-[11px] sm:text-xs font-medium text-muted-foreground/70">{`${hour.toString().padStart(2, "0")}:00`}</span>
@@ -562,13 +562,13 @@ export default function TeamCalendar() {
                                   {/* Events Area */}
                                   <div className="flex-1 relative overflow-y-auto" style={{ scrollBehavior: 'smooth' }}>
                                     <div className="absolute inset-0 pointer-events-none">
-                                      {Array.from({ length: 15 }).map((_, i) => (
+                                      {Array.from({ length: 24 }).map((_, i) => (
                                         <div key={i} className={cn("border-b border-border/20 h-14", i === 0 && "border-t border-border/30")} />
                                       ))}
                                     </div>
                                     
                                     {/* Current Time Indicator */}
-                                    {isToday(day) && currentHour >= 7 && currentHour < 22 && (
+                                    {isToday(day) && (
                                       <div 
                                         className="absolute left-0 right-0 flex items-center z-20 pointer-events-none"
                                         style={{ top: `${currentTimeOffset}px` }}
@@ -581,7 +581,7 @@ export default function TeamCalendar() {
                                       </div>
                                     )}
 
-                                    <DroppableDay date={day} id={`day-${key}-time`} className="relative min-h-[15 * 56px] w-full">
+                                    <DroppableDay date={day} id={`day-${key}-time`} className="relative min-h-[24 * 56px] w-full">
                                       {(() => {
                                         const columns = getEventColumns(timedEvents);
                                         return timedEvents.map((ev) => {
@@ -593,7 +593,7 @@ export default function TeamCalendar() {
                                               key={`${ev.id}-${refreshKey}`} 
                                               event={ev} 
                                               hourHeight={56} 
-                                              startHour={7}
+                                              startHour={0}
                                               left={left}
                                               width={width}
                                             />
@@ -674,8 +674,8 @@ export default function TeamCalendar() {
                               {/* Time Labels */}
                               <div className="w-14 sm:w-16 flex flex-col shrink-0 border-r border-border/30 bg-muted/10">
                                 <div className="h-12 sm:h-14 border-b border-border/20" /> {/* Spacer for day headers */}
-                                {Array.from({ length: 15 }).map((_, i) => {
-                                  const hour = 7 + i;
+                                {Array.from({ length: 24 }).map((_, i) => {
+                                  const hour = i;
                                   return (
                                     <div key={hour} className="h-12 sm:h-14 flex items-start justify-end pr-2 pt-1">
                                       <span className="text-[10px] sm:text-xs font-medium text-muted-foreground/70">{`${hour.toString().padStart(2, "0")}:00`}</span>
@@ -694,7 +694,7 @@ export default function TeamCalendar() {
                                     const timedEvents = dayEvents.filter((e) => !e.allDay);
                                     const summary = workloadSummary.get(key) ?? { meetings: 0, tasks: 0, holidays: 0 };
                                     const isCurrentDay = isToday(day);
-                                    const currentTimeOffset = isCurrentDay ? ((currentHour - 7) * 60 + currentMinute) / 60 * 56 : -100;
+                                    const currentTimeOffset = isCurrentDay ? currentHour * 56 + (currentMinute / 60) * 56 : -100;
 
                                     return (
                                       <div key={key} className="flex flex-col min-w-0 h-full border-r border-border/20 last:border-r-0">
@@ -737,13 +737,13 @@ export default function TeamCalendar() {
                                         <div className="flex-1 relative min-h-0 overflow-y-auto">
                                           {/* Hour Lines */}
                                           <div className="absolute inset-0 pointer-events-none">
-                                            {Array.from({ length: 15 }).map((_, i) => (
+                                            {Array.from({ length: 24 }).map((_, i) => (
                                               <div key={i} className="border-b border-border/15 h-12 sm:h-14" />
                                             ))}
                                           </div>
 
                                           {/* Current Time Indicator */}
-                                          {isCurrentDay && currentHour >= 7 && currentHour < 22 && (
+                                          {isCurrentDay && (
                                             <div 
                                               className="absolute left-0 right-0 flex items-center z-20 pointer-events-none"
                                               style={{ top: `${currentTimeOffset}px` }}
@@ -753,7 +753,7 @@ export default function TeamCalendar() {
                                             </div>
                                           )}
 
-                                          <DroppableDay date={day} id={`day-${key}-time`} className="relative min-h-[15 * 56px] w-full">
+                                          <DroppableDay date={day} id={`day-${key}-time`} className="relative min-h-[24 * 56px] w-full">
                                             {(() => {
                                               const columns = getEventColumns(timedEvents);
                                               return timedEvents.map((ev) => {
@@ -765,7 +765,7 @@ export default function TeamCalendar() {
                                                     key={`${ev.id}-${refreshKey}`} 
                                                     event={ev} 
                                                     hourHeight={56} 
-                                                    startHour={7}
+                                                    startHour={0}
                                                     left={left}
                                                     width={width}
                                                   />
