@@ -150,6 +150,10 @@ export default function Chat() {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Refs to track current active channel/DM for socket handlers (avoids stale closure issues)
+  const activeChannelRef = useRef<string | null>(null);
+  const activeDmRef = useRef<string | null>(null);
+
   // Rail tab state
   const [activeTab, setActiveTab] = useState<"channels" | "dms">("channels");
 
@@ -479,6 +483,10 @@ export default function Chat() {
   useEffect(() => {
     if (!currentUser?.id || location.pathname !== "/chat") return;
 
+    // Update refs for socket handlers
+    activeChannelRef.current = activeChannel;
+    activeDmRef.current = activeDm;
+
     if (activeDm) {
       setChatActive(currentUser.id, { kind: "dm", id: activeDm });
       clearDmUnread(currentUser.id, activeDm);
@@ -551,9 +559,15 @@ export default function Chat() {
 
     const handleNewMessage = (message: Message) => {
       const normalized = normalizeMessageAttachments(message);
-      if (normalized.channelId === activeChannel) {
+      // Use ref to get current active channel (avoids stale closure)
+      const currentActiveChannel = activeChannelRef.current;
+      if (normalized.channelId === currentActiveChannel) {
         // Active channel: append to visible messages
-        setMessages((prev) => [...prev, normalized]);
+        setMessages((prev) => {
+          // Avoid duplicates
+          if (prev.some((m) => m.id === normalized.id)) return prev;
+          return [...prev, normalized];
+        });
       } else {
         // Other channel: bump unread counter for that channel
         if (currentUser?.id) {
@@ -599,6 +613,9 @@ export default function Chat() {
         mentions: data.mentions,
       });
 
+      // Use ref to get current active DM (avoids stale closure)
+      const currentActiveDm = activeDmRef.current;
+      
       // Update contacts list (สถานะจะถูกอัปเดตโดย dmContactsWithStatus จาก presence system)
       setDmContacts((prev) => {
         const exists = prev.find((c) => c.id === otherUserId);
@@ -611,7 +628,7 @@ export default function Chat() {
           lastMsg: "",
         };
         const updated = prev.filter((c) => c.id !== otherUserId);
-        const isActive = activeDm === otherUserId;
+        const isActive = currentActiveDm === otherUserId;
         const bump = isActive ? 0 : (isFromMe ? 0 : 1);
         if (bump > 0 && currentUser?.id) {
           incrementDmUnread(currentUser.id, otherUserId, bump);
@@ -622,7 +639,7 @@ export default function Chat() {
 
       // If DM is active, add message immediately (real-time display)
       // Note: Message is already persisted in DB by backend, so we just update UI
-      if (activeDm === otherUserId) {
+      if (currentActiveDm === otherUserId) {
         console.log(`DM is active, adding message immediately`);
         setDmMessages((prev) => {
           if (prev.some((m) => m.id === msg.id)) {
@@ -683,7 +700,9 @@ export default function Chat() {
       socket.off("channel:updated", handleChannelUpdated);
       socket.off("channel:deleted", handleChannelDeleted);
     };
-  }, [activeChannel, activeDm, currentUser, location.pathname]);
+  // Remove activeChannel and activeDm from dependencies since we use refs now
+  // This prevents re-registering socket handlers on every channel/DM switch
+  }, [currentUser, location.pathname]);
 
   // ── Message actions ──
 
@@ -924,6 +943,10 @@ export default function Chat() {
   // ── Navigation ──
 
   const selectChannel = useCallback((channelId: string) => {
+    // Update refs IMMEDIATELY to prevent race condition with socket handlers
+    activeChannelRef.current = channelId;
+    activeDmRef.current = null;
+    
     setActiveChannel(channelId);
     setActiveDm(null);
     // Reset unread counter for this channel when user opens it
@@ -946,6 +969,10 @@ export default function Chat() {
 
   const selectDm = useCallback(
     async (userId: string) => {
+      // Update refs IMMEDIATELY to prevent race condition with socket handlers
+      activeDmRef.current = userId;
+      activeChannelRef.current = null;
+      
       setActiveDm(userId);
       setActiveChannel(null);
 
