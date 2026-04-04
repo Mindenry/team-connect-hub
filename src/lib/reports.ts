@@ -1140,26 +1140,29 @@ function formatHeader(key: string): string {
 export const reportTransformers = {
   taskReportToRows(report: TaskReport): Record<string, any>[] {
     const rows: Record<string, any>[] = [];
+    const summary = report?.summary;
 
-    rows.push({
-      category: 'Summary',
-      totalTasks: report.summary.totalTasks,
-      completed: report.summary.completedTasks,
-      inProgress: report.summary.inProgressTasks,
-      todo: report.summary.todoTasks,
-      overdue: report.summary.overdueTasks,
-    });
+    if (summary) {
+      rows.push({
+        category: 'Summary',
+        totalTasks: summary.totalTasks ?? 0,
+        completed: summary.completedTasks ?? 0,
+        inProgress: summary.inProgressTasks ?? 0,
+        todo: summary.todoTasks ?? 0,
+        overdue: summary.overdueTasks ?? 0,
+      });
+    }
 
-    report.overdueTasks.forEach(t => {
+    (report?.overdueTasks || []).forEach(t => {
       rows.push({
         category: 'Overdue Task',
-        title: t.title,
+        title: t.title || '—',
         assignee: t.assignee || 'Unassigned',
         team: t.team || '—',
-        priority: t.priority,
+        priority: t.priority || '—',
         dueDate: t.dueDate ? new Date(t.dueDate).toLocaleDateString('th-TH') : '—',
-        daysOverdue: t.daysOverdue,
-        status: t.status,
+        daysOverdue: t.daysOverdue ?? 0,
+        status: t.status || '—',
       });
     });
 
@@ -1168,27 +1171,30 @@ export const reportTransformers = {
 
   meetingReportToRows(report: MeetingReport): Record<string, any>[] {
     const rows: Record<string, any>[] = [];
+    const summary = report?.summary;
 
-    rows.push({
-      category: 'Summary',
-      totalMeetings: report.summary.totalMeetings,
-      completed: report.summary.completedMeetings,
-      scheduled: report.summary.scheduledMeetings,
-      totalDuration: `${report.summary.totalDuration} min`,
-      avgDuration: `${report.summary.avgDuration.toFixed(1)} min`,
-      avgParticipants: report.summary.avgParticipants.toFixed(1),
-    });
+    if (summary) {
+      rows.push({
+        category: 'Summary',
+        totalMeetings: summary.totalMeetings ?? 0,
+        completed: summary.completedMeetings ?? 0,
+        scheduled: summary.scheduledMeetings ?? 0,
+        totalDuration: `${summary.totalDuration ?? 0} min`,
+        avgDuration: `${summary.avgDuration?.toFixed(1) ?? 0} min`,
+        avgParticipants: summary.avgParticipants?.toFixed(1) ?? '0',
+      });
+    }
 
-    report.meetings.forEach(m => {
+    (report?.meetings || []).forEach(m => {
       rows.push({
         category: 'Meeting',
-        title: m.title,
-        host: m.host,
+        title: m.title || '—',
+        host: m.host || '—',
         team: m.team || '—',
-        startTime: new Date(m.startTime).toLocaleString('th-TH'),
-        duration: `${m.duration} min`,
-        participants: m.participants,
-        status: m.status,
+        startTime: m.startTime ? new Date(m.startTime).toLocaleString('th-TH') : '—',
+        duration: `${m.duration ?? 0} min`,
+        participants: m.participants ?? 0,
+        status: m.status || '—',
       });
     });
 
@@ -1197,27 +1203,31 @@ export const reportTransformers = {
 
   teamProductivityToRows(report: TeamProductivityReport): Record<string, any>[] {
     const rows: Record<string, any>[] = [];
+    const summary = report?.summary;
+    const team = report?.team;
 
-    rows.push({
-      category: 'Team Summary',
-      teamName: report.team.name,
-      members: report.summary.members,
-      totalTasks: report.summary.tasks.total,
-      completedTasks: report.summary.tasks.completed,
-      totalMeetings: report.summary.meetings.total,
-      totalDuration: `${report.summary.meetings.totalDuration} min`,
-    });
+    if (team && summary) {
+      rows.push({
+        category: 'Team Summary',
+        teamName: team.name,
+        members: summary.members ?? 0,
+        totalTasks: summary.tasks?.total ?? 0,
+        completedTasks: summary.tasks?.completed ?? 0,
+        totalMeetings: summary.meetings?.total ?? 0,
+        totalDuration: `${summary.meetings?.totalDuration ?? 0} min`,
+      });
+    }
 
-    report.members.forEach(m => {
+    (report?.members || []).forEach(m => {
       rows.push({
         category: 'Member',
-        name: m.user.name,
-        email: m.user.email,
-        totalTasks: m.tasks.total,
-        completedTasks: m.tasks.completed,
-        inProgress: m.tasks.inProgress,
-        messagesSent: m.messagesSent,
-        meetingsAttended: m.meetingsAttended,
+        name: m.user?.name || '—',
+        email: m.user?.email || '—',
+        totalTasks: m.tasks?.total ?? 0,
+        completedTasks: m.tasks?.completed ?? 0,
+        inProgress: m.tasks?.inProgress ?? 0,
+        messagesSent: m.messagesSent ?? 0,
+        meetingsAttended: m.meetingsAttended ?? 0,
         productivityScore: m.productivityScore?.toFixed(1) || '—',
       });
     });
@@ -1227,34 +1237,37 @@ export const reportTransformers = {
 
   performanceToRows(dashboard: PerformanceDashboard): Record<string, any>[] {
     const rows: Record<string, any>[] = [];
+    const summary = dashboard?.summary;
 
-    rows.push({
-      category: 'Summary',
-      avgCompletionRate: `${dashboard.summary.avgTaskCompletionRate.toFixed(1)}%`,
-      avgAttendanceRate: `${dashboard.summary.avgMeetingAttendanceRate.toFixed(1)}%`,
-      totalInteractions: dashboard.summary.totalInteractions,
-      topPerformer: dashboard.summary.topPerformer?.userName || '—',
-    });
+    if (summary) {
+      rows.push({
+        category: 'Summary',
+        avgCompletionRate: `${summary.avgTaskCompletionRate?.toFixed(1) ?? 0}%`,
+        avgAttendanceRate: `${summary.avgMeetingAttendanceRate?.toFixed(1) ?? 0}%`,
+        totalInteractions: summary.totalInteractions ?? 0,
+        topPerformer: summary.topPerformer?.userName || '—',
+      });
+    }
 
-    dashboard.taskCompletionRates.forEach(r => {
+    (dashboard?.taskCompletionRates || []).forEach(r => {
       rows.push({
         category: 'Task Completion',
         userName: r.userName,
-        totalTasks: r.totalTasks,
-        completedTasks: r.completedTasks,
-        completionRate: `${r.completionRate.toFixed(1)}%`,
+        totalTasks: r.totalTasks ?? 0,
+        completedTasks: r.completedTasks ?? 0,
+        completionRate: `${r.completionRate?.toFixed(1) ?? 0}%`,
         trend: r.trend || '—',
       });
     });
 
-    dashboard.collaborationActivity.forEach(a => {
+    (dashboard?.collaborationActivity || []).forEach(a => {
       rows.push({
         category: 'Collaboration',
         userName: a.userName,
-        completedTasks: a.completedTasks,
-        meetingsAttended: a.attendedMeetings,
-        messagesSent: a.messagesSent,
-        totalInteractions: a.totalInteractions,
+        completedTasks: a.completedTasks ?? 0,
+        meetingsAttended: a.attendedMeetings ?? 0,
+        messagesSent: a.messagesSent ?? 0,
+        totalInteractions: a.totalInteractions ?? 0,
         activityScore: a.activityScore?.toFixed(1) || '—',
       });
     });
@@ -1263,15 +1276,15 @@ export const reportTransformers = {
   },
 
   workloadToRows(report: TeamWorkloadReport): Record<string, any>[] {
-    return report.workload.map(w => ({
-      userName: w.userName,
-      userEmail: w.userEmail,
-      totalTasks: w.totalTasks,
-      completed: w.completed,
-      inProgress: w.inProgress,
-      todo: w.todo,
-      overdue: w.overdue,
-      workloadPercentage: `${w.workloadPercentage.toFixed(1)}%`,
+    return (report?.workload || []).map(w => ({
+      userName: w.userName || '—',
+      userEmail: w.userEmail || '—',
+      totalTasks: w.totalTasks ?? 0,
+      completed: w.completed ?? 0,
+      inProgress: w.inProgress ?? 0,
+      todo: w.todo ?? 0,
+      overdue: w.overdue ?? 0,
+      workloadPercentage: `${w.workloadPercentage?.toFixed(1) ?? 0}%`,
     }));
   },
 };
