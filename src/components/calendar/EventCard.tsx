@@ -78,7 +78,7 @@ export function DraggableEventCard({ event }: DraggableEventCardProps) {
   return <EventCardBase event={event} style={style} draggable dragAttributes={attributes} dragListeners={listeners} setNodeRef={setNodeRef} isDragging={isDragging} />;
 }
 
-export function StaticEventCard({ event, hourHeight = 48, startHour = 7 }: { event: CalendarEvent; hourHeight?: number; startHour?: number }) {
+export function StaticEventCard({ event, hourHeight = 48, startHour = 7, left = 0, width = 100 }: { event: CalendarEvent; hourHeight?: number; startHour?: number; left?: number; width?: number }) {
   const startMinutes = event.start.getHours() * 60 + event.start.getMinutes();
   const endMinutes = event.end.getHours() * 60 + event.end.getMinutes();
   const startOffsetMinutes = startHour * 60;
@@ -92,10 +92,37 @@ export function StaticEventCard({ event, hourHeight = 48, startHour = 7 }: { eve
     position: "absolute",
     top: `${top}px`,
     height: `${Math.max(height, 32)}px`,
-    left: "4px",
-    right: "4px",
+    left: `${left}%`,
+    width: `${width}%`,
     zIndex: 10,
   };
   
   return <EventCardBase event={event} style={style} className={cn("mb-0", isCompact && "py-1")} />;
+}
+
+// Simple overlap detection - returns column index and total columns for each event
+export function getEventColumns(events: CalendarEvent[]): Map<string, { column: number; total: number }> {
+  const result = new Map<string, { column: number; total: number }>();
+  if (events.length === 0) return result;
+  
+  const sorted = [...events].sort((a, b) => a.start.getTime() - b.start.getTime());
+  const columns: { end: Date; id: string }[] = [];
+  
+  for (const ev of sorted) {
+    let placed = false;
+    for (let i = 0; i < columns.length; i++) {
+      if (columns[i].end <= ev.start) {
+        columns[i] = { end: ev.end, id: ev.id };
+        placed = true;
+        break;
+      }
+    }
+    if (!placed) columns.push({ end: ev.end, id: ev.id });
+  }
+  
+  for (let i = 0; i < columns.length; i++) {
+    result.set(columns[i].id, { column: i, total: columns.length });
+  }
+  
+  return result;
 }

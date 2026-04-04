@@ -23,6 +23,7 @@ import {
   DraggableEventCard,
   StaticEventCard,
   DroppableDay,
+  getEventColumns,
   startOfDay,
   endOfDay,
   startOfWeek,
@@ -581,9 +582,24 @@ export default function TeamCalendar() {
                                     )}
 
                                     <DroppableDay date={day} id={`day-${key}-time`} className="relative min-h-[15 * 56px] w-full">
-                                      {timedEvents.map((ev) => (
-                                        <StaticEventCard key={`${ev.id}-${refreshKey}`} event={ev} hourHeight={56} startHour={7} />
-                                      ))}
+                                      {(() => {
+                                        const columns = getEventColumns(timedEvents);
+                                        return timedEvents.map((ev) => {
+                                          const col = columns.get(ev.id) ?? { column: 0, total: 1 };
+                                          const width = 100 / col.total - 1;
+                                          const left = col.column * (100 / col.total);
+                                          return (
+                                            <StaticEventCard 
+                                              key={`${ev.id}-${refreshKey}`} 
+                                              event={ev} 
+                                              hourHeight={56} 
+                                              startHour={7}
+                                              left={left}
+                                              width={width}
+                                            />
+                                          );
+                                        });
+                                      })()}
                                     </DroppableDay>
                                   </div>
                                 </div>
@@ -738,9 +754,24 @@ export default function TeamCalendar() {
                                           )}
 
                                           <DroppableDay date={day} id={`day-${key}-time`} className="relative min-h-[15 * 56px] w-full">
-                                            {timedEvents.map((ev) => (
-                                              <StaticEventCard key={`${ev.id}-${refreshKey}`} event={ev} hourHeight={56} startHour={7} />
-                                            ))}
+                                            {(() => {
+                                              const columns = getEventColumns(timedEvents);
+                                              return timedEvents.map((ev) => {
+                                                const col = columns.get(ev.id) ?? { column: 0, total: 1 };
+                                                const width = 100 / col.total - 1;
+                                                const left = col.column * (100 / col.total);
+                                                return (
+                                                  <StaticEventCard 
+                                                    key={`${ev.id}-${refreshKey}`} 
+                                                    event={ev} 
+                                                    hourHeight={56} 
+                                                    startHour={7}
+                                                    left={left}
+                                                    width={width}
+                                                  />
+                                                );
+                                              });
+                                            })()}
                                           </DroppableDay>
                                         </div>
                                       </div>
