@@ -45,7 +45,7 @@ export default function Tasks() {
   const [filterPriority, setFilterPriority] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
   const [filterAssignee, setFilterAssignee] = useState("all");
-  const [sortBy, setSortBy] = useState("position");
+  const [sortBy, setSortBy] = useState("priority");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const [groupBy, setGroupBy] = useState("status");
 
@@ -411,11 +411,10 @@ export default function Tasks() {
 
                 {/* Sort By Dropdown */}
                 <Select value={sortBy} onValueChange={setSortBy}>
-                  <SelectTrigger className={cn("h-9 w-[110px] rounded-lg text-xs bg-background/50 border-border/60", sortBy !== "position" && "border-primary/50 bg-primary/5")}>
+                  <SelectTrigger className={cn("h-9 w-[110px] rounded-lg text-xs bg-background/50 border-border/60", sortBy !== "priority" && "border-primary/50 bg-primary/5")}>
                     <SelectValue placeholder="Sort by" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="position">Position</SelectItem>
                     <SelectItem value="dueDate">Due Date</SelectItem>
                     <SelectItem value="priority">Priority</SelectItem>
                     <SelectItem value="title">Title</SelectItem>
@@ -429,7 +428,7 @@ export default function Tasks() {
                     <Button 
                       size="sm" 
                       variant="outline" 
-                      className={cn("h-9 w-9 p-0", sortBy !== "position" && "border-primary/50 bg-primary/5")} 
+                      className={cn("h-9 w-9 p-0", sortBy !== "priority" && "border-primary/50 bg-primary/5")} 
                       onClick={() => setSortOrder(sortOrder === "asc" ? "desc" : "asc")}
                     >
                       {sortOrder === "asc" ? (
@@ -447,8 +446,7 @@ export default function Tasks() {
                         {sortBy === "priority" && (sortOrder === "asc" ? "Low → Urgent" : "Urgent → Low")}
                         {sortBy === "title" && (sortOrder === "asc" ? "A → Z" : "Z → A")}
                         {sortBy === "createdAt" && (sortOrder === "asc" ? "เก่า → ใหม่" : "ใหม่ → เก่า")}
-                        {sortBy === "position" && (sortOrder === "asc" ? "บน → ล่าง" : "ล่าง → บน")}
-                      </div>
+                                              </div>
                     </div>
                   </TooltipContent>
                 </Tooltip>
