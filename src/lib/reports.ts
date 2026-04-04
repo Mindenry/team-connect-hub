@@ -748,19 +748,36 @@ function drawFooters(doc: jsPDF, pageW: number, pageH: number, margin: number): 
 
 // ─── exportUtils ─────────────────────────────────────────────────────────────
 
+// Helper to flatten value for CSV
+function flattenValue(v: any): string {
+  if (v === null || v === undefined) return '';
+  if (typeof v === 'object') {
+    // Arrays: join with semicolon
+    if (Array.isArray(v)) {
+      return v.map(item => typeof item === 'object' ? JSON.stringify(item) : String(item)).join('; ');
+    }
+    // Objects: JSON stringify (compact)
+    return JSON.stringify(v);
+  }
+  return String(v);
+}
+
 export const exportUtils = {
   // ── CSV ──────────────────────────────────────────────────────────────────
   toCSV(data: Record<string, any>[], filename: string): void {
     if (!data.length) return;
 
-    const headers = Object.keys(data[0]);
+    // Collect all unique headers from all rows
+    const allHeaders = new Set<string>();
+    data.forEach(row => Object.keys(row).forEach(k => allHeaders.add(k)));
+    const headers = Array.from(allHeaders);
+
     const csvRows = [
       headers.map(h => `"${formatHeader(h)}"`).join(','),
       ...data.map(row =>
         headers.map(h => {
           const v = row[h];
-          if (v === null || v === undefined) return '';
-          const s = String(v);
+          const s = flattenValue(v);
           return s.includes(',') || s.includes('"') || s.includes('\n')
             ? `"${s.replace(/"/g, '""')}"`
             : s;
@@ -768,7 +785,7 @@ export const exportUtils = {
       ),
     ];
 
-    const blob = new Blob(['\ufeff' + csvRows.join('\n'), { type: 'text/csv;charset=utf-8;' }]);
+    const blob = new Blob(['\ufeff' + csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' });
     downloadBlob(blob, `${filename}.csv`);
   },
 
