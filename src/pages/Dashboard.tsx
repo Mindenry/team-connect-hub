@@ -81,12 +81,12 @@ export default function Dashboard() {
             Array.isArray(tasks) ? tasks.filter((t: any) => t.status === "todo" || t.status === "in_progress") : []
           ),
         ]);
-        
+
         const [notificationsRes, channelsRes, digestRes] = await Promise.all([
           currentUser?.id
             ? apiGet<any>(`/notifications?userId=${currentUser.id}&read=false`).catch(() => []).then((res: any) =>
               Array.isArray(res) ? res.length : 0
-            ) 
+            )
             : Promise.resolve(0),
           apiGet<any[]>("/channels").catch(() => []),
           currentUser?.id
@@ -103,16 +103,16 @@ export default function Dashboard() {
 
         const meetingsTodayAll: MeetingItem[] = safeMeetings
           .filter((m: any) => {
-             const start = new Date(m.startTime);
-             return start >= today && start < tomorrow;
+            const start = new Date(m.startTime);
+            return start >= today && start < tomorrow;
           })
           .map((m: any) => ({
-             id: m.id,
-             title: m.title || "Untitled meeting",
-             startTime: m.startTime,
-             team: m.team?.name || "Personal",
-             participants: m.participants?.length || 0,
-             isLive: m.status === "live"
+            id: m.id,
+            title: m.title || "Untitled meeting",
+            startTime: m.startTime,
+            team: m.team?.name || "Personal",
+            participants: m.participants?.length || 0,
+            isLive: m.status === "live"
           }));
 
         const meetingsForList = meetingsTodayAll
@@ -127,30 +127,30 @@ export default function Dashboard() {
           dueDate: t.dueDate || undefined,
           assignee: t.assignee
             ? {
-                id: t.assignee.id,
-                name: t.assignee.name,
-                initials:
-                  t.assignee.name
-                    ?.split(" ")
-                    .map((p: string) => p[0])
-                    .join("")
-                    .toUpperCase() ?? "NA",
-              }
+              id: t.assignee.id,
+              name: t.assignee.name,
+              initials:
+                t.assignee.name
+                  ?.split(" ")
+                  .map((p: string) => p[0])
+                  .join("")
+                  .toUpperCase() ?? "NA",
+            }
             : undefined,
           project: t.project
             ? {
-                id: t.project.id,
-                key: t.project.key,
-                name: t.project.name,
-                color: t.project.color,
-              }
+              id: t.project.id,
+              key: t.project.key,
+              name: t.project.name,
+              color: t.project.color,
+            }
             : undefined,
           epic: t.epic
             ? {
-                id: t.epic.id,
-                name: t.epic.name,
-                color: t.epic.color,
-              }
+              id: t.epic.id,
+              name: t.epic.name,
+              color: t.epic.color,
+            }
             : undefined,
           tags: Array.isArray(t.tags) ? t.tags : [],
         }));
@@ -174,7 +174,7 @@ export default function Dashboard() {
 
         const allUsersList: MemberItem[] = mergedUsers.map((u: any) => {
           const userStatus = u.status || "offline";
-          
+
           return {
             id: u.id,
             name: u.name || "Unknown",
@@ -189,13 +189,13 @@ export default function Dashboard() {
         const memberList: MemberItem[] = allUsersList.slice(0, 8);
 
         let unreadTotal = notificationsRes || 0;
-        
-         setTodayMeetings(meetingsForList);
-         setRecentTasks(tasks);
-         setMembers(memberList);
-         setAllUsers(allUsersList);
-         setTeams(safeTeams);
-         setStats({
+
+        setTodayMeetings(meetingsForList);
+        setRecentTasks(tasks);
+        setMembers(memberList);
+        setAllUsers(allUsersList);
+        setTeams(safeTeams);
+        setStats({
           meetingsToday: meetingsTodayAll.length,
           openTasks: safeTasks.length,
           unreadMessages: unreadTotal,
@@ -218,7 +218,7 @@ export default function Dashboard() {
         try {
           const usersRes = await apiGet<any[]>("/users").catch(() => []);
           const safeUsers = Array.isArray(usersRes) ? usersRes : [];
-          
+
           let mergedUsers = [...safeUsers];
           if (currentUser) {
             const existingIndex = mergedUsers.findIndex((u: any) => u.id === currentUser.id);
@@ -234,7 +234,7 @@ export default function Dashboard() {
               mergedUsers[existingIndex] = { ...mergedUsers[existingIndex], ...authUserPatch };
             }
           }
-          
+
           const allUsersList: MemberItem[] = mergedUsers.map((u: any) => {
             const userStatus = u.status || "offline";
             return {
@@ -247,9 +247,9 @@ export default function Dashboard() {
               avatar: u.avatar,
             };
           });
-          
+
           const memberList: MemberItem[] = allUsersList.slice(0, 8);
-          
+
           setMembers(memberList);
           setAllUsers(allUsersList);
         } catch (err) {
@@ -274,7 +274,7 @@ export default function Dashboard() {
 
   const nextMeeting = todayMeetings[0];
   const onlineSummary = `${onlineCount}/${stats.teamTotal || 0}`;
-  
+
   const allUsersMap = useMemo(() => {
     const map = new Map<string, MemberItem>();
     allUsers.forEach((m) => {
@@ -282,27 +282,27 @@ export default function Dashboard() {
     });
     return map;
   }, [allUsers]);
-  
+
   const teamPulseMembers = useMemo(() => {
     const onlineMembersList: Array<MemberItem & { isOnline: boolean }> = [];
-    
+
     onlineUsers.forEach((onlineUser) => {
       const existingMember = allUsersMap.get(onlineUser.userId);
-      
+
       if (existingMember) {
         let finalStatus: "online" | "busy" | "away" | "offline" | "dnd" = "online";
-        
+
         if (existingMember.status && ["online", "busy", "away", "dnd"].includes(existingMember.status)) {
           finalStatus = existingMember.status as "online" | "busy" | "away" | "dnd";
         }
-        
+
         if (currentUser && onlineUser.userId === currentUser.id && currentUser.status) {
           const authStatus = currentUser.status;
           if (["online", "busy", "away", "dnd"].includes(authStatus)) {
             finalStatus = authStatus as "online" | "busy" | "away" | "dnd";
           }
         }
-        
+
         onlineMembersList.push({
           ...existingMember,
           isOnline: true,
@@ -315,7 +315,7 @@ export default function Dashboard() {
           .join("")
           .slice(0, 2)
           .toUpperCase();
-        
+
         onlineMembersList.push({
           id: onlineUser.userId,
           name: onlineUser.name,
@@ -328,7 +328,7 @@ export default function Dashboard() {
         });
       }
     });
-    
+
     onlineMembersList.sort((a, b) => {
       if (currentUser) {
         if (a.id === currentUser.id) return -1;
@@ -336,7 +336,7 @@ export default function Dashboard() {
       }
       return a.name.localeCompare(b.name);
     });
-    
+
     return onlineMembersList;
   }, [onlineUsers, allUsersMap, currentUser]);
 
@@ -374,36 +374,36 @@ export default function Dashboard() {
   };
 
   const kpiCards: KpiCardConfig[] = [
-    { 
-      label: "Meetings Today", 
-      value: stats.meetingsToday, 
+    {
+      label: "Meetings Today",
+      value: stats.meetingsToday,
       icon: Video,
       gradient: "from-blue-500/20 via-blue-500/10 to-blue-500/5",
       iconBg: "bg-blue-500/10",
       iconColor: "text-blue-600",
       borderColor: "border-blue-500/20",
     },
-    { 
-      label: "Open Tasks", 
-      value: stats.openTasks, 
+    {
+      label: "Open Tasks",
+      value: stats.openTasks,
       icon: CheckSquare,
       gradient: "from-amber-500/20 via-amber-500/10 to-amber-500/5",
       iconBg: "bg-amber-500/10",
       iconColor: "text-amber-600",
       borderColor: "border-amber-500/20",
     },
-    { 
-      label: "Unread Messages", 
-      value: stats.unreadMessages, 
+    {
+      label: "Unread Messages",
+      value: stats.unreadMessages,
       icon: MessageSquare,
       gradient: "from-purple-500/20 via-purple-500/10 to-purple-500/5",
       iconBg: "bg-purple-500/10",
       iconColor: "text-purple-600",
       borderColor: "border-purple-500/20",
     },
-    { 
-      label: "Team Online", 
-      value: onlineSummary, 
+    {
+      label: "Team Online",
+      value: onlineSummary,
       icon: Users,
       gradient: "from-green-500/20 via-green-500/10 to-green-500/5",
       iconBg: "bg-green-500/10",
@@ -449,16 +449,16 @@ export default function Dashboard() {
             task={
               selectedTask
                 ? {
-                    id: selectedTask.id,
-                    title: selectedTask.title,
-                    priority: selectedTask.priority,
-                    assignee: selectedTask.assignee,
-                    dueDate: selectedTask.dueDate,
-                    tags: selectedTask.tags,
-                    linkedMeeting: undefined,
-                    sprint: undefined,
-                    epic: selectedTask.epic,
-                  }
+                  id: selectedTask.id,
+                  title: selectedTask.title,
+                  priority: selectedTask.priority,
+                  assignee: selectedTask.assignee,
+                  dueDate: selectedTask.dueDate,
+                  tags: selectedTask.tags,
+                  linkedMeeting: undefined,
+                  sprint: undefined,
+                  epic: selectedTask.epic,
+                }
                 : undefined
             }
           />
@@ -479,9 +479,9 @@ export default function Dashboard() {
                   <div className="flex items-center gap-1.5">
                     <Calendar className="w-3.5 h-3.5" />
                     <span>
-                      {new Date().toLocaleDateString("th-TH", { 
-                        weekday: "long", 
-                        month: "long", 
+                      {new Date().toLocaleDateString("th-TH", {
+                        weekday: "long",
+                        month: "long",
                         day: "numeric",
                         year: "numeric"
                       })}
@@ -549,7 +549,7 @@ export default function Dashboard() {
           </motion.div>
 
           {loadError && (
-            <motion.div 
+            <motion.div
               variants={itemVariants}
               className="rounded-2xl border-2 border-destructive/50 bg-destructive/10 backdrop-blur-sm px-6 py-4 shadow-lg"
             >

@@ -752,11 +752,9 @@ function drawFooters(doc: jsPDF, pageW: number, pageH: number, margin: number): 
 function flattenValue(v: any): string {
   if (v === null || v === undefined) return '';
   if (typeof v === 'object') {
-    // Arrays: join with semicolon
     if (Array.isArray(v)) {
       return v.map(item => typeof item === 'object' ? JSON.stringify(item) : String(item)).join('; ');
     }
-    // Objects: JSON stringify (compact)
     return JSON.stringify(v);
   }
   return String(v);
@@ -767,25 +765,49 @@ export const exportUtils = {
   toCSV(data: Record<string, any>[], filename: string): void {
     if (!data.length) return;
 
-    // Collect all unique headers from all rows
-    const allHeaders = new Set<string>();
-    data.forEach(row => Object.keys(row).forEach(k => allHeaders.add(k)));
-    const headers = Array.from(allHeaders);
+    // Group data by category for better structure
+    const grouped = new Map<string, Record<string, any>[]>();
+    data.forEach(row => {
+      const cat = row.category || 'Data';
+      if (!grouped.has(cat)) grouped.set(cat, []);
+      grouped.get(cat)!.push(row);
+    });
 
-    const csvRows = [
-      headers.map(h => `"${formatHeader(h)}"`).join(','),
-      ...data.map(row =>
-        headers.map(h => {
+    const lines: string[] = [];
+
+    // Add header
+    lines.push(`# Team Connect Report Export`);
+    lines.push(`# Generated: ${new Date().toLocaleString('en-GB')}`);
+    lines.push(`# Total Records: ${data.length}`);
+    lines.push('');
+
+    // Process each category group
+    grouped.forEach((rows, category) => {
+      // Category header
+      lines.push(`### ${category.toUpperCase()} ###`);
+
+      // Get headers for this group (exclude 'category' from display)
+      const headers = Array.from(new Set(rows.flatMap(r => Object.keys(r).filter(k => k !== 'category'))));
+
+      // Header row
+      lines.push(headers.map(h => `"${formatHeader(h)}"`).join(','));
+
+      // Data rows
+      rows.forEach(row => {
+        const values = headers.map(h => {
           const v = row[h];
           const s = flattenValue(v);
-          return s.includes(',') || s.includes('"') || s.includes('\n')
+          return s.includes(',') || s.includes('"') || s.includes('\n') || s.includes(';')
             ? `"${s.replace(/"/g, '""')}"`
             : s;
-        }).join(',')
-      ),
-    ];
+        });
+        lines.push(values.join(','));
+      });
 
-    const blob = new Blob(['\ufeff' + csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+      lines.push(''); // Empty line between categories
+    });
+
+    const blob = new Blob(['\ufeff' + lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
     downloadBlob(blob, `${filename}.csv`);
   },
 
@@ -793,20 +815,68 @@ export const exportUtils = {
   toExcel(data: Record<string, any>[], filename: string, sheetName = 'Report'): void {
     if (!data.length) return;
 
-    // Rename keys to pretty headers
-    const pretty = data.map(row =>
-      Object.fromEntries(Object.entries(row).map(([k, v]) => [formatHeader(k), v]))
-    );
-
-    const ws = XLSX.utils.json_to_sheet(pretty);
-
-    // Column width: auto-fit to longest value
-    const cols = Object.keys(pretty[0]);
-    ws['!cols'] = cols.map(col => ({
-      wch: Math.min(40, Math.max(col.length + 2, ...pretty.map(r => String(r[col] ?? '').length + 2))),
-    }));
-
     const wb = XLSX.utils.book_new();
+
+    // Group data by category for better structure
+    const grouped = new Map<string, Record<string, any>[]>();
+    data.forEach(row => {
+      const cat = row.category || 'Data';
+      if (!grouped.has(cat)) grouped.set(cat, []);
+      grouped.get(cat)!.push(row);
+    });
+
+    // Build sheet data with section headers
+    const sheetData: any[][] = [];
+
+    // Title row
+    sheetData.push(['Team Connect Report Export']);
+    sheetData.push([`Generated: ${new Date().toLocaleString('en-GB')}`]);
+    sheetData.push([`Total Records: ${data.length}`]);
+    sheetData.push([]); // Empty row
+
+    // Process each category
+    grouped.forEach((rows, category) => {
+      // Category header row (will be styled differently)
+      sheetData.push([`=== ${category.toUpperCase()} ===`]);
+
+      // Get headers for this group
+      const headers = Array.from(new Set(rows.flatMap(r => Object.keys(r).filter(k => k !== 'category'))));
+
+      // Header row with formatted names
+      sheetData.push(headers.map(h => formatHeader(h)));
+
+      // Data rows
+      rows.forEach(row => {
+        const values = headers.map(h => {
+          const v = row[h];
+          if (v === null || v === undefined) return '';
+          if (typeof v === 'object') {
+            if (Array.isArray(v)) return v.join('; ');
+            return JSON.stringify(v);
+          }
+          return v;
+        });
+        sheetData.push(values);
+      });
+
+      sheetData.push([]); // Empty row between sections
+    });
+
+    const ws = XLSX.utils.aoa_to_sheet(sheetData);
+
+    // Set column widths based on content
+    const colWidths: number[] = [];
+    sheetData.forEach(row => {
+      row.forEach((cell: any, colIdx: number) => {
+        const len = String(cell ?? '').length;
+        colWidths[colIdx] = Math.max(colWidths[colIdx] || 10, Math.min(50, len + 2));
+      });
+    });
+    ws['!cols'] = colWidths.map(w => ({ wch: w }));
+
+    // Add metadata for Excel to recognize it as a formatted table
+    ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: sheetData.length - 1, c: Math.max(...colWidths.map((_, i) => i)) } });
+
     XLSX.utils.book_append_sheet(wb, ws, sheetName.substring(0, 31));
     XLSX.writeFile(wb, `${filename}.xlsx`);
   },
@@ -836,16 +906,51 @@ export const exportUtils = {
     sheets.forEach(({ name, data }) => {
       if (!data.length) return;
 
-      const pretty = data.map(row =>
-        Object.fromEntries(Object.entries(row).map(([k, v]) => [formatHeader(k), v]))
-      );
+      // Group data by category
+      const grouped = new Map<string, Record<string, any>[]>();
+      data.forEach(row => {
+        const cat = row.category || 'Data';
+        if (!grouped.has(cat)) grouped.set(cat, []);
+        grouped.get(cat)!.push(row);
+      });
 
-      const ws = XLSX.utils.json_to_sheet(pretty);
+      const sheetData: any[][] = [];
 
-      const cols = Object.keys(pretty[0]);
-      ws['!cols'] = cols.map(col => ({
-        wch: Math.min(40, Math.max(col.length + 2, ...pretty.map(r => String(r[col] ?? '').length + 2))),
-      }));
+      // Title
+      sheetData.push([`${name} - Team Connect`]);
+      sheetData.push([`Generated: ${new Date().toLocaleString('en-GB')}`]);
+      sheetData.push([]);
+
+      grouped.forEach((rows, category) => {
+        sheetData.push([`=== ${category.toUpperCase()} ===`]);
+        const headers = Array.from(new Set(rows.flatMap(r => Object.keys(r).filter(k => k !== 'category'))));
+        sheetData.push(headers.map(h => formatHeader(h)));
+
+        rows.forEach(row => {
+          const values = headers.map(h => {
+            const v = row[h];
+            if (v === null || v === undefined) return '';
+            if (typeof v === 'object') {
+              if (Array.isArray(v)) return v.join('; ');
+              return JSON.stringify(v);
+            }
+            return v;
+          });
+          sheetData.push(values);
+        });
+        sheetData.push([]);
+      });
+
+      const ws = XLSX.utils.aoa_to_sheet(sheetData);
+
+      const colWidths: number[] = [];
+      sheetData.forEach(row => {
+        row.forEach((cell: any, colIdx: number) => {
+          const len = String(cell ?? '').length;
+          colWidths[colIdx] = Math.max(colWidths[colIdx] || 10, Math.min(50, len + 2));
+        });
+      });
+      ws['!cols'] = colWidths.map(w => ({ wch: w }));
 
       XLSX.utils.book_append_sheet(wb, ws, name.substring(0, 31));
     });
