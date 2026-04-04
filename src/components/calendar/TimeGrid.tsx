@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { useDroppable } from "@dnd-kit/core";
 import { useDraggable } from "@dnd-kit/core";
@@ -26,40 +27,59 @@ function heightPx(start: Date, end: Date) {
   return Math.max((mins / 60) * HOUR_HEIGHT, 22);
 }
 
-// ── column layout (prevent overlap) ───────────────────────
+// ── column layout (interval graph coloring) ───────────────
 interface PositionedEvent extends CalendarEvent {
   col: number;
   colCount: number;
 }
 
+function overlaps(a: CalendarEvent, b: CalendarEvent) {
+  return a.start < b.end && a.end > b.start;
+}
+
 function layoutEvents(events: CalendarEvent[]): PositionedEvent[] {
-  const sorted = [...events].sort((a, b) => a.start.getTime() - b.start.getTime());
-  const columns: CalendarEvent[][] = [];
-  const result: PositionedEvent[] = [];
+  if (events.length === 0) return [];
+
+  // Sort by start time, then by duration desc (longest first for better packing)
+  const sorted = [...events].sort((a, b) => {
+    const dt = a.start.getTime() - b.start.getTime();
+    if (dt !== 0) return dt;
+    return (b.end.getTime() - b.start.getTime()) - (a.end.getTime() - a.start.getTime());
+  });
+
+  // Assign column indices with greedy interval coloring
+  const colOf = new Map<string, number>();
+  const colEnds: number[] = []; // tracks the end-time of the last event in each column
 
   for (const ev of sorted) {
-    let placed = false;
-    for (let c = 0; c < columns.length; c++) {
-      const last = columns[c][columns[c].length - 1];
-      if (last.end.getTime() <= ev.start.getTime()) {
-        columns[c].push(ev);
-        result.push({ ...ev, col: c, colCount: 0 });
-        placed = true;
+    let placed = -1;
+    for (let c = 0; c < colEnds.length; c++) {
+      if (colEnds[c] <= ev.start.getTime()) {
+        placed = c;
         break;
       }
     }
-    if (!placed) {
-      columns.push([ev]);
-      result.push({ ...ev, col: columns.length - 1, colCount: 0 });
+    if (placed === -1) {
+      placed = colEnds.length;
+      colEnds.push(0);
     }
+    colOf.set(ev.id, placed);
+    colEnds[placed] = ev.end.getTime();
   }
+
+  // Build clique groups: for each event, find the max number of simultaneous overlaps
+  // This gives us the true colCount for that event's clique
+  const result: PositionedEvent[] = sorted.map((ev) => ({ ...ev, col: colOf.get(ev.id)!, colCount: 1 }));
+
+  // For every pair, if they overlap, both need colCount >= max(col)+1 within their clique
+  // We compute connected components of the overlap graph, then colCount = width of that component
+  const idToResult = new Map(result.map((ev) => [ev.id, ev]));
 
   for (const ev of result) {
     let maxCol = ev.col;
     for (const other of result) {
-      if (other.id === ev.id) continue;
-      if (ev.start < other.end && ev.end > other.start && other.col > maxCol) {
-        maxCol = other.col;
+      if (other.id !== ev.id && overlaps(ev, other)) {
+        if (other.col > maxCol) maxCol = other.col;
       }
     }
     ev.colCount = maxCol + 1;
@@ -69,21 +89,32 @@ function layoutEvents(events: CalendarEvent[]): PositionedEvent[] {
 }
 
 // ── Timed event card ───────────────────────────────────────
-function TimedEventCard({ event, refreshKey }: { event: PositionedEvent; refreshKey?: number }) {
+const MIN_SLOT_PX = 48; // below this slot width → ultra-compact dot mode
+
+function TimedEventCard({ event, columnWidthPx = 120, refreshKey }: {
+  event: PositionedEvent; columnWidthPx?: number; refreshKey?: number;
+}) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: event.id });
-  const colW = 100 / event.colCount;
   const h = heightPx(event.start, event.end);
   const isMeeting = event.type === "meeting";
+  const slotPx = columnWidthPx / event.colCount;
+  const isUltraCompact = slotPx < MIN_SLOT_PX;
 
   const style: CSSProperties = {
     position: "absolute",
     top: `${topPx(event.start)}px`,
     height: `${h}px`,
-    left: `calc(${colW * event.col}% + 2px)`,
-    width: `calc(${colW}% - 4px)`,
-    zIndex: isDragging ? 50 : event.col + 1,
+    left: `calc(${(100 / event.colCount) * event.col}% + 2px)`,
+    width: `calc(${100 / event.colCount}% - 4px)`,
+    zIndex: isDragging ? 50 : event.col + 2,
     ...(transform ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` } : {}),
   };
+
+  const tooltip = [
+    event.title,
+    `${event.start.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} – ${event.end.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`,
+    event.teamName ?? event.assigneeName,
+  ].filter(Boolean).join("\n");
 
   return (
     <motion.div
@@ -91,37 +122,49 @@ function TimedEventCard({ event, refreshKey }: { event: PositionedEvent; refresh
       style={style}
       {...attributes}
       {...listeners}
-      animate={{ opacity: isDragging ? 0.5 : 1 }}
+      title={tooltip}
+      animate={{ opacity: isDragging ? 0.4 : 1 }}
       transition={{ duration: 0.1 }}
       className={cn(
-        "rounded-md px-2 py-1 text-xs border overflow-hidden select-none",
-        "cursor-grab active:cursor-grabbing shadow-sm hover:shadow-md transition-shadow duration-150",
+        "rounded-md border overflow-hidden select-none",
+        "cursor-grab active:cursor-grabbing shadow-sm hover:shadow-md hover:ring-1 transition-all duration-150",
         isMeeting
-          ? "bg-gradient-to-br from-primary/25 via-primary/15 to-primary/10 border-primary/40"
-          : "bg-gradient-to-br from-amber-50 via-amber-100/70 to-amber-50 border-amber-300/60 text-amber-900",
-        isDragging && "ring-2 ring-primary/60 shadow-xl opacity-50"
+          ? "bg-gradient-to-b from-primary/30 to-primary/15 border-primary/50 text-primary hover:ring-primary/30"
+          : "bg-gradient-to-b from-amber-200/70 to-amber-100/50 border-amber-300/70 text-amber-900 hover:ring-amber-300/50",
+        isDragging && "ring-2 ring-primary/60 shadow-xl"
       )}
     >
-      <div className="flex items-start gap-1.5 h-full">
-        <div className={cn("w-3.5 h-3.5 rounded flex items-center justify-center shrink-0 mt-0.5", isMeeting ? "bg-primary/25" : "bg-amber-200/70")}>
-          {isMeeting ? <Video className="w-2 h-2 text-primary" /> : <CheckSquare className="w-2 h-2 text-amber-700" />}
+      {isUltraCompact || h < 24 ? (
+        <div className="flex items-center justify-center h-full px-0.5">
+          <div className={cn("w-1.5 h-1.5 rounded-full", isMeeting ? "bg-primary" : "bg-amber-500")} />
         </div>
-        <div className="flex-1 min-w-0">
-          <div className="font-semibold text-[10px] leading-tight truncate">{event.title}</div>
-          {h >= 36 && (
-            <div className="flex items-center gap-1 text-[9px] text-muted-foreground/80 mt-0.5">
-              <Clock className="w-2 h-2 shrink-0" />
-              <span>{event.start.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} – {event.end.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
-            </div>
-          )}
-          {h >= 52 && (event.teamName || event.assigneeName) && (
-            <div className="flex items-center gap-1 text-[9px] text-muted-foreground/70 mt-0.5">
-              <Users className="w-2 h-2 shrink-0" />
-              <span className="truncate">{event.teamName ?? event.assigneeName}</span>
-            </div>
-          )}
+      ) : (
+        <div className="px-1.5 py-1 flex items-start gap-1 h-full overflow-hidden">
+          <div className={cn("w-3 h-3 rounded flex items-center justify-center shrink-0 mt-0.5",
+            isMeeting ? "bg-primary/30" : "bg-amber-300/60")}>
+            {isMeeting ? <Video className="w-2 h-2" /> : <CheckSquare className="w-2 h-2 text-amber-700" />}
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="font-semibold text-[10px] leading-tight truncate">{event.title}</div>
+            {h >= 38 && (
+              <div className="flex items-center gap-0.5 text-[9px] opacity-70 mt-0.5">
+                <Clock className="w-2 h-2 shrink-0" />
+                <span className="truncate">
+                  {event.start.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                  {" – "}
+                  {event.end.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                </span>
+              </div>
+            )}
+            {h >= 56 && (event.teamName || event.assigneeName) && (
+              <div className="flex items-center gap-0.5 text-[9px] opacity-60 mt-0.5">
+                <Users className="w-2 h-2 shrink-0" />
+                <span className="truncate">{event.teamName ?? event.assigneeName}</span>
+              </div>
+            )}
+          </div>
         </div>
-      </div>
+      )}
     </motion.div>
   );
 }
@@ -157,7 +200,7 @@ function AllDayChip({ event }: { event: CalendarEvent }) {
   );
 }
 
-// ── Droppable zones ────────────────────────────────────────
+// ── Droppable time column with width measurement ───────────
 function makeDayId(date: Date) {
   const y = date.getFullYear();
   const m = (date.getMonth() + 1).toString().padStart(2, "0");
@@ -165,15 +208,40 @@ function makeDayId(date: Date) {
   return `${y}-${m}-${d}`;
 }
 
-function DroppableTimeColumn({ date, children }: { date: Date; children: React.ReactNode }) {
-  const { setNodeRef, isOver } = useDroppable({ id: `day-${makeDayId(date)}-time` });
+function DayTimeColumn({ date, positioned, isCurrentDay, refreshKey }: {
+  date: Date;
+  positioned: PositionedEvent[];
+  isCurrentDay: boolean;
+  refreshKey: number;
+}) {
+  const { setNodeRef: dropRef, isOver } = useDroppable({ id: `day-${makeDayId(date)}-time` });
+  const colRef = useRef<HTMLDivElement>(null);
+  const [colWidth, setColWidth] = useState(120);
+
+  useEffect(() => {
+    if (!colRef.current) return;
+    const ro = new ResizeObserver((entries) => {
+      for (const e of entries) setColWidth(e.contentRect.width);
+    });
+    ro.observe(colRef.current);
+    setColWidth(colRef.current.getBoundingClientRect().width);
+    return () => ro.disconnect();
+  }, []);
+
   return (
     <div
-      ref={setNodeRef}
+      ref={(el) => {
+        dropRef(el);
+        (colRef as any).current = el;
+      }}
       style={{ height: `${GRID_HEIGHT}px`, position: "relative", width: "100%" }}
-      className={cn("transition-colors duration-150", isOver && "bg-primary/5")}
+      className={cn("transition-colors duration-150", isOver && "bg-primary/5", isCurrentDay && "bg-primary/[0.02]")}
     >
-      {children}
+      <HourLines />
+      {isCurrentDay && <NowIndicator />}
+      {positioned.map((ev) => (
+        <TimedEventCard key={`${ev.id}-${refreshKey}`} event={ev} columnWidthPx={colWidth} refreshKey={refreshKey} />
+      ))}
     </div>
   );
 }
@@ -310,17 +378,13 @@ export function TimeGrid({ days, eventsByDay, refreshKey = 0, isToday }: TimeGri
             const isCurrentDay = isToday(day) && isSameDay(day, today);
 
             return (
-              <div
-                key={key}
-                className={cn("border-r border-border/25 last:border-r-0 relative min-w-0", isCurrentDay && "bg-primary/[0.02]")}
-              >
-                <DroppableTimeColumn date={day}>
-                  <HourLines />
-                  {isCurrentDay && <NowIndicator />}
-                  {positioned.map((ev) => (
-                    <TimedEventCard key={`${ev.id}-${refreshKey}`} event={ev} refreshKey={refreshKey} />
-                  ))}
-                </DroppableTimeColumn>
+              <div key={key} className="border-r border-border/25 last:border-r-0 min-w-0">
+                <DayTimeColumn
+                  date={day}
+                  positioned={positioned}
+                  isCurrentDay={isCurrentDay}
+                  refreshKey={refreshKey}
+                />
               </div>
             );
           })}
