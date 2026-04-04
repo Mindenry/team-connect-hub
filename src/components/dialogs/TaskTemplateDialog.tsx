@@ -63,7 +63,8 @@ export default function TaskTemplateDialog({
 
   useEffect(() => {
     if (open) {
-      apiGet<any[]>("/teams").catch(() => []).then((t) => setTeams(Array.isArray(t) ? t : []));
+      // Filter out "Personal Recordings" - it's just a personal folder, not a real team
+      apiGet<any[]>("/teams").catch(() => []).then((t) => setTeams(Array.isArray(t) ? t.filter((team: any) => team.name.toLowerCase() !== "personal recordings") : []));
 
       if (template) {
         setName(template.name);

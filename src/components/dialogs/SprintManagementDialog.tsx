@@ -64,8 +64,10 @@ export default function SprintManagementDialog({
   useEffect(() => {
     if (open) {
       apiGet<any[]>("/teams").then((data) => {
-        setTeams(Array.isArray(data) ? data : []);
-        if (data?.length && !selectedTeamId) setSelectedTeamId(data[0].id);
+        // Filter out "Personal Recordings" - it's just a personal folder, not a real team
+        const filtered = Array.isArray(data) ? data.filter((t: any) => t.name.toLowerCase() !== "personal recordings") : [];
+        setTeams(filtered);
+        if (filtered.length && !selectedTeamId) setSelectedTeamId(filtered[0].id);
       });
     }
   }, [open]);

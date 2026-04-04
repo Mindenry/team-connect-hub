@@ -88,7 +88,8 @@ export default function SharedDrive() {
   const loadTeams = async () => {
     try {
       const data = await apiGet<Team[]>("/teams").catch(() => []);
-      const safe = Array.isArray(data) ? data : [];
+      // Filter out "Personal Recordings" - it's just a personal folder, not a real team
+      const safe = (Array.isArray(data) ? data : []).filter((t) => t.name.toLowerCase() !== "personal recordings");
       setTeams(safe);
       if (!safe.length) return;
       const hasTeamInQuery = !!teamIdFromQuery && safe.some((t) => t.id === teamIdFromQuery);

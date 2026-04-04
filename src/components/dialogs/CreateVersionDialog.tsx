@@ -48,11 +48,13 @@ export default function CreateVersionDialog({
     if (open) {
       apiGet<any[]>("/teams")
         .then((data) => {
-          setTeams(Array.isArray(data) ? data : []);
-          if (defaultTeamId && data?.some(t => t.id === defaultTeamId)) {
+          // Filter out "Personal Recordings" - it's just a personal folder, not a real team
+          const filtered = Array.isArray(data) ? data.filter((t: any) => t.name.toLowerCase() !== "personal recordings") : [];
+          setTeams(filtered);
+          if (defaultTeamId && filtered.some(t => t.id === defaultTeamId)) {
             setTeamId(defaultTeamId);
-          } else if (data?.length && !teamId) {
-            setTeamId(data[0].id);
+          } else if (filtered.length && !teamId) {
+            setTeamId(filtered[0].id);
           }
         })
         .catch(() => setTeams([]));

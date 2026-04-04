@@ -36,7 +36,11 @@ export default function InviteUserDialog({ open, onOpenChange, teamId, onInviteS
     if (open) {
       apiGet<any[]>("/teams")
         .then((data) => {
-          setTeams(Array.isArray(data) ? data : []);
+          // Filter out "Personal Recordings" - it's just a personal folder, not a real team
+          const filteredTeams = (Array.isArray(data) ? data : []).filter(
+            (t) => t.name.toLowerCase() !== "personal recordings"
+          );
+          setTeams(filteredTeams);
           if (teamId) setSelectedTeamId(teamId);
         })
         .catch(() => setTeams([]));

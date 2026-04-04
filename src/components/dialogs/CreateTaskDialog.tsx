@@ -93,7 +93,8 @@ export default function CreateTaskDialog({
         apiGet<any[]>("/users").catch(() => []),
         apiGet<TaskTemplate[]>("/tasks/templates").catch(() => []),
       ]).then(([t, u, tmpl]) => {
-        setTeams(Array.isArray(t) ? t : []);
+        // Filter out "Personal Recordings" - it's just a personal folder, not a real team
+        setTeams(Array.isArray(t) ? t.filter((team: any) => team.name.toLowerCase() !== "personal recordings") : []);
         setUsers(Array.isArray(u) ? u : []);
         setTemplates(Array.isArray(tmpl) ? tmpl : []);
       });

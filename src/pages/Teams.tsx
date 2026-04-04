@@ -122,7 +122,8 @@ export default function Teams() {
         apiGet<any[]>("/channels").catch(() => []),
       ]);
 
-      const teamsRes = Array.isArray(teamsResRaw) ? teamsResRaw : [];
+      // Filter out "Personal Recordings" - it's just a personal folder, not a real team
+      const teamsRes = (Array.isArray(teamsResRaw) ? teamsResRaw : []).filter((t: any) => t.name.toLowerCase() !== "personal recordings");
       const tasksRes = Array.isArray(tasksResRaw) ? tasksResRaw : [];
       const channelsRes = Array.isArray(channelsResRaw) ? channelsResRaw : [];
 

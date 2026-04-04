@@ -78,7 +78,10 @@ export default function EditMeetingDialog({
   useEffect(() => {
     if (open) {
       apiGet<any[]>("/teams")
-        .then((data) => setTeams(Array.isArray(data) ? data : []))
+        .then((data) => {
+          // Filter out "Personal Recordings" - it's just a personal folder, not a real team
+          setTeams(Array.isArray(data) ? data.filter((t: any) => t.name.toLowerCase() !== "personal recordings") : []);
+        })
         .catch(() => setTeams([]));
     }
   }, [open]);

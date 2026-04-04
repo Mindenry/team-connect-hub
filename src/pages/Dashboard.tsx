@@ -70,10 +70,12 @@ export default function Dashboard() {
       tomorrow.setDate(tomorrow.getDate() + 1);
       const now = new Date();
 
-      const [meetingsRes, teamsRes] = await Promise.all([
+      const [meetingsRes, teamsResRaw] = await Promise.all([
         apiGet<any[]>("/meetings?status=upcoming").catch(() => []),
         apiGet<any[]>("/teams").catch(() => []),
       ]);
+      // Filter out "Personal Recordings" - it's just a personal folder, not a real team
+      const teamsRes = (Array.isArray(teamsResRaw) ? teamsResRaw : []).filter((t: any) => t.name.toLowerCase() !== "personal recordings");
 
       const [usersRes, tasksRes] = await Promise.all([
         apiGet<any[]>("/users").catch(() => []),

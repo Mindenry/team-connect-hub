@@ -70,7 +70,8 @@ export default function Tasks() {
         apiGet<any[]>("/teams").catch(() => []),
       ]);
       setTasks(Array.isArray(tasksRes) ? tasksRes : []);
-      setTeams(Array.isArray(teamsRes) ? teamsRes : []);
+      // Filter out "Personal Recordings" - it's just a personal folder, not a real team
+      setTeams(Array.isArray(teamsRes) ? teamsRes.filter((t: any) => t.name.toLowerCase() !== "personal recordings") : []);
     } catch (err: any) {
       setError("Failed to load tasks");
     } finally {

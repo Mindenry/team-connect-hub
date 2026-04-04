@@ -71,7 +71,8 @@ export default function Meetings() {
   };
 
   useEffect(() => {
-    apiGet<any[]>("/teams").then((data) => setTeams(Array.isArray(data) ? data : [])).catch(() => setTeams([]));
+    // Filter out "Personal Recordings" - it's just a personal folder, not a real team
+    apiGet<any[]>("/teams").then((data) => setTeams(Array.isArray(data) ? data.filter((t: any) => t.name.toLowerCase() !== "personal recordings") : [])).catch(() => setTeams([]));
   }, []);
 
   useEffect(() => {

@@ -58,7 +58,8 @@ export default function TeamCalendar() {
     let cancelled = false;
     apiGet<any[]>("/teams").catch(() => []).then((data) => {
       if (!cancelled)
-        setTeams((Array.isArray(data) ? data : []).map((t: any) => ({ id: t.id, name: t.name })));
+        // Filter out "Personal Recordings" - it's just a personal folder, not a real team
+        setTeams((Array.isArray(data) ? data : []).filter((t: any) => t.name.toLowerCase() !== "personal recordings").map((t: any) => ({ id: t.id, name: t.name })));
     });
     return () => { cancelled = true; };
   }, []);
