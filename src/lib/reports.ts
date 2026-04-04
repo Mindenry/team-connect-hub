@@ -249,7 +249,7 @@ export interface TeamOption {
 export function getDateRange(range: DateRangeKey): DateRange {
   const end = new Date();
   const start = new Date();
-  
+
   switch (range) {
     case 'week':
       start.setDate(start.getDate() - 7);
@@ -264,7 +264,7 @@ export function getDateRange(range: DateRangeKey): DateRange {
       start.setFullYear(start.getFullYear() - 1);
       break;
   }
-  
+
   return { start, end };
 }
 
@@ -289,7 +289,6 @@ export function formatDateForApi(date: Date): string {
 // ─── API Functions ───────────────────────────────────────────────────────────
 
 export const reportsApi = {
-  // Get all teams for filtering
   async getTeams(): Promise<TeamOption[]> {
     const teams = await apiGet<any[]>('/teams').catch(() => []);
     return (teams || []).map((t) => ({
@@ -299,12 +298,10 @@ export const reportsApi = {
     }));
   },
 
-  // Get personal report
   async getPersonalReport(range: DateRangeKey): Promise<PersonalReportData | null> {
     return apiGet<PersonalReportData>(`/reports?range=${range}`).catch(() => null);
   },
 
-  // Get overview dashboard data
   async getOverviewDashboard(dateRange: DateRange, teamId?: string): Promise<OverviewDashboard | null> {
     const { start, end } = dateRange;
     const params = new URLSearchParams({
@@ -312,11 +309,9 @@ export const reportsApi = {
       endDate: formatDateForApi(end),
     });
     if (teamId) params.append('teamId', teamId);
-    
     return apiGet<OverviewDashboard>(`/reports/overview?${params}`).catch(() => null);
   },
 
-  // Get task report
   async getTaskReport(dateRange: DateRange, teamId?: string): Promise<TaskReport | null> {
     const { start, end } = dateRange;
     const params = new URLSearchParams({
@@ -324,11 +319,9 @@ export const reportsApi = {
       endDate: formatDateForApi(end),
     });
     if (teamId) params.append('teamId', teamId);
-    
     return apiGet<TaskReport>(`/reports/tasks?${params}`).catch(() => null);
   },
 
-  // Get meeting report
   async getMeetingReport(dateRange: DateRange, teamId?: string): Promise<MeetingReport | null> {
     const { start, end } = dateRange;
     const params = new URLSearchParams({
@@ -336,11 +329,9 @@ export const reportsApi = {
       endDate: formatDateForApi(end),
     });
     if (teamId) params.append('teamId', teamId);
-    
     return apiGet<MeetingReport>(`/reports/meetings?${params}`).catch(() => null);
   },
 
-  // Get team productivity report
   async getTeamProductivityReport(teamId: string, dateRange: DateRange): Promise<TeamProductivityReport | null> {
     const { start, end } = dateRange;
     const params = new URLSearchParams({
@@ -348,22 +339,18 @@ export const reportsApi = {
       startDate: formatDateForApi(start),
       endDate: formatDateForApi(end),
     });
-    
     return apiGet<TeamProductivityReport>(`/reports/team-productivity?${params}`).catch(() => null);
   },
 
-  // Get team workload
   async getTeamWorkload(teamId: string, dateRange: DateRange): Promise<TeamWorkloadReport | null> {
     const { start, end } = dateRange;
     const params = new URLSearchParams({
       startDate: formatDateForApi(start),
       endDate: formatDateForApi(end),
     });
-    
     return apiGet<TeamWorkloadReport>(`/reports/teams/${teamId}/workload?${params}`).catch(() => null);
   },
 
-  // Get performance dashboard
   async getPerformanceDashboard(dateRange: DateRange, teamId?: string): Promise<PerformanceDashboard | null> {
     const { start, end } = dateRange;
     const params = new URLSearchParams({
@@ -371,19 +358,13 @@ export const reportsApi = {
       endDate: formatDateForApi(end),
     });
     if (teamId) params.append('teamId', teamId);
-    
     return apiGet<PerformanceDashboard>(`/reports/performance?${params}`).catch(() => null);
   },
 
-  // Export report
   async exportReport(
     type: ReportType,
     format: ExportFormat,
-    options: {
-      dateRange: DateRange;
-      teamId?: string;
-      range?: DateRangeKey;
-    }
+    options: { dateRange: DateRange; teamId?: string; range?: DateRangeKey }
   ): Promise<Blob> {
     const { start, end } = options.dateRange;
     const params = new URLSearchParams({
@@ -394,63 +375,468 @@ export const reportsApi = {
     });
     if (options.teamId) params.append('teamId', options.teamId);
     if (options.range) params.append('range', options.range);
-    
+
     const res = await apiFetch(`/reports/export?${params}`);
-    if (!res.ok) {
-      throw new Error('Export failed');
-    }
+    if (!res.ok) throw new Error('Export failed');
     return res.blob();
   },
 };
 
-// ─── Export Utilities (Client-side) ──────────────────────────────────────────
+// ─── Export Utilities ────────────────────────────────────────────────────────
 
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
+// ─── Design Tokens ───────────────────────────────────────────────────────────
+
+const BRAND = {
+  // Primary palette
+  navy:       [15,  23,  42]  as [number, number, number],   // #0F172A — headings, text
+  blue:       [37,  99,  235] as [number, number, number],   // #2563EB — primary accent
+  blueLight:  [96,  165, 250] as [number, number, number],   // #60A5FA — secondary accent
+  bluePale:   [219, 234, 254] as [number, number, number],   // #DBEAFE — tint backgrounds
+
+  // Status colours
+  green:      [16,  185, 129] as [number, number, number],   // #10B981
+  greenPale:  [209, 250, 229] as [number, number, number],
+  amber:      [245, 158, 11]  as [number, number, number],   // #F59E0B
+  amberPale:  [254, 243, 199] as [number, number, number],
+  red:        [239, 68,  68]  as [number, number, number],   // #EF4444
+  redPale:    [254, 226, 226] as [number, number, number],
+  purple:     [139, 92,  246] as [number, number, number],   // #8B5CF6
+
+  // Neutrals
+  slate900:   [15,  23,  42]  as [number, number, number],
+  slate700:   [51,  65,  85]  as [number, number, number],
+  slate500:   [100, 116, 139] as [number, number, number],
+  slate300:   [203, 213, 225] as [number, number, number],
+  slate100:   [241, 245, 249] as [number, number, number],
+  slate50:    [248, 250, 252] as [number, number, number],
+  white:      [255, 255, 255] as [number, number, number],
+};
+
+// ─── PDF Layout Helpers ───────────────────────────────────────────────────────
+
+interface PdfContext {
+  doc: jsPDF;
+  pageW: number;
+  pageH: number;
+  margin: number;
+  contentW: number;
+  y: number;
+}
+
+function newPage(ctx: PdfContext): void {
+  ctx.doc.addPage();
+  ctx.y = ctx.margin;
+  drawPageBackground(ctx);
+}
+
+function ensureSpace(ctx: PdfContext, needed: number): void {
+  if (ctx.y + needed > ctx.pageH - ctx.margin - 20) newPage(ctx);
+}
+
+function drawPageBackground(ctx: PdfContext): void {
+  const { doc, pageW, pageH } = ctx;
+  // Subtle left accent strip
+  doc.setFillColor(...BRAND.blue);
+  doc.rect(0, 0, 3, pageH, 'F');
+  // Very light page tint
+  doc.setFillColor(250, 251, 255);
+  doc.rect(3, 0, pageW - 3, pageH, 'F');
+}
+
+function drawSectionHeading(ctx: PdfContext, title: string, icon?: string): void {
+  ensureSpace(ctx, 18);
+  const { doc, margin, contentW, y } = ctx;
+
+  // Pill background
+  doc.setFillColor(...BRAND.bluePale);
+  doc.roundedRect(margin, y, contentW, 10, 2, 2, 'F');
+
+  // Left accent bar on pill
+  doc.setFillColor(...BRAND.blue);
+  doc.roundedRect(margin, y, 3, 10, 1, 1, 'F');
+
+  // Title text
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.setTextColor(...BRAND.blue);
+  doc.text((icon ? icon + '  ' : '') + title.toUpperCase(), margin + 8, y + 6.8);
+
+  ctx.y += 14;
+}
+
+function drawKpiRow(
+  ctx: PdfContext,
+  kpis: { label: string; value: string | number; sub?: string; color?: [number, number, number]; paleColor?: [number, number, number] }[]
+): void {
+  ensureSpace(ctx, 30);
+  const { doc, margin, contentW, y } = ctx;
+  const count = kpis.length;
+  const cardW = (contentW - (count - 1) * 4) / count;
+
+  kpis.forEach((kpi, i) => {
+    const x = margin + i * (cardW + 4);
+    const accent = kpi.color || BRAND.blue;
+    const pale   = kpi.paleColor || BRAND.bluePale;
+
+    // Card shadow (fake — shifted rect)
+    doc.setFillColor(200, 210, 230);
+    doc.roundedRect(x + 0.8, y + 0.8, cardW, 26, 3, 3, 'F');
+
+    // Card body
+    doc.setFillColor(...BRAND.white);
+    doc.roundedRect(x, y, cardW, 26, 3, 3, 'F');
+
+    // Top colour strip
+    doc.setFillColor(...accent);
+    doc.roundedRect(x, y, cardW, 4, 3, 3, 'F');
+    doc.rect(x, y + 2, cardW, 2, 'F'); // flatten bottom of strip
+
+    // Dot
+    doc.setFillColor(...pale);
+    doc.circle(x + cardW - 9, y + 13, 5, 'F');
+    doc.setFillColor(...accent);
+    doc.circle(x + cardW - 9, y + 13, 2.5, 'F');
+
+    // Value
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(14);
+    doc.setTextColor(...BRAND.navy);
+    doc.text(String(kpi.value), x + 5, y + 16);
+
+    // Label
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7);
+    doc.setTextColor(...BRAND.slate500);
+    doc.text(kpi.label, x + 5, y + 22);
+
+    // Sub text
+    if (kpi.sub) {
+      doc.setFont('helvetica', 'italic');
+      doc.setFontSize(6.5);
+      doc.setTextColor(...BRAND.slate500);
+      doc.text(kpi.sub, x + 5, y + 26.5);
+    }
+  });
+
+  ctx.y += 32;
+}
+
+function drawHorizontalBar(
+  ctx: PdfContext,
+  label: string,
+  value: number,   // 0–100
+  displayValue: string,
+  color: [number, number, number],
+  weight?: string
+): void {
+  ensureSpace(ctx, 14);
+  const { doc, margin, contentW, y } = ctx;
+  const trackW = contentW - 48;
+
+  // Label
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(...BRAND.slate700);
+  doc.text(label, margin, y + 4);
+
+  // Weight badge
+  if (weight) {
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(6.5);
+    doc.setTextColor(...color);
+    doc.text(weight, margin + trackW + 4 + 12, y + 4, { align: 'right' });
+  }
+
+  // Track background
+  doc.setFillColor(...BRAND.slate100);
+  doc.roundedRect(margin, y + 6, trackW, 5, 2, 2, 'F');
+
+  // Filled bar
+  const fillW = Math.max(0, (value / 100) * trackW);
+  if (fillW > 0) {
+    doc.setFillColor(...color);
+    doc.roundedRect(margin, y + 6, fillW, 5, 2, 2, 'F');
+  }
+
+  // Score label
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8.5);
+  doc.setTextColor(...BRAND.navy);
+  doc.text(displayValue, margin + trackW + 4, y + 10.5);
+
+  ctx.y += 14;
+}
+
+function drawDivider(ctx: PdfContext, spaceAbove = 4, spaceBelow = 4): void {
+  ctx.y += spaceAbove;
+  ctx.doc.setDrawColor(...BRAND.slate300);
+  ctx.doc.setLineWidth(0.2);
+  ctx.doc.line(ctx.margin, ctx.y, ctx.margin + ctx.contentW, ctx.y);
+  ctx.y += spaceBelow;
+}
+
+function drawStatusBadge(
+  doc: jsPDF,
+  text: string,
+  x: number,
+  y: number
+): void {
+  const t = text.toLowerCase();
+  const color: [number, number, number] =
+    t.includes('complet') ? BRAND.green :
+    t.includes('progress') ? BRAND.blue :
+    t.includes('overdue') || t.includes('cancel') ? BRAND.red :
+    t.includes('todo') || t.includes('pending') ? BRAND.amber :
+    BRAND.slate500;
+
+  const pale: [number, number, number] =
+    t.includes('complet') ? BRAND.greenPale :
+    t.includes('progress') ? BRAND.bluePale :
+    t.includes('overdue') || t.includes('cancel') ? BRAND.redPale :
+    t.includes('todo') || t.includes('pending') ? BRAND.amberPale :
+    BRAND.slate100;
+
+  doc.setFillColor(...pale);
+  doc.roundedRect(x - 1, y - 3.5, 20, 5, 1.5, 1.5, 'F');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(6.5);
+  doc.setTextColor(...color);
+  doc.text(text.charAt(0).toUpperCase() + text.slice(1), x, y, { align: 'left' });
+}
+
+// ─── Cover Page ───────────────────────────────────────────────────────────────
+
+function drawCoverPage(
+  ctx: PdfContext,
+  opts: { title: string; subtitle: string; period: string; reportType: string }
+): void {
+  const { doc, pageW, pageH } = ctx;
+
+  // Full navy background
+  doc.setFillColor(...BRAND.navy);
+  doc.rect(0, 0, pageW, pageH, 'F');
+
+  // Geometric accent shapes
+  doc.setFillColor(37, 99, 235, 0.25); // translucent blue
+  doc.setFillColor(30, 58, 138);
+  doc.ellipse(pageW - 20, 30, 55, 55, 'F');
+  doc.setFillColor(23, 37, 84);
+  doc.ellipse(pageW - 5, 50, 35, 35, 'F');
+  doc.setFillColor(30, 58, 138);
+  doc.ellipse(20, pageH - 30, 40, 40, 'F');
+  doc.setFillColor(23, 37, 84);
+  doc.ellipse(5, pageH - 10, 22, 22, 'F');
+
+  // Thin horizontal rule at 45%
+  const ruleY = pageH * 0.45;
+  doc.setDrawColor(...BRAND.blue);
+  doc.setLineWidth(0.4);
+  doc.line(14, ruleY, pageW - 14, ruleY);
+
+  // Brand mark — left coloured bar + wordmark
+  doc.setFillColor(...BRAND.blue);
+  doc.rect(14, 24, 4, 20, 'F');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(22);
+  doc.setTextColor(...BRAND.white);
+  doc.text('Team Connect', 22, 38);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.setTextColor(...BRAND.blueLight);
+  doc.text('Productivity & Analytics Platform', 22, 46);
+
+  // Report type badge
+  doc.setFillColor(...BRAND.blue);
+  doc.roundedRect(14, ruleY + 14, 42, 8, 2, 2, 'F');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7);
+  doc.setTextColor(...BRAND.white);
+  doc.text(opts.reportType.toUpperCase() + ' REPORT', 35, ruleY + 19.5, { align: 'center' });
+
+  // Main title
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(26);
+  doc.setTextColor(...BRAND.white);
+  const titleLines = doc.splitTextToSize(opts.title, pageW - 28) as string[];
+  let titleY = ruleY + 30;
+  titleLines.forEach((line: string) => {
+    doc.text(line, 14, titleY);
+    titleY += 11;
+  });
+
+  // Subtitle
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(11);
+  doc.setTextColor(...BRAND.blueLight);
+  doc.text(opts.subtitle, 14, titleY + 4);
+
+  // Period pill
+  titleY += 18;
+  doc.setFillColor(255, 255, 255, 0.12);
+  doc.setFillColor(30, 58, 138);
+  doc.roundedRect(14, titleY, 80, 10, 2, 2, 'F');
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(...BRAND.blueLight);
+  doc.text('Reporting Period:', 18, titleY + 6.5);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(...BRAND.white);
+  doc.text(opts.period, 50, titleY + 6.5);
+
+  // Generation timestamp (bottom)
+  const now = new Date();
+  const genStr = `Generated on ${now.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })} at ${now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7.5);
+  doc.setTextColor(...BRAND.slate500);
+  doc.text(genStr, pageW - 14, pageH - 12, { align: 'right' });
+  doc.text('CONFIDENTIAL — FOR INTERNAL USE ONLY', 14, pageH - 12);
+}
+
+// ─── Header/Footer ────────────────────────────────────────────────────────────
+
+function drawHeader(ctx: PdfContext, reportTitle: string): void {
+  const { doc, pageW, margin } = ctx;
+
+  // Left strip (already drawn in background, but reinforce)
+  doc.setFillColor(...BRAND.blue);
+  doc.rect(0, 0, 3, 18, 'F');
+
+  // White header bar
+  doc.setFillColor(...BRAND.white);
+  doc.rect(3, 0, pageW - 3, 18, 'F');
+
+  // Brand name
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.setTextColor(...BRAND.blue);
+  doc.text('Team Connect', margin, 11);
+
+  // Report title (centre)
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(...BRAND.slate500);
+  doc.text(reportTitle, pageW / 2, 11, { align: 'center' });
+
+  // Thin underline
+  doc.setDrawColor(...BRAND.slate300);
+  doc.setLineWidth(0.3);
+  doc.line(margin, 18, pageW - margin, 18);
+}
+
+function drawFooters(doc: jsPDF, pageW: number, pageH: number, margin: number): void {
+  const total = doc.getNumberOfPages();
+  for (let i = 2; i <= total; i++) {   // skip cover (page 1)
+    doc.setPage(i);
+
+    doc.setDrawColor(...BRAND.slate300);
+    doc.setLineWidth(0.2);
+    doc.line(margin, pageH - 14, pageW - margin, pageH - 14);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7);
+    doc.setTextColor(...BRAND.slate500);
+    doc.text('Team Connect  •  Confidential — Internal Use Only', margin, pageH - 8);
+    doc.text(`Page ${i - 1} of ${total - 1}`, pageW - margin, pageH - 8, { align: 'right' });
+  }
+}
+
+// ─── exportUtils ─────────────────────────────────────────────────────────────
+
 export const exportUtils = {
-  // Export to CSV
+  // ── CSV ──────────────────────────────────────────────────────────────────
   toCSV(data: Record<string, any>[], filename: string): void {
     if (!data.length) return;
-    
+
     const headers = Object.keys(data[0]);
-    const csvContent = [
-      headers.join(','),
-      ...data.map(row => 
+    const csvRows = [
+      headers.map(h => `"${formatHeader(h)}"`).join(','),
+      ...data.map(row =>
         headers.map(h => {
-          const value = row[h];
-          if (value === null || value === undefined) return '';
-          if (typeof value === 'string' && (value.includes(',') || value.includes('"') || value.includes('\n'))) {
-            return `"${value.replace(/"/g, '""')}"`;
-          }
-          return String(value);
+          const v = row[h];
+          if (v === null || v === undefined) return '';
+          const s = String(v);
+          return s.includes(',') || s.includes('"') || s.includes('\n')
+            ? `"${s.replace(/"/g, '""')}"`
+            : s;
         }).join(',')
-      )
-    ].join('\n');
-    
-    const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
+      ),
+    ];
+
+    const blob = new Blob(['\ufeff' + csvRows.join('\n'), { type: 'text/csv;charset=utf-8;' }]);
     downloadBlob(blob, `${filename}.csv`);
   },
 
-  // Export to Excel
+  // ── Excel (single sheet) ─────────────────────────────────────────────────
   toExcel(data: Record<string, any>[], filename: string, sheetName = 'Report'): void {
     if (!data.length) return;
-    
-    const ws = XLSX.utils.json_to_sheet(data);
+
+    // Rename keys to pretty headers
+    const pretty = data.map(row =>
+      Object.fromEntries(Object.entries(row).map(([k, v]) => [formatHeader(k), v]))
+    );
+
+    const ws = XLSX.utils.json_to_sheet(pretty);
+
+    // Column width: auto-fit to longest value
+    const cols = Object.keys(pretty[0]);
+    ws['!cols'] = cols.map(col => ({
+      wch: Math.min(40, Math.max(col.length + 2, ...pretty.map(r => String(r[col] ?? '').length + 2))),
+    }));
+
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, sheetName);
+    XLSX.utils.book_append_sheet(wb, ws, sheetName.substring(0, 31));
     XLSX.writeFile(wb, `${filename}.xlsx`);
   },
 
-  // Export to JSON
+  // ── JSON ─────────────────────────────────────────────────────────────────
   toJSON(data: any, filename: string): void {
-    const jsonContent = JSON.stringify(data, null, 2);
-    const blob = new Blob([jsonContent], { type: 'application/json' });
+    const payload = {
+      meta: {
+        exportedAt: new Date().toISOString(),
+        generator: 'Team Connect Report Export',
+        version: '2.0',
+        filename,
+      },
+      data,
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
     downloadBlob(blob, `${filename}.json`);
   },
 
-  // Export to PDF - Professional Report Template
+  // ── Excel Multi-sheet ────────────────────────────────────────────────────
+  toExcelMultiSheet(
+    sheets: { name: string; data: Record<string, any>[] }[],
+    filename: string
+  ): void {
+    const wb = XLSX.utils.book_new();
+
+    sheets.forEach(({ name, data }) => {
+      if (!data.length) return;
+
+      const pretty = data.map(row =>
+        Object.fromEntries(Object.entries(row).map(([k, v]) => [formatHeader(k), v]))
+      );
+
+      const ws = XLSX.utils.json_to_sheet(pretty);
+
+      const cols = Object.keys(pretty[0]);
+      ws['!cols'] = cols.map(col => ({
+        wch: Math.min(40, Math.max(col.length + 2, ...pretty.map(r => String(r[col] ?? '').length + 2))),
+      }));
+
+      XLSX.utils.book_append_sheet(wb, ws, name.substring(0, 31));
+    });
+
+    XLSX.writeFile(wb, `${filename}.xlsx`);
+  },
+
+  // ── PDF ──────────────────────────────────────────────────────────────────
   toPDF(
     data: Record<string, any>[],
     filename: string,
@@ -459,8 +845,9 @@ export const exportUtils = {
       subtitle?: string;
       columns?: { header: string; dataKey: string }[];
       orientation?: 'portrait' | 'landscape';
-      reportType?: 'overview' | 'personal' | 'team' | 'performance';
-      reportData?: any;
+      reportType?: ReportType;
+      reportData?: PersonalReportData;
+      period?: string;
     } = {}
   ): void {
     const doc = new jsPDF({
@@ -469,314 +856,291 @@ export const exportUtils = {
       format: 'a4',
     });
 
-    const pageWidth = doc.internal.pageSize.getWidth();
-    const pageHeight = doc.internal.pageSize.getHeight();
+    const pageW = doc.internal.pageSize.getWidth();
+    const pageH = doc.internal.pageSize.getHeight();
     const margin = 14;
-    let currentY = 14;
 
-    // ─── Header Section ─────────────────────────────────────────────────────
-    // Blue header bar
-    doc.setFillColor(37, 99, 235);
-    doc.rect(0, 0, pageWidth, 35, 'F');
+    const ctx: PdfContext = {
+      doc,
+      pageW,
+      pageH,
+      margin,
+      contentW: pageW - margin * 2,
+      y: margin,
+    };
 
-    // Company/Brand name
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(20);
-    doc.setFont('helvetica', 'bold');
-    doc.text('Team Connect', margin, 15);
+    // ── Page 1: Cover ──────────────────────────────────────────────────────
 
-    // Report title
-    doc.setFontSize(12);
-    doc.setFont('helvetica', 'normal');
-    doc.text(options.title || 'Professional Report', margin, 26);
-
-    // Date on right side
     const now = new Date();
-    const dateStr = now.toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' });
-    const timeStr = now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
-    doc.setFontSize(9);
-    doc.text(`Generated: ${dateStr} ${timeStr}`, pageWidth - margin, 15, { align: 'right' });
-    doc.text(`Period: ${options.subtitle || 'Monthly Report'}`, pageWidth - margin, 26, { align: 'right' });
+    const periodLabel = options.period || options.subtitle || now.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+    const reportTypeName =
+      options.reportType === 'personal'     ? 'Personal Productivity' :
+      options.reportType === 'team'         ? 'Team Productivity'     :
+      options.reportType === 'performance'  ? 'Performance Analytics' :
+                                              'Overview';
 
-    currentY = 45;
-
-    // ─── Executive Summary Section ───────────────────────────────────────────
-    doc.setTextColor(30, 41, 59);
-    doc.setFontSize(14);
-    doc.setFont('helvetica', 'bold');
-    doc.text('Executive Summary', margin, currentY);
-    currentY += 8;
-
-    // Summary box
-    doc.setFillColor(248, 250, 252);
-    doc.roundedRect(margin, currentY, pageWidth - margin * 2, 50, 3, 3, 'F');
-    doc.setDrawColor(226, 232, 240);
-    doc.roundedRect(margin, currentY, pageWidth - margin * 2, 50, 3, 3, 'S');
-
-    // Extract key metrics from data
-    const summaryData = data.find(d => d.category === 'Summary' || d.category === 'Personal Report');
-    const taskData = data.find(d => d.category === 'Task Completion');
-    const collabData = data.filter(d => d.category === 'Collaboration');
-
-    // Key metrics row
-    const metrics = [
-      { label: 'Tasks Completed', value: summaryData?.value || summaryData?.completedTasks || taskData?.completedTasks || 0, color: [16, 185, 129] },
-      { label: 'Meetings Attended', value: summaryData?.meetingsAttended || taskData?.attendedMeetings || 0, color: [59, 130, 246] },
-      { label: 'Messages Sent', value: summaryData?.messagesSent || 0, color: [139, 92, 246] },
-      { label: 'Productivity Score', value: `${summaryData?.value || summaryData?.productivityScore || 0}%`, color: [245, 158, 11] },
-    ];
-
-    const metricWidth = (pageWidth - margin * 2 - 12) / 4;
-    metrics.forEach((metric, i) => {
-      const x = margin + 6 + i * (metricWidth + 4);
-      const y = currentY + 8;
-
-      // Metric icon circle
-      doc.setFillColor(metric.color[0], metric.color[1], metric.color[2]);
-      doc.circle(x + 8, y + 8, 6, 'F');
-
-      // Metric value
-      doc.setTextColor(30, 41, 59);
-      doc.setFontSize(16);
-      doc.setFont('helvetica', 'bold');
-      doc.text(String(metric.value), x + 18, y + 10);
-
-      // Metric label
-      doc.setTextColor(100, 116, 139);
-      doc.setFontSize(8);
-      doc.setFont('helvetica', 'normal');
-      doc.text(metric.label, x + 18, y + 18);
+    drawCoverPage(ctx, {
+      title:      options.title || 'Productivity Report',
+      subtitle:   options.subtitle || 'Detailed Analytics & Insights',
+      period:     periodLabel,
+      reportType: reportTypeName,
     });
 
-    currentY += 60;
+    // ── Page 2: Summary ────────────────────────────────────────────────────
 
-    // ─── Performance Breakdown Section ──────────────────────────────────────
-    if (options.reportData?.productivityBreakdown) {
-      const breakdown = options.reportData.productivityBreakdown;
-      
-      doc.setTextColor(30, 41, 59);
-      doc.setFontSize(14);
-      doc.setFont('helvetica', 'bold');
-      doc.text('Performance Breakdown', margin, currentY);
-      currentY += 5;
-      
-      // Methodology citation
-      doc.setTextColor(100, 116, 139);
-      doc.setFontSize(7);
+    doc.addPage();
+    drawPageBackground(ctx);
+    drawHeader(ctx, options.title || 'Productivity Report');
+    ctx.y = 26;
+
+    // ── KPI cards ─────────────────────────────────────────────────────────
+
+    const rd = options.reportData;
+    const summaryRow = data.find(d => d.category === 'Summary' || d.category === 'Personal Report');
+
+    if (rd || summaryRow) {
+      drawSectionHeading(ctx, 'Key Performance Indicators');
+
+      drawKpiRow(ctx, [
+        {
+          label:     'Tasks Completed',
+          value:     rd?.tasksCompleted ?? summaryRow?.completed ?? summaryRow?.completedTasks ?? 0,
+          sub:       `Rate: ${rd?.taskCompletionRate ?? 0}%`,
+          color:     BRAND.green,
+          paleColor: BRAND.greenPale,
+        },
+        {
+          label:     'Meetings Attended',
+          value:     rd?.meetingsAttended ?? summaryRow?.meetingsAttended ?? 0,
+          color:     BRAND.blue,
+          paleColor: BRAND.bluePale,
+        },
+        {
+          label:     'Messages Sent',
+          value:     rd?.messagesSent ?? summaryRow?.messagesSent ?? 0,
+          color:     BRAND.purple,
+          paleColor: [237, 233, 254] as [number, number, number],
+        },
+        {
+          label:     'Productivity Score',
+          value:     `${rd?.productivityScore ?? summaryRow?.productivityScore ?? 0}%`,
+          sub:       rd?.activeDays ? `${rd.activeDays} active days` : undefined,
+          color:     BRAND.amber,
+          paleColor: BRAND.amberPale,
+        },
+      ]);
+    }
+
+    // ── Productivity Breakdown ────────────────────────────────────────────
+
+    if (rd?.productivityBreakdown) {
+      const bd = rd.productivityBreakdown;
+      drawSectionHeading(ctx, 'Performance Breakdown');
+
+      // Methodology note
       doc.setFont('helvetica', 'italic');
-      doc.text('Based on Balanced Scorecard (Kaplan & Norton, 1996) with Task Difficulty Adjustment', margin, currentY + 3);
-      currentY += 10;
+      doc.setFontSize(7);
+      doc.setTextColor(...BRAND.slate500);
+      doc.text(
+        'Methodology: Balanced Scorecard (Kaplan & Norton, 1996) with Task Difficulty Adjustment',
+        margin, ctx.y
+      );
+      ctx.y += 7;
 
-      // Breakdown bars - 4 factors
-      const barMetrics = [
-        { label: 'Adjusted Task Performance', score: breakdown.adjustedTaskPerformance, weight: breakdown.weights?.adjustedTaskPerformance || 45, color: [16, 185, 129] },
-        { label: 'Meaningful Engagement', score: breakdown.meaningfulEngagement, weight: breakdown.weights?.meaningfulEngagement || 20, color: [59, 130, 246] },
-        { label: 'Communication Effectiveness', score: breakdown.communicationEffectiveness, weight: breakdown.weights?.communicationEffectiveness || 20, color: [139, 92, 246] },
-        { label: 'Work Consistency', score: breakdown.workConsistency, weight: breakdown.weights?.workConsistency || 15, color: [245, 158, 11] },
-      ];
+      drawHorizontalBar(ctx,
+        'Adjusted Task Performance',
+        bd.adjustedTaskPerformance,
+        `${bd.adjustedTaskPerformance}%`,
+        BRAND.green,
+        `${bd.weights?.adjustedTaskPerformance ?? 45}% weight`
+      );
+      drawHorizontalBar(ctx,
+        'Meaningful Engagement',
+        bd.meaningfulEngagement,
+        `${bd.meaningfulEngagement}%`,
+        BRAND.blue,
+        `${bd.weights?.meaningfulEngagement ?? 20}% weight`
+      );
+      drawHorizontalBar(ctx,
+        'Communication Effectiveness',
+        bd.communicationEffectiveness,
+        `${bd.communicationEffectiveness}%`,
+        BRAND.purple,
+        `${bd.weights?.communicationEffectiveness ?? 20}% weight`
+      );
+      drawHorizontalBar(ctx,
+        'Work Consistency',
+        bd.workConsistency,
+        `${bd.workConsistency}%`,
+        BRAND.amber,
+        `${bd.weights?.workConsistency ?? 15}% weight`
+      );
 
-      barMetrics.forEach((metric, i) => {
-        const barY = currentY + i * 14;
-        const barWidth = (pageWidth - margin * 2 - 60) * (metric.score / 100);
+      ctx.y += 4;
 
-        doc.setTextColor(100, 116, 139);
-        doc.setFontSize(8);
-        doc.setFont('helvetica', 'normal');
-        doc.text(`${metric.label} (${metric.weight}% weight)`, margin, barY + 3);
+      // Meta row
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7.5);
+      doc.setTextColor(...BRAND.slate500);
+      doc.text(
+        `Active Days: ${bd.activeDays} / ${bd.periodDays}   •   Difficulty Factor: ×${bd.difficultyFactor}`,
+        margin, ctx.y
+      );
+      ctx.y += 8;
 
-        // Background bar
-        doc.setFillColor(241, 245, 249);
-        doc.roundedRect(margin, barY + 5, pageWidth - margin * 2 - 60, 5, 2, 2, 'F');
-
-        // Progress bar
-        if (barWidth > 0) {
-          doc.setFillColor(metric.color[0], metric.color[1], metric.color[2]);
-          doc.roundedRect(margin, barY + 5, barWidth, 5, 2, 2, 'F');
-        }
-
-        // Score text
-        doc.setTextColor(30, 41, 59);
-        doc.setFontSize(9);
+      if (bd.antiGamingApplied) {
+        doc.setFillColor(...BRAND.amberPale);
+        doc.roundedRect(margin, ctx.y, ctx.contentW, 9, 2, 2, 'F');
         doc.setFont('helvetica', 'bold');
-        doc.text(`${metric.score}%`, pageWidth - margin - 20, barY + 9);
-      });
-
-      currentY += barMetrics.length * 14 + 5;
-      
-      // Additional info
-      doc.setTextColor(100, 116, 139);
-      doc.setFontSize(8);
-      doc.text(`Active Days: ${breakdown.activeDays}/${breakdown.periodDays} days  •  Difficulty Factor: ${breakdown.difficultyFactor}x`, margin, currentY);
-      currentY += 5;
-      
-      // Anti-gaming warning if applied
-      if (breakdown.antiGamingApplied) {
-        doc.setTextColor(217, 119, 6);
-        doc.setFontSize(7);
-        doc.text('⚠ Anti-Gaming Rule Applied: Score capped at 50% due to low task completion', margin, currentY + 3);
-        currentY += 8;
-      } else {
-        currentY += 5;
+        doc.setFontSize(7.5);
+        doc.setTextColor(...BRAND.amber);
+        doc.text('⚠  Anti-Gaming Rule Applied: Score capped at 50% due to low task completion rate', margin + 4, ctx.y + 5.5);
+        ctx.y += 14;
       }
     }
 
-    // ─── Data Table Section ──────────────────────────────────────────────────
-    doc.setTextColor(30, 41, 59);
-    doc.setFontSize(14);
-    doc.setFont('helvetica', 'bold');
-    doc.text('Detailed Report', margin, currentY);
-    currentY += 6;
+    // ── Team Contributions ────────────────────────────────────────────────
 
-    // Filter and prepare table data
-    const tableData = data.filter(d => d.category !== 'Summary' && d.category !== 'Personal Report');
-    
+    const teamMetrics = (rd?.teamMetrics || data.filter(d => d.category === 'Team'));
+    if (teamMetrics && teamMetrics.length > 0) {
+      drawDivider(ctx);
+      drawSectionHeading(ctx, 'Team Contributions');
+
+      teamMetrics.forEach((t: any, i: number) => {
+        ensureSpace(ctx, 20);
+        const { y } = ctx;
+
+        // Alternating row tint
+        if (i % 2 === 0) {
+          doc.setFillColor(...BRAND.slate50);
+          doc.roundedRect(margin, y, ctx.contentW, 15, 2, 2, 'F');
+        }
+
+        // Team name
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(8.5);
+        doc.setTextColor(...BRAND.navy);
+        doc.text(t.teamName || `Team ${i + 1}`, margin + 4, y + 6);
+
+        // Stats inline
+        const stats = [
+          { label: 'Tasks', val: t.tasksCompleted ?? t.tasks ?? 0 },
+          { label: 'Meetings', val: t.meetingsAttended ?? t.meetings ?? 0 },
+          { label: 'Messages', val: t.messagesSent ?? t.messages ?? 0 },
+        ];
+        stats.forEach((s, si) => {
+          const sx = margin + 60 + si * 42;
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(8.5);
+          doc.setTextColor(...BRAND.navy);
+          doc.text(String(s.val), sx, y + 6);
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(6.5);
+          doc.setTextColor(...BRAND.slate500);
+          doc.text(s.label, sx, y + 12);
+        });
+
+        ctx.y += 17;
+      });
+    }
+
+    // ── Detailed Data Table ───────────────────────────────────────────────
+
+    const tableData = data.filter(
+      d => d.category !== 'Summary' && d.category !== 'Personal Report' && d.category !== 'Team'
+    );
+
     if (tableData.length > 0) {
-      // Determine columns
-      const columns = options.columns || 
-        Object.keys(tableData[0]).map(key => ({ header: formatHeader(key), dataKey: key }));
+      ensureSpace(ctx, 20);
+      drawDivider(ctx);
+      drawSectionHeading(ctx, 'Detailed Data');
+
+      const columns = options.columns ||
+        Object.keys(tableData[0]).map(k => ({ header: formatHeader(k), dataKey: k }));
+
+      // Category column gets a badge; status column gets coloured text
+      const statusColIdx = columns.findIndex(c => c.dataKey.toLowerCase().includes('status'));
+      const catColIdx    = columns.findIndex(c => c.dataKey.toLowerCase() === 'category');
 
       autoTable(doc, {
         head: [columns.map(c => c.header)],
         body: tableData.map(row => columns.map(c => String(row[c.dataKey] ?? ''))),
-        startY: currentY,
+        startY: ctx.y,
         margin: { left: margin, right: margin },
         styles: {
-          fontSize: 8,
-          cellPadding: 3,
+          fontSize: 7.5,
+          cellPadding: { top: 3, bottom: 3, left: 4, right: 4 },
           font: 'helvetica',
+          lineColor: BRAND.slate300,
+          lineWidth: 0.1,
+          valign: 'middle',
         },
         headStyles: {
-          fillColor: [37, 99, 235],
-          textColor: 255,
+          fillColor: BRAND.navy,
+          textColor: BRAND.white,
           fontStyle: 'bold',
+          fontSize: 7.5,
           halign: 'left',
+          cellPadding: { top: 4, bottom: 4, left: 4, right: 4 },
         },
         alternateRowStyles: {
-          fillColor: [248, 250, 252],
+          fillColor: BRAND.slate50,
         },
         columnStyles: {
-          0: { fontStyle: 'bold', cellWidth: 35 },
+          ...(catColIdx >= 0 ? {
+            [catColIdx]: { fontStyle: 'bold', textColor: BRAND.blue, cellWidth: 32 },
+          } : {}),
+          ...(statusColIdx >= 0 ? {
+            [statusColIdx]: { fontStyle: 'bold' },
+          } : {}),
         },
-        tableLineColor: [226, 232, 240],
-        tableLineWidth: 0.1,
+        didDrawCell: (hookData) => {
+          // Colour status cells
+          if (statusColIdx >= 0 && hookData.column.index === statusColIdx && hookData.section === 'body') {
+            const raw = String(tableData[hookData.row.index]?.[columns[statusColIdx].dataKey] ?? '');
+            drawStatusBadge(doc, raw, hookData.cell.x + 4, hookData.cell.y + hookData.cell.height / 2 + 1.5);
+          }
+        },
+        tableLineColor: BRAND.slate300,
+        tableLineWidth: 0.15,
       });
 
-      currentY = (doc as any).lastAutoTable?.finalY || currentY + 30;
+      ctx.y = (doc as any).lastAutoTable?.finalY + 6 || ctx.y + 30;
     }
 
-    // ─── Team Metrics Section (if available) ──────────────────────────────────
-    const teamMetrics = data.filter(d => d.category === 'Team');
-    if (teamMetrics.length > 0) {
-      if (currentY > pageHeight - 80) {
-        doc.addPage();
-        currentY = 20;
-      }
-
-      doc.setTextColor(30, 41, 59);
-      doc.setFontSize(14);
-      doc.setFont('helvetica', 'bold');
-      doc.text('Team Contributions', margin, currentY);
-      currentY += 8;
-
-      teamMetrics.forEach((team, i) => {
-        const teamY = currentY + i * 20;
-        
-        // Team card
-        doc.setFillColor(255, 255, 255);
-        doc.setDrawColor(226, 232, 240);
-        doc.roundedRect(margin, teamY, pageWidth - margin * 2, 18, 2, 2, 'FD');
-
-        // Team name
-        doc.setTextColor(30, 41, 59);
-        doc.setFontSize(10);
-        doc.setFont('helvetica', 'bold');
-        doc.text(team.teamName || `Team ${i + 1}`, margin + 5, teamY + 7);
-
-        // Team stats
-        doc.setTextColor(100, 116, 139);
-        doc.setFontSize(8);
-        doc.setFont('helvetica', 'normal');
-        doc.text(`Tasks: ${team.tasks || 0}  •  Meetings: ${team.meetings || 0}  •  Messages: ${team.messages || 0}`, margin + 5, teamY + 14);
-      });
-
-      currentY += teamMetrics.length * 22;
-    }
-
-    // ─── Footer on all pages ─────────────────────────────────────────────────
-    const pageCount = doc.getNumberOfPages();
-    for (let i = 1; i <= pageCount; i++) {
-      doc.setPage(i);
-      
-      // Footer line
-      doc.setDrawColor(226, 232, 240);
-      doc.line(margin, pageHeight - 15, pageWidth - margin, pageHeight - 15);
-
-      // Footer text
-      doc.setFontSize(8);
-      doc.setTextColor(148, 163, 184);
-      doc.setFont('helvetica', 'normal');
-      doc.text(
-        'Team Connect Report • Confidential - For Internal Use Only',
-        margin,
-        pageHeight - 8
-      );
-      doc.text(
-        `Page ${i} of ${pageCount}`,
-        pageWidth - margin,
-        pageHeight - 8,
-        { align: 'right' }
-      );
-    }
+    // ── Footers on all content pages ──────────────────────────────────────
+    drawFooters(doc, pageW, pageH, margin);
 
     doc.save(`${filename}.pdf`);
   },
-
-  // Export multiple sheets to Excel
-  toExcelMultiSheet(
-    sheets: { name: string; data: Record<string, any>[] }[],
-    filename: string
-  ): void {
-    const wb = XLSX.utils.book_new();
-    
-    sheets.forEach(({ name, data }) => {
-      if (data.length) {
-        const ws = XLSX.utils.json_to_sheet(data);
-        XLSX.utils.book_append_sheet(wb, ws, name.substring(0, 31)); // Excel sheet name limit
-      }
-    });
-    
-    XLSX.writeFile(wb, `${filename}.xlsx`);
-  },
 };
 
-// Helper function to download blob
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
 function downloadBlob(blob: Blob, filename: string): void {
   const url = window.URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
   window.URL.revokeObjectURL(url);
 }
 
-// Helper to format header
 function formatHeader(key: string): string {
   return key
     .replace(/([A-Z])/g, ' $1')
-    .replace(/^./, str => str.toUpperCase())
+    .replace(/^./, s => s.toUpperCase())
     .trim();
 }
 
 // ─── Data Transformation Utilities ──────────────────────────────────────────
 
 export const reportTransformers = {
-  // Transform task report for export
   taskReportToRows(report: TaskReport): Record<string, any>[] {
     const rows: Record<string, any>[] = [];
-    
-    // Summary row
+
     rows.push({
       category: 'Summary',
       totalTasks: report.summary.totalTasks,
@@ -785,28 +1149,26 @@ export const reportTransformers = {
       todo: report.summary.todoTasks,
       overdue: report.summary.overdueTasks,
     });
-    
-    // Overdue tasks
+
     report.overdueTasks.forEach(t => {
       rows.push({
         category: 'Overdue Task',
         title: t.title,
         assignee: t.assignee || 'Unassigned',
-        team: t.team || '-',
+        team: t.team || '—',
         priority: t.priority,
-        dueDate: t.dueDate ? new Date(t.dueDate).toLocaleDateString('th-TH') : '-',
+        dueDate: t.dueDate ? new Date(t.dueDate).toLocaleDateString('th-TH') : '—',
         daysOverdue: t.daysOverdue,
+        status: t.status,
       });
     });
-    
+
     return rows;
   },
 
-  // Transform meeting report for export
   meetingReportToRows(report: MeetingReport): Record<string, any>[] {
     const rows: Record<string, any>[] = [];
-    
-    // Summary
+
     rows.push({
       category: 'Summary',
       totalMeetings: report.summary.totalMeetings,
@@ -816,29 +1178,26 @@ export const reportTransformers = {
       avgDuration: `${report.summary.avgDuration.toFixed(1)} min`,
       avgParticipants: report.summary.avgParticipants.toFixed(1),
     });
-    
-    // Meeting list
+
     report.meetings.forEach(m => {
       rows.push({
         category: 'Meeting',
         title: m.title,
         host: m.host,
-        team: m.team || '-',
+        team: m.team || '—',
         startTime: new Date(m.startTime).toLocaleString('th-TH'),
         duration: `${m.duration} min`,
         participants: m.participants,
         status: m.status,
       });
     });
-    
+
     return rows;
   },
 
-  // Transform team productivity for export
   teamProductivityToRows(report: TeamProductivityReport): Record<string, any>[] {
     const rows: Record<string, any>[] = [];
-    
-    // Team summary
+
     rows.push({
       category: 'Team Summary',
       teamName: report.team.name,
@@ -848,8 +1207,7 @@ export const reportTransformers = {
       totalMeetings: report.summary.meetings.total,
       totalDuration: `${report.summary.meetings.totalDuration} min`,
     });
-    
-    // Member details
+
     report.members.forEach(m => {
       rows.push({
         category: 'Member',
@@ -860,27 +1218,24 @@ export const reportTransformers = {
         inProgress: m.tasks.inProgress,
         messagesSent: m.messagesSent,
         meetingsAttended: m.meetingsAttended,
-        productivityScore: m.productivityScore?.toFixed(1) || '-',
+        productivityScore: m.productivityScore?.toFixed(1) || '—',
       });
     });
-    
+
     return rows;
   },
 
-  // Transform performance dashboard for export
   performanceToRows(dashboard: PerformanceDashboard): Record<string, any>[] {
     const rows: Record<string, any>[] = [];
-    
-    // Summary
+
     rows.push({
       category: 'Summary',
       avgCompletionRate: `${dashboard.summary.avgTaskCompletionRate.toFixed(1)}%`,
       avgAttendanceRate: `${dashboard.summary.avgMeetingAttendanceRate.toFixed(1)}%`,
       totalInteractions: dashboard.summary.totalInteractions,
-      topPerformer: dashboard.summary.topPerformer?.userName || '-',
+      topPerformer: dashboard.summary.topPerformer?.userName || '—',
     });
-    
-    // Task completion rates
+
     dashboard.taskCompletionRates.forEach(r => {
       rows.push({
         category: 'Task Completion',
@@ -888,11 +1243,10 @@ export const reportTransformers = {
         totalTasks: r.totalTasks,
         completedTasks: r.completedTasks,
         completionRate: `${r.completionRate.toFixed(1)}%`,
-        trend: r.trend || '-',
+        trend: r.trend || '—',
       });
     });
-    
-    // Collaboration activity
+
     dashboard.collaborationActivity.forEach(a => {
       rows.push({
         category: 'Collaboration',
@@ -901,14 +1255,13 @@ export const reportTransformers = {
         meetingsAttended: a.attendedMeetings,
         messagesSent: a.messagesSent,
         totalInteractions: a.totalInteractions,
-        activityScore: a.activityScore?.toFixed(1) || '-',
+        activityScore: a.activityScore?.toFixed(1) || '—',
       });
     });
-    
+
     return rows;
   },
 
-  // Transform workload for export
   workloadToRows(report: TeamWorkloadReport): Record<string, any>[] {
     return report.workload.map(w => ({
       userName: w.userName,
