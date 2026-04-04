@@ -23,8 +23,6 @@ import {
   DraggableEventCard,
   StaticEventCard,
   DroppableDay,
-  OverlappingEventGrid,
-  OverflowIndicator,
   startOfDay,
   endOfDay,
   startOfWeek,
@@ -464,30 +462,9 @@ export default function TeamCalendar() {
                         const summary = workloadSummary.get(key) ?? { meetings: 0, tasks: 0, holidays: 0 };
                         const isCurrentMonth = day.getMonth() === currentDate.getMonth();
                         const eventsKey = `${key}-${dayEvents.length}-${dayEvents.map((e) => e.id).join(",")}`;
-                        
-                        // Calculate density intensity (0-1 scale)
-                        const totalEvents = dayEvents.length;
-                        const densityIntensity = Math.min(1, totalEvents / 10); // Max intensity at 10+ events
-                        
-                        // Density color classes based on event count
-                        const densityBgClass = totalEvents === 0 
-                          ? "bg-card/70" 
-                          : totalEvents <= 3 
-                            ? "bg-gradient-to-br from-primary/5 via-card/70 to-card/70"
-                            : totalEvents <= 6 
-                              ? "bg-gradient-to-br from-primary/10 via-primary/5 to-card/70"
-                              : totalEvents <= 9 
-                                ? "bg-gradient-to-br from-primary/15 via-primary/10 to-card/70"
-                                : "bg-gradient-to-br from-primary/20 via-primary/15 to-card/70";
-                        
                         return (
                           <motion.div key={eventsKey} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.15 }}>
-                            <Card className={cn(
-                              "border-border/50 hover:bg-card hover:border-border/80 transition-all duration-300 hover:shadow-xl hover:shadow-black/10 hover:-translate-y-1 ring-0 hover:ring-1 hover:ring-primary/20",
-                              densityBgClass,
-                              isToday(day) && "ring-2 ring-primary/50 bg-gradient-to-br from-primary/10 via-primary/5 to-background border-primary/70 shadow-lg",
-                              !isCurrentMonth && "opacity-50"
-                            )}>
+                            <Card className={cn("border-border/50 bg-card/70 hover:bg-card hover:border-border/80 transition-all duration-300 hover:shadow-xl hover:shadow-black/10 hover:-translate-y-1 ring-0 hover:ring-1 hover:ring-primary/20", isToday(day) && "ring-2 ring-primary/50 bg-gradient-to-br from-primary/10 via-primary/5 to-background border-primary/70 shadow-lg", !isCurrentMonth && "opacity-50")}>
                               <CardHeader className="py-1.5 sm:py-2.5 md:py-3.5 px-1.5 sm:px-2.5 md:px-3.5 flex flex-row items-center justify-between bg-gradient-to-r from-transparent via-muted/10 to-transparent">
                                 <div className="flex items-center gap-1 sm:gap-2 md:gap-2.5">
                                   <span className={cn("text-xs sm:text-sm md:text-base font-bold transition-all duration-200", isToday(day) && "text-primary scale-110", !isCurrentMonth && "text-muted-foreground")}>{day.getDate()}</span>
@@ -502,12 +479,7 @@ export default function TeamCalendar() {
                               <CardContent className="px-1.5 sm:px-2 md:px-3 pb-1.5 sm:pb-2 md:pb-3 overflow-hidden">
                                 <DroppableDay date={day} className="min-h-[60px] sm:min-h-[80px] md:min-h-[100px] overflow-hidden">
                                   {dayEvents.slice(0, isMobile ? 2 : 3).map((ev) => <DraggableEventCard key={`${ev.id}-${refreshKey}`} event={ev} />)}
-                                  {dayEvents.length > (isMobile ? 2 : 3) && (
-                                    <OverflowIndicator 
-                                      hiddenEvents={dayEvents.slice(isMobile ? 2 : 3)} 
-                                      date={day} 
-                                    />
-                                  )}
+                                  {dayEvents.length > (isMobile ? 2 : 3) && <div className="text-[9px] sm:text-[10px] text-muted-foreground mt-1 font-medium px-1 truncate">+{dayEvents.length - (isMobile ? 2 : 3)} {t("calendar.more")}</div>}
                                 </DroppableDay>
                               </CardContent>
                             </Card>
@@ -527,20 +499,7 @@ export default function TeamCalendar() {
                         const summary = workloadSummary.get(key) ?? { meetings: 0, tasks: 0, holidays: 0 };
                         const currentHour = new Date().getHours();
                         const currentMinute = new Date().getMinutes();
-                        
-                        // Calculate earliest event time to adjust start hour
-                        const earliestEventHour = timedEvents.length > 0 
-                          ? Math.min(...timedEvents.map(e => e.start.getHours()))
-                          : 7;
-                        const startHour = Math.max(0, Math.min(earliestEventHour, 7)); // Show from 0:00 if events exist before 7:00
-                        const totalHours = 24 - startHour;
-                        const hourHeight = 56;
-                        const currentTimeOffset = isToday(day) && currentHour >= startHour 
-                          ? ((currentHour - startHour) * 60 + currentMinute) / 60 * hourHeight 
-                          : -100;
-                        
-                        // Check if there are early morning events (before 7:00)
-                        const hasEarlyMorningEvents = timedEvents.some(e => e.start.getHours() < 7);
+                        const currentTimeOffset = ((currentHour - 7) * 60 + currentMinute) / 60 * 56; // 56px per hour
 
                         return (
                           <div className="h-full flex flex-col lg:flex-row gap-4">
@@ -589,8 +548,8 @@ export default function TeamCalendar() {
                                 <div className="flex-1 flex min-h-0 overflow-hidden">
                                   {/* Time Labels */}
                                   <div className="w-14 sm:w-16 flex flex-col shrink-0 border-r border-border/30 bg-muted/10">
-                                    {Array.from({ length: totalHours }).map((_, i) => {
-                                      const hour = startHour + i;
+                                    {Array.from({ length: 15 }).map((_, i) => {
+                                      const hour = 7 + i;
                                       return (
                                         <div key={hour} className="h-14 flex items-start justify-end pr-2 pt-1">
                                           <span className="text-[11px] sm:text-xs font-medium text-muted-foreground/70">{`${hour.toString().padStart(2, "0")}:00`}</span>
@@ -602,23 +561,13 @@ export default function TeamCalendar() {
                                   {/* Events Area */}
                                   <div className="flex-1 relative overflow-y-auto" style={{ scrollBehavior: 'smooth' }}>
                                     <div className="absolute inset-0 pointer-events-none">
-                                      {Array.from({ length: totalHours }).map((_, i) => (
+                                      {Array.from({ length: 15 }).map((_, i) => (
                                         <div key={i} className={cn("border-b border-border/20 h-14", i === 0 && "border-t border-border/30")} />
                                       ))}
                                     </div>
                                     
-                                    {/* Early Morning Events Warning */}
-                                    {hasEarlyMorningEvents && (
-                                      <div className="absolute top-0 left-0 right-0 z-30 bg-gradient-to-r from-amber-100/90 to-amber-50/90 border-b border-amber-200 px-3 py-2 flex items-center gap-2">
-                                        <Clock className="w-4 h-4 text-amber-600" />
-                                        <span className="text-xs font-medium text-amber-700">
-                                          Events start at {earliestEventHour}:00 — scroll up to view early morning events
-                                        </span>
-                                      </div>
-                                    )}
-                                    
                                     {/* Current Time Indicator */}
-                                    {isToday(day) && currentHour >= startHour && currentHour < 24 && (
+                                    {isToday(day) && currentHour >= 7 && currentHour < 22 && (
                                       <div 
                                         className="absolute left-0 right-0 flex items-center z-20 pointer-events-none"
                                         style={{ top: `${currentTimeOffset}px` }}
@@ -631,8 +580,10 @@ export default function TeamCalendar() {
                                       </div>
                                     )}
 
-                                    <DroppableDay date={day} id={`day-${key}-time`} className="relative min-h-[${totalHours} * 56px] w-full">
-                                      <OverlappingEventGrid events={timedEvents} hourHeight={hourHeight} startHour={startHour} />
+                                    <DroppableDay date={day} id={`day-${key}-time`} className="relative min-h-[15 * 56px] w-full">
+                                      {timedEvents.map((ev) => (
+                                        <StaticEventCard key={`${ev.id}-${refreshKey}`} event={ev} hourHeight={56} startHour={7} />
+                                      ))}
                                     </DroppableDay>
                                   </div>
                                 </div>
@@ -675,19 +626,6 @@ export default function TeamCalendar() {
                         const currentHour = new Date().getHours();
                         const currentMinute = new Date().getMinutes();
                         
-                        // Calculate earliest event time across all days
-                        const allTimedEvents = visibleDays.slice(0, 7).flatMap(day => {
-                          const key = dateKey(day);
-                          return (eventsByDay.get(key) ?? []).filter(e => !e.allDay);
-                        });
-                        const earliestEventHour = allTimedEvents.length > 0 
-                          ? Math.min(...allTimedEvents.map(e => e.start.getHours()))
-                          : 7;
-                        const startHour = Math.max(0, Math.min(earliestEventHour, 7));
-                        const totalHours = 24 - startHour;
-                        const hourHeight = 56;
-                        const hasEarlyMorningEvents = allTimedEvents.some(e => e.start.getHours() < 7);
-                        
                         return (
                           <Card className="h-full border-border/50 bg-card/30 backdrop-blur-sm shadow-2xl flex flex-col overflow-hidden">
                             {/* Week Header */}
@@ -720,8 +658,8 @@ export default function TeamCalendar() {
                               {/* Time Labels */}
                               <div className="w-14 sm:w-16 flex flex-col shrink-0 border-r border-border/30 bg-muted/10">
                                 <div className="h-12 sm:h-14 border-b border-border/20" /> {/* Spacer for day headers */}
-                                {Array.from({ length: totalHours }).map((_, i) => {
-                                  const hour = startHour + i;
+                                {Array.from({ length: 15 }).map((_, i) => {
+                                  const hour = 7 + i;
                                   return (
                                     <div key={hour} className="h-12 sm:h-14 flex items-start justify-end pr-2 pt-1">
                                       <span className="text-[10px] sm:text-xs font-medium text-muted-foreground/70">{`${hour.toString().padStart(2, "0")}:00`}</span>
@@ -740,9 +678,7 @@ export default function TeamCalendar() {
                                     const timedEvents = dayEvents.filter((e) => !e.allDay);
                                     const summary = workloadSummary.get(key) ?? { meetings: 0, tasks: 0, holidays: 0 };
                                     const isCurrentDay = isToday(day);
-                                    const currentTimeOffset = isCurrentDay && currentHour >= startHour 
-                                      ? ((currentHour - startHour) * 60 + currentMinute) / 60 * hourHeight 
-                                      : -100;
+                                    const currentTimeOffset = isCurrentDay ? ((currentHour - 7) * 60 + currentMinute) / 60 * 56 : -100;
 
                                     return (
                                       <div key={key} className="flex flex-col min-w-0 h-full border-r border-border/20 last:border-r-0">
@@ -785,13 +721,13 @@ export default function TeamCalendar() {
                                         <div className="flex-1 relative min-h-0 overflow-y-auto">
                                           {/* Hour Lines */}
                                           <div className="absolute inset-0 pointer-events-none">
-                                            {Array.from({ length: totalHours }).map((_, i) => (
+                                            {Array.from({ length: 15 }).map((_, i) => (
                                               <div key={i} className="border-b border-border/15 h-12 sm:h-14" />
                                             ))}
                                           </div>
 
                                           {/* Current Time Indicator */}
-                                          {isCurrentDay && currentHour >= startHour && currentHour < 24 && (
+                                          {isCurrentDay && currentHour >= 7 && currentHour < 22 && (
                                             <div 
                                               className="absolute left-0 right-0 flex items-center z-20 pointer-events-none"
                                               style={{ top: `${currentTimeOffset}px` }}
@@ -801,8 +737,10 @@ export default function TeamCalendar() {
                                             </div>
                                           )}
 
-                                          <DroppableDay date={day} id={`day-${key}-time`} className="relative min-h-[${totalHours} * 56px] w-full">
-                                            <OverlappingEventGrid events={timedEvents} hourHeight={hourHeight} startHour={startHour} />
+                                          <DroppableDay date={day} id={`day-${key}-time`} className="relative min-h-[15 * 56px] w-full">
+                                            {timedEvents.map((ev) => (
+                                              <StaticEventCard key={`${ev.id}-${refreshKey}`} event={ev} hourHeight={56} startHour={7} />
+                                            ))}
                                           </DroppableDay>
                                         </div>
                                       </div>
