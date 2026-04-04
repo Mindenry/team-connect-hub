@@ -34,7 +34,7 @@ export default function MeetingLobby() {
   const { user: authUser } = useAuth();
   const [currentUser, setCurrentUser] = useState(authUser);
 
-  const [meetingTitle, setMeetingTitle] = useState("Zoom Meeting");
+  const [meetingTitle, setMeetingTitle] = useState("Meeting");
   const [isMuted, setIsMuted] = useState(true);
   const [isCameraOn, setIsCameraOn] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -78,7 +78,7 @@ export default function MeetingLobby() {
           const avatarUrl = profile.avatar?.startsWith("/") ? `${API_BASE}${profile.avatar}` : profile.avatar;
           setCurrentUser({ ...cachedUser, ...profile, avatar: avatarUrl });
         }
-      } catch {}
+      } catch { }
     };
     fetchProfile();
   }, []);
@@ -202,7 +202,7 @@ export default function MeetingLobby() {
       }
     };
     init();
-    const handler = () => enumerate().catch(() => {});
+    const handler = () => enumerate().catch(() => { });
     navigator.mediaDevices?.addEventListener?.("devicechange", handler);
     return () => {
       alive = false;
@@ -290,7 +290,7 @@ export default function MeetingLobby() {
       setError("Cannot join: Meeting not found. Please check the meeting code.");
       return;
     }
-    
+
     setJoining(true);
     const previewStream = streamRef.current;
     const effectiveCameraOn = previewStream ? previewStream.getVideoTracks().some((track) => track.enabled) : isCameraOn;
@@ -306,7 +306,7 @@ export default function MeetingLobby() {
       if (isEnded) {
         setError("This meeting has already ended and cannot be joined.");
         setJoining(false);
-        try { await ensureLocalStream(); } catch {}
+        try { await ensureLocalStream(); } catch { }
         return;
       }
       try {
@@ -321,7 +321,7 @@ export default function MeetingLobby() {
           if (res.status === 400 || res.status === 403) {
             setError(data?.message || `Failed to join (${res.status})`);
             setJoining(false);
-            try { await ensureLocalStream(); } catch {}
+            try { await ensureLocalStream(); } catch { }
             return;
           }
         }

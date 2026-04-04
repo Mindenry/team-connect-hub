@@ -312,19 +312,6 @@ export default function Tasks() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2">
-                <Label className="text-xs font-medium text-muted-foreground">Sort By</Label>
-                <Select value={sortBy} onValueChange={setSortBy}>
-                  <SelectTrigger className="h-10 rounded-lg"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="position">Position</SelectItem>
-                    <SelectItem value="dueDate">Due Date</SelectItem>
-                    <SelectItem value="priority">Priority</SelectItem>
-                    <SelectItem value="title">Title</SelectItem>
-                    <SelectItem value="createdAt">Created Date</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
               {viewMode === "list" && (
                 <div className="space-y-2">
                   <Label className="text-xs font-medium text-muted-foreground">Group By</Label>
@@ -435,7 +422,7 @@ export default function Tasks() {
                       {hasActiveFilters && <span className="w-1.5 h-1.5 rounded-full bg-white/80 animate-pulse" />}
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent>Filters & Sort</TooltipContent>
+                  <TooltipContent>Filters</TooltipContent>
                 </Tooltip>
 
                 {hasActiveFilters && (
@@ -443,6 +430,49 @@ export default function Tasks() {
                     <X className="w-3 h-3 mr-1" /> Clear
                   </Button>
                 )}
+
+                {/* Sort By Dropdown */}
+                <Select value={sortBy} onValueChange={setSortBy}>
+                  <SelectTrigger className="h-9 w-[130px] rounded-lg text-xs bg-background/50 border-border/60">
+                    <SelectValue placeholder="Sort by" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="position">Position</SelectItem>
+                    <SelectItem value="dueDate">Due Date</SelectItem>
+                    <SelectItem value="priority">Priority</SelectItem>
+                    <SelectItem value="title">Title</SelectItem>
+                    <SelectItem value="createdAt">Created</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button 
+                      size="sm" 
+                      variant="outline" 
+                      className={cn("h-9 w-9 p-0", sortBy !== "position" && "border-primary/50 bg-primary/5")} 
+                      onClick={() => setSortOrder(sortOrder === "asc" ? "desc" : "asc")}
+                    >
+                      {sortOrder === "asc" ? (
+                        <span className="text-xs font-bold">↑</span>
+                      ) : (
+                        <span className="text-xs font-bold">↓</span>
+                      )}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <div className="text-center">
+                      <div className="font-medium">{sortOrder === "asc" ? "Ascending" : "Descending"}</div>
+                      <div className="text-[10px] text-muted-foreground">
+                        {sortBy === "dueDate" && (sortOrder === "asc" ? "เร็ว → ช้า" : "ช้า → เร็ว")}
+                        {sortBy === "priority" && (sortOrder === "asc" ? "Low → Urgent" : "Urgent → Low")}
+                        {sortBy === "title" && (sortOrder === "asc" ? "A → Z" : "Z → A")}
+                        {sortBy === "createdAt" && (sortOrder === "asc" ? "เก่า → ใหม่" : "ใหม่ → เก่า")}
+                        {sortBy === "position" && (sortOrder === "asc" ? "บน → ล่าง" : "ล่าง → บน")}
+                      </div>
+                    </div>
+                  </TooltipContent>
+                </Tooltip>
 
                 <div className="flex items-center rounded-lg border border-border/60 bg-background/50 p-0.5">
                   <Tooltip>
@@ -470,15 +500,6 @@ export default function Tasks() {
                     <TooltipContent>Calendar View</TooltipContent>
                   </Tooltip>
                 </div>
-
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button size="sm" variant="ghost" className="h-9 w-9 p-0" onClick={() => setSortOrder(sortOrder === "asc" ? "desc" : "asc")}>
-                      <ArrowUpDown className={cn("w-3.5 h-3.5 transition-transform", sortOrder === "desc" && "rotate-180")} />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>{sortOrder === "asc" ? "Ascending" : "Descending"}</TooltipContent>
-                </Tooltip>
               </div>
             </div>
 
