@@ -365,7 +365,7 @@ export default function Chat() {
         setLoading(true);
 
         const [channelsRes, usersRes] = await Promise.all([
-          apiGet<Channel[]>("/channels").catch(() => []),
+          apiGet<Channel[]>("/channels/mine").catch(() => []),
           apiGet<any[]>("/users").catch(() => []),
         ]);
 

@@ -159,13 +159,33 @@ export default function Directory() {
           )
           .map((t: any) => t.name);
 
+        // Helper function to format last active time
+        const formatLastActive = (lastActiveAt: string | Date | null | undefined, isOnline: boolean): string => {
+          if (isOnline) return "Now";
+          if (!lastActiveAt) return "Never";
+          
+          const lastActiveDate = new Date(lastActiveAt);
+          const now = new Date();
+          const diffMs = now.getTime() - lastActiveDate.getTime();
+          const diffMins = Math.floor(diffMs / 60000);
+          const diffHours = Math.floor(diffMs / 3600000);
+          const diffDays = Math.floor(diffMs / 86400000);
+          
+          if (diffMins < 1) return "Just now";
+          if (diffMins < 60) return `${diffMins} min ago`;
+          if (diffHours < 24) return `${diffHours}h ago`;
+          if (diffDays < 7) return `${diffDays}d ago`;
+          return lastActiveDate.toLocaleDateString();
+        };
+
+        const isOnline = isUserOnline(u.id);
         return {
           id: u.id,
           name: u.name,
           email: u.email,
           role: u.role || "employee",
-          status: isUserOnline(u.id) ? "online" : "offline",
-          lastActive: "Now",
+          status: isOnline ? "online" : "offline",
+          lastActive: formatLastActive(u.lastActiveAt, isOnline),
           isActive: u.isActive !== false,
           teams: userTeams,
           joinedDate: new Date(u.createdAt).toLocaleDateString(),
