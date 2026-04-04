@@ -1,14 +1,12 @@
 import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Plus, Search, Filter, X, CalendarIcon, LayoutGrid, List, Calendar as CalendarViewIcon, CheckSquare, Clock, AlertCircle, ChevronLeft, ChevronRight, GripVertical, ArrowUpDown, BarChart3, Users, Loader2, FileText } from "lucide-react";
+import { Plus, Search, X, CalendarIcon, LayoutGrid, List, Calendar as CalendarViewIcon, CheckSquare, Clock, AlertCircle, ChevronLeft, ChevronRight, GripVertical, ArrowUpDown, BarChart3, Users, Loader2, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import CreateTaskDialog from "@/components/dialogs/CreateTaskDialog";
@@ -50,7 +48,6 @@ export default function Tasks() {
   const [sortBy, setSortBy] = useState("position");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const [groupBy, setGroupBy] = useState("status");
-  const [showFilter, setShowFilter] = useState(false);
 
   const [showCreateTask, setShowCreateTask] = useState(false);
   const [showTemplateDialog, setShowTemplateDialog] = useState(false);
@@ -267,74 +264,7 @@ export default function Tasks() {
           onDeleted={handleTaskDeleted}
         />
 
-        <Dialog open={showFilter} onOpenChange={setShowFilter}>
-          <DialogContent className="max-w-sm rounded-2xl p-6">
-            <DialogHeader><DialogTitle className="text-lg font-semibold">Filters</DialogTitle></DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label className="text-xs font-medium text-muted-foreground">Status</Label>
-                <Select value={filterStatus} onValueChange={setFilterStatus}>
-                  <SelectTrigger className="h-10 rounded-lg"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Statuses</SelectItem>
-                    {ALL_STATUSES.map((s) => (<SelectItem key={s} value={s}>{STATUS_CONFIG[s].label}</SelectItem>))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label className="text-xs font-medium text-muted-foreground">Priority</Label>
-                <Select value={filterPriority} onValueChange={setFilterPriority}>
-                  <SelectTrigger className="h-10 rounded-lg"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Priorities</SelectItem>
-                    {(Object.keys(PRIORITY_CONFIG) as Array<keyof typeof PRIORITY_CONFIG>).map((p) => (<SelectItem key={p} value={p}>{PRIORITY_CONFIG[p].label}</SelectItem>))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label className="text-xs font-medium text-muted-foreground">Team</Label>
-                <Select value={filterTeam} onValueChange={setFilterTeam}>
-                  <SelectTrigger className="h-10 rounded-lg"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Teams</SelectItem>
-                    {teams.map((t) => (<SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label className="text-xs font-medium text-muted-foreground">Assignee</Label>
-                <Select value={filterAssignee} onValueChange={setFilterAssignee}>
-                  <SelectTrigger className="h-10 rounded-lg"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All People</SelectItem>
-                    <SelectItem value="unassigned">Unassigned</SelectItem>
-                    {uniqueAssignees.map((u) => (<SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>))}
-                  </SelectContent>
-                </Select>
-              </div>
-              {viewMode === "list" && (
-                <div className="space-y-2">
-                  <Label className="text-xs font-medium text-muted-foreground">Group By</Label>
-                  <Select value={groupBy} onValueChange={setGroupBy}>
-                    <SelectTrigger className="h-10 rounded-lg"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="status">Status</SelectItem>
-                      <SelectItem value="priority">Priority</SelectItem>
-                      <SelectItem value="team">Team</SelectItem>
-                      <SelectItem value="assignee">Assignee</SelectItem>
-                      <SelectItem value="none">None</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-            </div>
-            <DialogFooter>
-              <Button variant="ghost" onClick={() => { clearFilters(); setShowFilter(false); }}>Reset</Button>
-              <Button onClick={() => setShowFilter(false)}>Apply</Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
+        
         <div className="border-b border-border/50 bg-background/95 backdrop-blur-xl supports-[backdrop-filter]:bg-background/80">
           <div className="max-w-7xl 3xl:max-w-[1600px] 4xl:max-w-[2000px] mx-auto px-3 sm:px-4 md:px-6 lg:px-8 py-3 sm:py-4 md:py-5 space-y-3 sm:space-y-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -413,27 +343,65 @@ export default function Tasks() {
                 )}
               </div>
 
-              <div className="flex items-center gap-1.5 sm:gap-2">
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button size="sm" variant={hasActiveFilters ? "default" : "outline"} className="h-9 gap-1.5 px-2.5 text-xs" onClick={() => setShowFilter(true)}>
-                      <Filter className="w-3.5 h-3.5" />
-                      <span className="hidden sm:inline">Filter</span>
-                      {hasActiveFilters && <span className="w-1.5 h-1.5 rounded-full bg-white/80 animate-pulse" />}
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Filters</TooltipContent>
-                </Tooltip>
+              <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                {/* Status Filter */}
+                <Select value={filterStatus} onValueChange={setFilterStatus}>
+                  <SelectTrigger className={cn("h-9 w-[100px] rounded-lg text-xs bg-background/50 border-border/60", filterStatus !== "all" && "border-primary/50 bg-primary/5")}>
+                    <SelectValue placeholder="Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Status</SelectItem>
+                    {ALL_STATUSES.map((s) => (<SelectItem key={s} value={s}>{STATUS_CONFIG[s].label}</SelectItem>))}
+                  </SelectContent>
+                </Select>
 
+                {/* Priority Filter */}
+                <Select value={filterPriority} onValueChange={setFilterPriority}>
+                  <SelectTrigger className={cn("h-9 w-[100px] rounded-lg text-xs bg-background/50 border-border/60", filterPriority !== "all" && "border-primary/50 bg-primary/5")}>
+                    <SelectValue placeholder="Priority" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Priority</SelectItem>
+                    {(Object.keys(PRIORITY_CONFIG) as Array<keyof typeof PRIORITY_CONFIG>).map((p) => (<SelectItem key={p} value={p}>{PRIORITY_CONFIG[p].label}</SelectItem>))}
+                  </SelectContent>
+                </Select>
+
+                {/* Team Filter */}
+                <Select value={filterTeam} onValueChange={setFilterTeam}>
+                  <SelectTrigger className={cn("h-9 w-[110px] rounded-lg text-xs bg-background/50 border-border/60", filterTeam !== "all" && "border-primary/50 bg-primary/5")}>
+                    <SelectValue placeholder="Team" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Teams</SelectItem>
+                    {teams.map((t) => (<SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>))}
+                  </SelectContent>
+                </Select>
+
+                {/* Assignee Filter */}
+                <Select value={filterAssignee} onValueChange={setFilterAssignee}>
+                  <SelectTrigger className={cn("h-9 w-[120px] rounded-lg text-xs bg-background/50 border-border/60", filterAssignee !== "all" && "border-primary/50 bg-primary/5")}>
+                    <SelectValue placeholder="Assignee" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All People</SelectItem>
+                    <SelectItem value="unassigned">Unassigned</SelectItem>
+                    {uniqueAssignees.map((u) => (<SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>))}
+                  </SelectContent>
+                </Select>
+
+                {/* Clear Filters */}
                 {hasActiveFilters && (
                   <Button size="sm" variant="ghost" className="h-9 text-xs text-muted-foreground" onClick={clearFilters}>
                     <X className="w-3 h-3 mr-1" /> Clear
                   </Button>
                 )}
 
+                {/* Divider */}
+                <div className="w-px h-6 bg-border/60 mx-1" />
+
                 {/* Sort By Dropdown */}
                 <Select value={sortBy} onValueChange={setSortBy}>
-                  <SelectTrigger className="h-9 w-[130px] rounded-lg text-xs bg-background/50 border-border/60">
+                  <SelectTrigger className={cn("h-9 w-[110px] rounded-lg text-xs bg-background/50 border-border/60", sortBy !== "position" && "border-primary/50 bg-primary/5")}>
                     <SelectValue placeholder="Sort by" />
                   </SelectTrigger>
                   <SelectContent>
@@ -445,6 +413,7 @@ export default function Tasks() {
                   </SelectContent>
                 </Select>
 
+                {/* Sort Order */}
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button 
@@ -474,6 +443,10 @@ export default function Tasks() {
                   </TooltipContent>
                 </Tooltip>
 
+                {/* Divider */}
+                <div className="w-px h-6 bg-border/60 mx-1" />
+
+                {/* View Mode Toggle */}
                 <div className="flex items-center rounded-lg border border-border/60 bg-background/50 p-0.5">
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -502,35 +475,6 @@ export default function Tasks() {
                 </div>
               </div>
             </div>
-
-            {hasActiveFilters && (
-              <div className="flex flex-wrap gap-1.5">
-                {filterStatus !== "all" && (
-                  <Badge variant="secondary" className="text-xs gap-1 pr-1">
-                    Status: {STATUS_CONFIG[filterStatus]?.label}
-                    <button onClick={() => setFilterStatus("all")}><X className="w-3 h-3" /></button>
-                  </Badge>
-                )}
-                {filterPriority !== "all" && (
-                  <Badge variant="secondary" className="text-xs gap-1 pr-1">
-                    Priority: {PRIORITY_CONFIG[filterPriority as keyof typeof PRIORITY_CONFIG]?.label}
-                    <button onClick={() => setFilterPriority("all")}><X className="w-3 h-3" /></button>
-                  </Badge>
-                )}
-                {filterTeam !== "all" && (
-                  <Badge variant="secondary" className="text-xs gap-1 pr-1">
-                    Team: {teams.find((t) => t.id === filterTeam)?.name}
-                    <button onClick={() => setFilterTeam("all")}><X className="w-3 h-3" /></button>
-                  </Badge>
-                )}
-                {filterAssignee !== "all" && (
-                  <Badge variant="secondary" className="text-xs gap-1 pr-1">
-                    Assignee: {filterAssignee === "unassigned" ? "Unassigned" : uniqueAssignees.find((u) => u.id === filterAssignee)?.name}
-                    <button onClick={() => setFilterAssignee("all")}><X className="w-3 h-3" /></button>
-                  </Badge>
-                )}
-              </div>
-            )}
 
             <div className="text-[11px] text-muted-foreground">
               {filteredTasks.length} of {tasks.length} tasks
