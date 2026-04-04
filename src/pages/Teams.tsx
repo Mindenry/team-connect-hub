@@ -11,6 +11,7 @@ import AddTeamMemberDialog from "@/components/dialogs/AddTeamMemberDialog";
 import CreateChannelDialog from "@/components/dialogs/CreateChannelDialog";
 import InviteUserDialog from "@/components/dialogs/InviteUserDialog";
 import { apiGet, apiPost, apiPatch, apiDelete } from "@/lib/api";
+import { getSocket } from "@/lib/websocket";
 import {
   Dialog,
   DialogContent,
@@ -197,6 +198,63 @@ export default function Teams() {
 
   useEffect(() => {
     loadTeams();
+  }, []);
+
+  // Real-time WebSocket listeners for teams
+  useEffect(() => {
+    const socket = getSocket();
+
+    const handleTeamCreated = (team: any) => {
+      console.log("[Teams] Real-time: team created", team.id);
+      // Reload teams to get full data with members
+      loadTeams();
+    };
+
+    const handleTeamUpdated = (team: any) => {
+      console.log("[Teams] Real-time: team updated", team.id);
+      setTeams((prev) => prev.map((t) => (t.id === team.id ? { ...t, name: team.name, description: team.description || t.description } : t)));
+    };
+
+    const handleTeamMemberAdded = (data: { teamId: string; member: any }) => {
+      console.log("[Teams] Real-time: member added to team", data.teamId);
+      // Reload the specific team to get updated members
+      loadTeams();
+    };
+
+    const handleTaskCreated = (task: any) => {
+      console.log("[Teams] Real-time: task created", task.id);
+      if (task.teamId) {
+        setTeams((prev) => prev.map((t) => (t.id === task.teamId ? { ...t, activeTasks: t.activeTasks + 1 } : t)));
+      }
+    };
+
+    const handleTaskUpdated = (task: any) => {
+      console.log("[Teams] Real-time: task updated", task.id);
+      // Task counts might have changed, reload teams
+      loadTeams();
+    };
+
+    const handleTaskDeleted = (taskId: string) => {
+      console.log("[Teams] Real-time: task deleted", taskId);
+      // Task counts might have changed, reload teams
+      loadTeams();
+    };
+
+    socket.on("team:created", handleTeamCreated);
+    socket.on("team:updated", handleTeamUpdated);
+    socket.on("team:member:added", handleTeamMemberAdded);
+    socket.on("task:created", handleTaskCreated);
+    socket.on("task:updated", handleTaskUpdated);
+    socket.on("task:deleted", handleTaskDeleted);
+
+    return () => {
+      socket.off("team:created", handleTeamCreated);
+      socket.off("team:updated", handleTeamUpdated);
+      socket.off("team:member:added", handleTeamMemberAdded);
+      socket.off("task:created", handleTaskCreated);
+      socket.off("task:updated", handleTaskUpdated);
+      socket.off("task:deleted", handleTaskDeleted);
+    };
   }, []);
 
   const filteredTeams = useMemo(() => {

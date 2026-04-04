@@ -23,6 +23,7 @@ import JoinMeetingByCodeDialog from "@/components/dialogs/JoinMeetingByCodeDialo
 import { auth } from "@/lib/auth";
 import { usePresence } from "@/hooks/usePresence";
 import { apiGet, apiPatch, apiPost } from "@/lib/api";
+import { getSocket } from "@/lib/websocket";
 import { toast } from "sonner";
 
 import {
@@ -60,156 +61,211 @@ export default function Dashboard() {
   const currentUser = auth.getUser();
   const { onlineCount, isUserOnline, activeRooms, onlineUsers } = usePresence();
 
-  useEffect(() => {
-    const loadData = async () => {
-      try {
-        setLoadError(null);
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const tomorrow = new Date(today);
-        tomorrow.setDate(tomorrow.getDate() + 1);
-        const now = new Date();
+  const loadData = async () => {
+    try {
+      setLoadError(null);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      const now = new Date();
 
-        const [meetingsRes, teamsRes] = await Promise.all([
-          apiGet<any[]>("/meetings?status=upcoming").catch(() => []),
-          apiGet<any[]>("/teams").catch(() => []),
-        ]);
+      const [meetingsRes, teamsRes] = await Promise.all([
+        apiGet<any[]>("/meetings?status=upcoming").catch(() => []),
+        apiGet<any[]>("/teams").catch(() => []),
+      ]);
 
-        const [usersRes, tasksRes] = await Promise.all([
-          apiGet<any[]>("/users").catch(() => []),
-          apiGet<any[]>("/tasks").catch(() => []).then((tasks: any[]) =>
-            Array.isArray(tasks) ? tasks.filter((t: any) => t.status === "todo" || t.status === "in_progress") : []
-          ),
-        ]);
+      const [usersRes, tasksRes] = await Promise.all([
+        apiGet<any[]>("/users").catch(() => []),
+        apiGet<any[]>("/tasks").catch(() => []).then((tasks: any[]) =>
+          Array.isArray(tasks) ? tasks.filter((t: any) => t.status === "todo" || t.status === "in_progress") : []
+        ),
+      ]);
 
-        const [notificationsRes, channelsRes, digestRes] = await Promise.all([
-          currentUser?.id
-            ? apiGet<any>(`/notifications?userId=${currentUser.id}&read=false`).catch(() => []).then((res: any) =>
-              Array.isArray(res) ? res.length : 0
-            )
-            : Promise.resolve(0),
-          apiGet<any[]>("/channels").catch(() => []),
-          currentUser?.id
-            ? apiGet<any[]>(`/notifications/digests?userId=${currentUser.id}&limit=1&digestType=daily`).catch(() => []).then((res: any) =>
-              Array.isArray(res) && res.length > 0 ? res[0] : null
-            )
-            : Promise.resolve(null),
-        ]);
+      const [notificationsRes, channelsRes, digestRes] = await Promise.all([
+        currentUser?.id
+          ? apiGet<any>(`/notifications?userId=${currentUser.id}&read=false`).catch(() => []).then((res: any) =>
+            Array.isArray(res) ? res.length : 0
+          )
+          : Promise.resolve(0),
+        apiGet<any[]>("/channels").catch(() => []),
+        currentUser?.id
+          ? apiGet<any[]>(`/notifications/digests?userId=${currentUser.id}&limit=1&digestType=daily`).catch(() => []).then((res: any) =>
+            Array.isArray(res) && res.length > 0 ? res[0] : null
+          )
+          : Promise.resolve(null),
+      ]);
 
-        const safeMeetings = Array.isArray(meetingsRes) ? meetingsRes : [];
-        const safeTasks = Array.isArray(tasksRes) ? tasksRes : [];
-        const safeUsers = Array.isArray(usersRes) ? usersRes : [];
-        const safeTeams = Array.isArray(teamsRes) ? teamsRes : [];
+      const safeMeetings = Array.isArray(meetingsRes) ? meetingsRes : [];
+      const safeTasks = Array.isArray(tasksRes) ? tasksRes : [];
+      const safeUsers = Array.isArray(usersRes) ? usersRes : [];
+      const safeTeams = Array.isArray(teamsRes) ? teamsRes : [];
 
-        const meetingsTodayAll: MeetingItem[] = safeMeetings
-          .filter((m: any) => {
-            const start = new Date(m.startTime);
-            return start >= today && start < tomorrow;
-          })
-          .map((m: any) => ({
-            id: m.id,
-            title: m.title || "Untitled meeting",
-            startTime: m.startTime,
-            team: m.team?.name || "Personal",
-            participants: m.participants?.length || 0,
-            isLive: m.status === "live"
-          }));
-
-        const meetingsForList = meetingsTodayAll
-          .filter((m: any) => new Date(m.startTime) >= now)
-          .slice(0, 4);
-
-        const tasks: TaskItem[] = safeTasks.slice(0, 6).map((t: any) => ({
-          id: t.id,
-          title: t.title || "Untitled task",
-          priority: (t.priority === "urgent" || t.priority === "high" || t.priority === "medium" || t.priority === "low") ? t.priority : "medium",
-          status: t.status || "todo",
-          dueDate: t.dueDate || undefined,
-          assignee: t.assignee
-            ? {
-              id: t.assignee.id,
-              name: t.assignee.name,
-              initials:
-                t.assignee.name
-                  ?.split(" ")
-                  .map((p: string) => p[0])
-                  .join("")
-                  .toUpperCase() ?? "NA",
-            }
-            : undefined,
-          project: t.project
-            ? {
-              id: t.project.id,
-              key: t.project.key,
-              name: t.project.name,
-              color: t.project.color,
-            }
-            : undefined,
-          epic: t.epic
-            ? {
-              id: t.epic.id,
-              name: t.epic.name,
-              color: t.epic.color,
-            }
-            : undefined,
-          tags: Array.isArray(t.tags) ? t.tags : [],
+      const meetingsTodayAll: MeetingItem[] = safeMeetings
+        .filter((m: any) => {
+          const start = new Date(m.startTime);
+          return start >= today && start < tomorrow;
+        })
+        .map((m: any) => ({
+          id: m.id,
+          title: m.title || "Untitled meeting",
+          startTime: m.startTime,
+          team: m.team?.name || "Personal",
+          participants: m.participants?.length || 0,
+          isLive: m.status === "live"
         }));
 
-        let mergedUsers = [...safeUsers];
-        if (currentUser) {
-          const existingIndex = mergedUsers.findIndex((u: any) => u.id === currentUser.id);
-          const authUserPatch = {
-            id: currentUser.id,
-            name: currentUser.name,
-            status: currentUser.status,
-            activity: currentUser.activity,
-          };
+      const meetingsForList = meetingsTodayAll
+        .filter((m: any) => new Date(m.startTime) >= now)
+        .slice(0, 4);
 
-          if (existingIndex === -1) {
-            mergedUsers.unshift(authUserPatch);
-          } else {
-            mergedUsers[existingIndex] = { ...mergedUsers[existingIndex], ...authUserPatch };
+      const tasks: TaskItem[] = safeTasks.slice(0, 6).map((t: any) => ({
+        id: t.id,
+        title: t.title || "Untitled task",
+        priority: (t.priority === "urgent" || t.priority === "high" || t.priority === "medium" || t.priority === "low") ? t.priority : "medium",
+        status: t.status || "todo",
+        dueDate: t.dueDate || undefined,
+        assignee: t.assignee
+          ? {
+            id: t.assignee.id,
+            name: t.assignee.name,
+            initials:
+              t.assignee.name
+                ?.split(" ")
+                .map((p: string) => p[0])
+                .join("")
+                .toUpperCase() ?? "NA",
           }
+          : undefined,
+        project: t.project
+          ? {
+            id: t.project.id,
+            key: t.project.key,
+            name: t.project.name,
+            color: t.project.color,
+          }
+          : undefined,
+        epic: t.epic
+          ? {
+            id: t.epic.id,
+            name: t.epic.name,
+            color: t.epic.color,
+          }
+          : undefined,
+        tags: Array.isArray(t.tags) ? t.tags : [],
+      }));
+
+      let mergedUsers = [...safeUsers];
+      if (currentUser) {
+        const existingIndex = mergedUsers.findIndex((u: any) => u.id === currentUser.id);
+        const authUserPatch = {
+          id: currentUser.id,
+          name: currentUser.name,
+          status: currentUser.status,
+          activity: currentUser.activity,
+        };
+
+        if (existingIndex === -1) {
+          mergedUsers.unshift(authUserPatch);
+        } else {
+          mergedUsers[existingIndex] = { ...mergedUsers[existingIndex], ...authUserPatch };
         }
+      }
 
-        const allUsersList: MemberItem[] = mergedUsers.map((u: any) => {
-          const userStatus = u.status || "offline";
+      const allUsersList: MemberItem[] = mergedUsers.map((u: any) => {
+        const userStatus = u.status || "offline";
 
-          return {
-            id: u.id,
-            name: u.name || "Unknown",
-            initials: (u.name || "?").split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase(),
-            status: userStatus,
-            activity: u.activity || (userStatus === "online" ? "Available" : userStatus === "away" ? "Away" : userStatus === "busy" ? "Busy" : userStatus === "dnd" ? "Focusing · Do Not Disturb" : "Offline"),
-            room: u.currentRoom || null,
-            avatar: u.avatar,
-          };
-        });
+        return {
+          id: u.id,
+          name: u.name || "Unknown",
+          initials: (u.name || "?").split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase(),
+          status: userStatus,
+          activity: u.activity || (userStatus === "online" ? "Available" : userStatus === "away" ? "Away" : userStatus === "busy" ? "Busy" : userStatus === "dnd" ? "Focusing · Do Not Disturb" : "Offline"),
+          room: u.currentRoom || null,
+          avatar: u.avatar,
+        };
+      });
 
-        const memberList: MemberItem[] = allUsersList.slice(0, 8);
+      const memberList: MemberItem[] = allUsersList.slice(0, 8);
 
-        let unreadTotal = notificationsRes || 0;
+      let unreadTotal = notificationsRes || 0;
 
-        setTodayMeetings(meetingsForList);
-        setRecentTasks(tasks);
-        setMembers(memberList);
-        setAllUsers(allUsersList);
-        setTeams(safeTeams);
-        setStats({
-          meetingsToday: meetingsTodayAll.length,
-          openTasks: safeTasks.length,
-          unreadMessages: unreadTotal,
-          teamTotal: safeUsers.length,
-        });
-      } catch (err) {
-        console.error("Failed to load dashboard data:", err);
-        setLoadError("We couldn't load your dashboard. Please try again.");
-      } finally {
-        setLoading(false);
+      setTodayMeetings(meetingsForList);
+      setRecentTasks(tasks);
+      setMembers(memberList);
+      setAllUsers(allUsersList);
+      setTeams(safeTeams);
+      setStats({
+        meetingsToday: meetingsTodayAll.length,
+        openTasks: safeTasks.length,
+        unreadMessages: unreadTotal,
+        teamTotal: safeUsers.length,
+      });
+    } catch (err) {
+      console.error("Failed to load dashboard data:", err);
+      setLoadError("We couldn't load your dashboard. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser?.id]);
+
+  // Real-time WebSocket listeners for Dashboard
+  useEffect(() => {
+    const socket = getSocket();
+
+    const handleMeetingCreated = (meeting: any) => {
+      console.log("[Dashboard] Real-time: meeting created", meeting.id);
+      loadData();
+    };
+
+    const handleMeetingUpdated = (meeting: any) => {
+      console.log("[Dashboard] Real-time: meeting updated", meeting.id);
+      loadData();
+    };
+
+    const handleMeetingDeleted = (meetingId: string) => {
+      console.log("[Dashboard] Real-time: meeting deleted", meetingId);
+      loadData();
+    };
+
+    const handleTaskCreated = (task: any) => {
+      console.log("[Dashboard] Real-time: task created", task.id);
+      if (task.status === "todo" || task.status === "in_progress") {
+        setStats((prev) => ({ ...prev, openTasks: prev.openTasks + 1 }));
+        loadData();
       }
     };
 
-    loadData();
+    const handleTaskUpdated = (task: any) => {
+      console.log("[Dashboard] Real-time: task updated", task.id);
+      loadData();
+    };
+
+    const handleTaskDeleted = (taskId: string) => {
+      console.log("[Dashboard] Real-time: task deleted", taskId);
+      loadData();
+    };
+
+    socket.on("meeting:created", handleMeetingCreated);
+    socket.on("meeting:updated", handleMeetingUpdated);
+    socket.on("meeting:deleted", handleMeetingDeleted);
+    socket.on("task:created", handleTaskCreated);
+    socket.on("task:updated", handleTaskUpdated);
+    socket.on("task:deleted", handleTaskDeleted);
+
+    return () => {
+      socket.off("meeting:created", handleMeetingCreated);
+      socket.off("meeting:updated", handleMeetingUpdated);
+      socket.off("meeting:deleted", handleMeetingDeleted);
+      socket.off("task:created", handleTaskCreated);
+      socket.off("task:updated", handleTaskUpdated);
+      socket.off("task:deleted", handleTaskDeleted);
+    };
   }, [currentUser?.id]);
 
   useEffect(() => {

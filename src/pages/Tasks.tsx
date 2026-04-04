@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Plus, Search, Filter, X, CalendarIcon, LayoutGrid, List, Calendar as CalendarViewIcon, CheckSquare, Clock, AlertCircle, ChevronLeft, ChevronRight, GripVertical, ArrowUpDown, BarChart3, Users, Loader2, FileText } from "lucide-react";
@@ -16,6 +16,7 @@ import TaskDetailDialog from "@/components/dialogs/TaskDetailDialog";
 import TaskTemplateDialog from "@/components/dialogs/TaskTemplateDialog";
 import { auth } from "@/lib/auth";
 import { apiGet, apiPatch } from "@/lib/api";
+import { getSocket } from "@/lib/websocket";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -81,6 +82,43 @@ export default function Tasks() {
   }, []);
 
   useEffect(() => { loadTasks(); }, [loadTasks]);
+
+  // Real-time WebSocket listeners for tasks
+  useEffect(() => {
+    const socket = getSocket();
+
+    const handleTaskCreated = (task: Task) => {
+      console.log("[Tasks] Real-time: task created", task.id);
+      setTasks((prev) => {
+        // Avoid duplicates
+        if (prev.some((t) => t.id === task.id)) return prev;
+        return [task, ...prev];
+      });
+    };
+
+    const handleTaskUpdated = (task: Task) => {
+      console.log("[Tasks] Real-time: task updated", task.id);
+      setTasks((prev) => prev.map((t) => (t.id === task.id ? task : t)));
+      // Update selected task if it's the one being viewed
+      setSelectedTask((prev) => (prev && prev.id === task.id ? task : prev));
+    };
+
+    const handleTaskDeleted = (taskId: string) => {
+      console.log("[Tasks] Real-time: task deleted", taskId);
+      setTasks((prev) => prev.filter((t) => t.id !== taskId));
+      setSelectedTask((prev) => (prev && prev.id === taskId ? null : prev));
+    };
+
+    socket.on("task:created", handleTaskCreated);
+    socket.on("task:updated", handleTaskUpdated);
+    socket.on("task:deleted", handleTaskDeleted);
+
+    return () => {
+      socket.off("task:created", handleTaskCreated);
+      socket.off("task:updated", handleTaskUpdated);
+      socket.off("task:deleted", handleTaskDeleted);
+    };
+  }, []);
 
   const uniqueAssignees = useMemo(() => {
     const map = new Map<string, { id: string; name: string }>();

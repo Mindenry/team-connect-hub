@@ -14,6 +14,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { PageShell, PageHero } from "@/components/shared/PageShell";
 import { useToast } from "@/components/ui/use-toast";
 import { apiGet, apiPost } from "@/lib/api";
+import { getSocket } from "@/lib/websocket";
 import { cn } from "@/lib/utils";
 import ReactMarkdown from "react-markdown";
 import { useAuth } from "@/lib/auth";
@@ -56,6 +57,39 @@ export default function Announcements() {
 
   useEffect(() => {
     loadAnnouncements();
+  }, []);
+
+  // Real-time WebSocket listeners for announcements
+  useEffect(() => {
+    const socket = getSocket();
+
+    const handleAnnouncementCreated = (announcement: Announcement) => {
+      console.log("[Announcements] Real-time: announcement created", announcement.id);
+      setAnnouncements((prev) => {
+        if (prev.some((a) => a.id === announcement.id)) return prev;
+        return [announcement, ...prev];
+      });
+    };
+
+    const handleAnnouncementUpdated = (announcement: Announcement) => {
+      console.log("[Announcements] Real-time: announcement updated", announcement.id);
+      setAnnouncements((prev) => prev.map((a) => (a.id === announcement.id ? announcement : a)));
+    };
+
+    const handleAnnouncementDeleted = (announcementId: string) => {
+      console.log("[Announcements] Real-time: announcement deleted", announcementId);
+      setAnnouncements((prev) => prev.filter((a) => a.id !== announcementId));
+    };
+
+    socket.on("announcement:created", handleAnnouncementCreated);
+    socket.on("announcement:updated", handleAnnouncementUpdated);
+    socket.on("announcement:deleted", handleAnnouncementDeleted);
+
+    return () => {
+      socket.off("announcement:created", handleAnnouncementCreated);
+      socket.off("announcement:updated", handleAnnouncementUpdated);
+      socket.off("announcement:deleted", handleAnnouncementDeleted);
+    };
   }, []);
 
   const loadAnnouncements = async () => {

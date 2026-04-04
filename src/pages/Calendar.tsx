@@ -21,6 +21,7 @@ import {
   PointerSensor, useSensor, useSensors,
 } from "@dnd-kit/core";
 import { apiGet, apiPatch } from "@/lib/api";
+import { getSocket } from "@/lib/websocket";
 import { TimeGrid } from "@/components/calendar/TimeGrid";
 
 import {
@@ -60,6 +61,69 @@ export default function TeamCalendar() {
         setTeams((Array.isArray(data) ? data : []).map((t: any) => ({ id: t.id, name: t.name })));
     });
     return () => { cancelled = true; };
+  }, []);
+
+  // Real-time WebSocket listeners for meetings and tasks
+  useEffect(() => {
+    const socket = getSocket();
+
+    const handleMeetingCreated = (meeting: RawMeeting) => {
+      console.log("[Calendar] Real-time: meeting created", meeting.id);
+      setMeetings((prev) => {
+        if (prev.some((m) => m.id === meeting.id)) return prev;
+        return [...prev, meeting];
+      });
+      setRefreshKey((k) => k + 1);
+    };
+
+    const handleMeetingUpdated = (meeting: RawMeeting) => {
+      console.log("[Calendar] Real-time: meeting updated", meeting.id);
+      setMeetings((prev) => prev.map((m) => (m.id === meeting.id ? meeting : m)));
+      setRefreshKey((k) => k + 1);
+    };
+
+    const handleMeetingDeleted = (meetingId: string) => {
+      console.log("[Calendar] Real-time: meeting deleted", meetingId);
+      setMeetings((prev) => prev.filter((m) => m.id !== meetingId));
+      setRefreshKey((k) => k + 1);
+    };
+
+    const handleTaskCreated = (task: RawTask) => {
+      console.log("[Calendar] Real-time: task created", task.id);
+      setTasks((prev) => {
+        if (prev.some((t) => t.id === task.id)) return prev;
+        return [...prev, task];
+      });
+      setRefreshKey((k) => k + 1);
+    };
+
+    const handleTaskUpdated = (task: RawTask) => {
+      console.log("[Calendar] Real-time: task updated", task.id);
+      setTasks((prev) => prev.map((t) => (t.id === task.id ? task : t)));
+      setRefreshKey((k) => k + 1);
+    };
+
+    const handleTaskDeleted = (taskId: string) => {
+      console.log("[Calendar] Real-time: task deleted", taskId);
+      setTasks((prev) => prev.filter((t) => t.id !== taskId));
+      setRefreshKey((k) => k + 1);
+    };
+
+    socket.on("meeting:created", handleMeetingCreated);
+    socket.on("meeting:updated", handleMeetingUpdated);
+    socket.on("meeting:deleted", handleMeetingDeleted);
+    socket.on("task:created", handleTaskCreated);
+    socket.on("task:updated", handleTaskUpdated);
+    socket.on("task:deleted", handleTaskDeleted);
+
+    return () => {
+      socket.off("meeting:created", handleMeetingCreated);
+      socket.off("meeting:updated", handleMeetingUpdated);
+      socket.off("meeting:deleted", handleMeetingDeleted);
+      socket.off("task:created", handleTaskCreated);
+      socket.off("task:updated", handleTaskUpdated);
+      socket.off("task:deleted", handleTaskDeleted);
+    };
   }, []);
 
   const { rangeStart, rangeEnd, visibleDays } = useMemo(() => {

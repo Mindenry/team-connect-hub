@@ -12,6 +12,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { apiGet, apiPost, apiPatch, apiDelete } from "@/lib/api";
+import { getSocket } from "@/lib/websocket";
 import { auth } from "@/lib/auth";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -43,6 +44,46 @@ export default function RemindersPage() {
     const interval = setInterval(loadData, 60000);
     return () => clearInterval(interval);
   }, [filter]);
+
+  // Real-time WebSocket listeners for reminders
+  useEffect(() => {
+    const socket = getSocket();
+
+    const handleReminderCreated = (reminder: Reminder) => {
+      console.log("[Reminders] Real-time: reminder created", reminder.id);
+      setReminders((prev) => {
+        if (prev.some((r) => r.id === reminder.id)) return prev;
+        return [...prev, reminder];
+      });
+    };
+
+    const handleReminderUpdated = (reminder: Reminder) => {
+      console.log("[Reminders] Real-time: reminder updated", reminder.id);
+      setReminders((prev) => prev.map((r) => (r.id === reminder.id ? reminder : r)));
+    };
+
+    const handleReminderDeleted = (reminderId: string) => {
+      console.log("[Reminders] Real-time: reminder deleted", reminderId);
+      setReminders((prev) => prev.filter((r) => r.id !== reminderId));
+    };
+
+    const handleReminderSent = (reminder: Reminder) => {
+      console.log("[Reminders] Real-time: reminder sent", reminder.id);
+      setReminders((prev) => prev.map((r) => (r.id === reminder.id ? { ...r, isSent: true } : r)));
+    };
+
+    socket.on("reminder:created", handleReminderCreated);
+    socket.on("reminder:updated", handleReminderUpdated);
+    socket.on("reminder:deleted", handleReminderDeleted);
+    socket.on("reminder:sent", handleReminderSent);
+
+    return () => {
+      socket.off("reminder:created", handleReminderCreated);
+      socket.off("reminder:updated", handleReminderUpdated);
+      socket.off("reminder:deleted", handleReminderDeleted);
+      socket.off("reminder:sent", handleReminderSent);
+    };
+  }, []);
 
   const loadData = async () => {
     try {

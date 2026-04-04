@@ -23,6 +23,7 @@ import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/comp
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { apiGet, apiPatch, apiDelete, apiPut, apiPost, apiFetch } from "@/lib/api";
+import { getSocket } from "@/lib/websocket";
 import {
   DirectoryGrid,
   UserManagementTable,
@@ -142,6 +143,57 @@ export default function Directory() {
 
   useEffect(() => {
     loadData();
+  }, []);
+
+  // Real-time WebSocket listeners for directory
+  useEffect(() => {
+    const socket = getSocket();
+
+    const handleUserCreated = (user: any) => {
+      console.log("[Directory] Real-time: user created", user.id);
+      loadData();
+    };
+
+    const handleUserUpdated = (updatedUser: any) => {
+      console.log("[Directory] Real-time: user updated", updatedUser.id);
+      setUsers((prev) => prev.map((u) => (u.id === updatedUser.id ? { ...u, name: updatedUser.name, role: updatedUser.role, department: updatedUser.department, position: updatedUser.position, isActive: updatedUser.isActive } : u)));
+    };
+
+    const handleUserDeleted = (userId: string) => {
+      console.log("[Directory] Real-time: user deleted", userId);
+      setUsers((prev) => prev.filter((u) => u.id !== userId));
+    };
+
+    const handleTeamCreated = (team: any) => {
+      console.log("[Directory] Real-time: team created", team.id);
+      loadData();
+    };
+
+    const handleTeamUpdated = (team: any) => {
+      console.log("[Directory] Real-time: team updated", team.id);
+      setTeams((prev) => prev.map((t) => (t.id === team.id ? { ...t, name: team.name, description: team.description } : t)));
+    };
+
+    const handleTeamDeleted = (teamId: string) => {
+      console.log("[Directory] Real-time: team deleted", teamId);
+      setTeams((prev) => prev.filter((t) => t.id !== teamId));
+    };
+
+    socket.on("user:created", handleUserCreated);
+    socket.on("user:updated", handleUserUpdated);
+    socket.on("user:deleted", handleUserDeleted);
+    socket.on("team:created", handleTeamCreated);
+    socket.on("team:updated", handleTeamUpdated);
+    socket.on("team:deleted", handleTeamDeleted);
+
+    return () => {
+      socket.off("user:created", handleUserCreated);
+      socket.off("user:updated", handleUserUpdated);
+      socket.off("user:deleted", handleUserDeleted);
+      socket.off("team:created", handleTeamCreated);
+      socket.off("team:updated", handleTeamUpdated);
+      socket.off("team:deleted", handleTeamDeleted);
+    };
   }, []);
 
   const loadData = async () => {
