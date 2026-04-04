@@ -239,9 +239,11 @@ export function clearApiCache() {
 }
 
 export async function apiFetch(url: string, options: RequestInit = {}): Promise<Response> {
-  // Check cache for GET requests
+  // Check cache for GET requests (but skip cache for chat/DM endpoints to ensure real-time data)
   const method = options.method || 'GET';
-  if (method === 'GET') {
+  const isChatEndpoint = url.includes('/channels/') && url.includes('/messages') || 
+                         url.includes('/dm/');
+  if (method === 'GET' && !isChatEndpoint) {
     const cacheKey = requestManager.getCacheKey(url, options);
     const cached = requestManager.getCached(cacheKey);
     if (cached !== null) {
@@ -309,7 +311,8 @@ export async function apiGet<T = any>(url: string): Promise<T> {
                                 url.includes('/channels') ||
                                 url.includes('/meetings') ||
                                 url.includes('/wiki') ||
-                                url.includes('/reports');
+                                url.includes('/reports') ||
+                                url.includes('/dm/');
         return (isArrayEndpoint ? [] : {}) as T;
       }
       
@@ -361,7 +364,8 @@ export async function apiGet<T = any>(url: string): Promise<T> {
                                 url.includes('/channels') ||
                                 url.includes('/meetings') ||
                                 url.includes('/wiki') ||
-                                url.includes('/reports');
+                                url.includes('/reports') ||
+                                url.includes('/dm/');
         return (isArrayEndpoint ? [] : {}) as T;
       }
       
@@ -378,7 +382,8 @@ export async function apiGet<T = any>(url: string): Promise<T> {
                                 url.includes('/channels') ||
                                 url.includes('/meetings') ||
                                 url.includes('/wiki') ||
-                                url.includes('/reports');
+                                url.includes('/reports') ||
+                                url.includes('/dm/');
         return (isArrayEndpoint ? [] : {}) as T;
       }
       
@@ -435,7 +440,8 @@ export async function apiGet<T = any>(url: string): Promise<T> {
                               url.includes('/tasks') || 
                               url.includes('/users') ||
                               url.includes('/channels') ||
-                              url.includes('/meetings');
+                              url.includes('/meetings') ||
+                              url.includes('/dm/');
       return (isArrayEndpoint ? [] : {}) as T;
     }
   } catch (error: unknown) {

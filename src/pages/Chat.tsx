@@ -111,7 +111,7 @@ const updateRecentDmOrder = (userId: string, contactId: string) => {
     const order = getRecentDmOrder(userId);
     const newOrder = [contactId, ...order.filter(id => id !== contactId)].slice(0, 50);
     localStorage.setItem(`dm-recent-order-${userId}`, JSON.stringify(newOrder));
-  } catch {}
+  } catch { }
 };
 
 const normalizeAttachmentUrl = (att: { url: string; name: string; type: string }) => {
@@ -363,17 +363,17 @@ export default function Chat() {
     const loadData = async () => {
       try {
         setLoading(true);
-        
+
         const [channelsRes, usersRes] = await Promise.all([
           apiGet<Channel[]>("/channels").catch(() => []),
           apiGet<any[]>("/users").catch(() => []),
         ]);
-        
+
         if (cancelled) return;
-        
+
         const safeChannels = Array.isArray(channelsRes) ? channelsRes : [];
         const safeUsers = Array.isArray(usersRes) ? usersRes : [];
-        
+
         // Hydrate unread counts from persistent store (so badges survive refresh / route changes)
         const unreadState = currentUser?.id ? getChatUnreadState(currentUser.id) : { channels: {}, dms: {} };
         setChannels(
@@ -393,7 +393,7 @@ export default function Chat() {
               id: u.id,
               name: u.name,
               initials: u.name.split(" ").map((n: string) => n[0]).join(""),
-              status: "offline", 
+              status: "offline",
               unread: (unreadState.dms as any)?.[u.id] || 0,
               lastMsg: "",
               avatar: u.avatar || null,
@@ -407,7 +407,7 @@ export default function Chat() {
               return a.name.localeCompare(b.name);
             })
         );
-        
+
       } catch (err) {
         console.error("Failed to load chat data:", err);
       } finally {
@@ -418,7 +418,7 @@ export default function Chat() {
     };
 
     loadData();
-    
+
     return () => {
       cancelled = true;
     };
@@ -429,7 +429,7 @@ export default function Chat() {
     if (location.pathname !== "/chat" || channels.length === 0 || loading || activeDm) return;
 
     const urlChannel = searchParams.get("channel");
-    
+
     setActiveChannel((prevChannel) => {
       if (urlChannel && channels.some((c) => c.id === urlChannel)) {
         return urlChannel;
@@ -446,16 +446,16 @@ export default function Chat() {
 
   useEffect(() => {
     if (!activeChannel || !currentUser || location.pathname !== "/chat") return;
-    
+
     let cancelled = false;
     const load = async () => {
       try {
         const data = await apiGet<any>(`/channels/${activeChannel}/messages`).catch(() =>
           apiGet<any>(`/channels/${activeChannel}`).catch(() => null)
         );
-        
+
         if (cancelled) return;
-        
+
         if (Array.isArray(data)) {
           setMessages(data.map((m) => normalizeMessageAttachments(m)));
         } else if (data && Array.isArray(data.messages)) {
@@ -473,7 +473,7 @@ export default function Chat() {
       }
     };
     load();
-    
+
     return () => {
       cancelled = true;
     };
@@ -510,7 +510,7 @@ export default function Chat() {
     try {
       const reactions = await apiGet<Array<{ emoji: string; count: number; users: Array<{ id: string; name: string }> }>>(`/messages/${messageId}/reactions`);
       setMessageReactions((prev) => ({ ...prev, [messageId]: reactions }));
-    } catch {}
+    } catch { }
   };
 
   useEffect(() => {
@@ -526,7 +526,7 @@ export default function Chat() {
     try {
       await apiPost(`/messages/${messageId}/reactions`, { userId: currentUser.id, emoji });
       loadReactionsForMessage(messageId);
-    } catch {}
+    } catch { }
   };
 
   // ── Thread helpers ──
@@ -538,7 +538,7 @@ export default function Chat() {
       setActiveThread(thread.id);
       const threadData = await apiGet(`/threads/${thread.id}`);
       setThreadReplies((prev) => ({ ...prev, [thread.id]: (threadData as any).replies || [] }));
-    } catch {}
+    } catch { }
   };
 
   // ── Request notification permission ──
@@ -554,7 +554,7 @@ export default function Chat() {
 
   useEffect(() => {
     if (location.pathname !== "/chat") return;
-    
+
     const socket = getSocket();
 
     const handleNewMessage = (message: Message) => {
@@ -615,7 +615,7 @@ export default function Chat() {
 
       // Use ref to get current active DM (avoids stale closure)
       const currentActiveDm = activeDmRef.current;
-      
+
       // Update contacts list (สถานะจะถูกอัปเดตโดย dmContactsWithStatus จาก presence system)
       setDmContacts((prev) => {
         const exists = prev.find((c) => c.id === otherUserId);
@@ -676,7 +676,11 @@ export default function Chat() {
     const handleChannelUpdated = (updatedChannel: any) => setChannels((prev) => prev.map((c) => (c.id === updatedChannel.id ? (updatedChannel as Channel) : c)));
     const handleChannelDeleted = (channelId: string) => {
       setChannels((prev) => prev.filter((c) => c.id !== channelId));
-      if (activeChannel === channelId) setActiveChannel(null);
+      // Use ref to check current active channel (avoids stale closure)
+      if (activeChannelRef.current === channelId) {
+        setActiveChannel(null);
+        activeChannelRef.current = null;
+      }
     };
 
     socket.on("message:created", handleNewMessage);
@@ -700,8 +704,8 @@ export default function Chat() {
       socket.off("channel:updated", handleChannelUpdated);
       socket.off("channel:deleted", handleChannelDeleted);
     };
-  // Remove activeChannel and activeDm from dependencies since we use refs now
-  // This prevents re-registering socket handlers on every channel/DM switch
+    // Remove activeChannel and activeDm from dependencies since we use refs now
+    // This prevents re-registering socket handlers on every channel/DM switch
   }, [currentUser, location.pathname]);
 
   // ── Message actions ──
@@ -710,14 +714,14 @@ export default function Chat() {
     try {
       await apiPatch(`/messages/${msg.id}`, { isPinned: !msg.isPinned });
       setMessages((prev) => prev.map((m) => (m.id === msg.id ? { ...m, isPinned: !m.isPinned } : m)));
-    } catch {}
+    } catch { }
   };
 
   const handleDeleteMessage = async (msg: Message) => {
     try {
       await apiDelete(`/messages/${msg.id}`);
       setMessages((prev) => prev.filter((m) => m.id !== msg.id));
-    } catch {}
+    } catch { }
   };
 
   const handleReplyMessage = (msg: Message) => {
@@ -733,7 +737,7 @@ export default function Chat() {
       if (activeChannel === channelToDelete.id) setActiveChannel(null);
       setShowDeleteChannel(false);
       setChannelToDelete(null);
-    } catch {}
+    } catch { }
   };
 
   // ── Typing indicator ──
@@ -946,7 +950,7 @@ export default function Chat() {
     // Update refs IMMEDIATELY to prevent race condition with socket handlers
     activeChannelRef.current = channelId;
     activeDmRef.current = null;
-    
+
     setActiveChannel(channelId);
     setActiveDm(null);
     // Reset unread counter for this channel when user opens it
@@ -972,7 +976,7 @@ export default function Chat() {
       // Update refs IMMEDIATELY to prevent race condition with socket handlers
       activeDmRef.current = userId;
       activeChannelRef.current = null;
-      
+
       setActiveDm(userId);
       setActiveChannel(null);
 
@@ -991,22 +995,22 @@ export default function Chat() {
 
         const mapped: Message[] = Array.isArray(dmHistory)
           ? dmHistory.map((dm) => ({
-              id: dm.id,
-              text: dm.text,
-              senderId: dm.senderId,
-              sender: {
-                id: dm.sender?.id ?? dm.senderId,
-                name: dm.sender?.name ?? "User",
-                email: dm.sender?.email ?? "",
-                avatar: dm.sender?.avatar || null,
-              },
-              channelId: "dm",
-              isPinned: dm.isPinned ?? false,
-              isSystem: dm.isSystem ?? false,
-              createdAt: dm.createdAt,
-              attachments: dm.attachments ?? undefined,
-              mentions: dm.mentions ?? undefined,
-            }))
+            id: dm.id,
+            text: dm.text,
+            senderId: dm.senderId,
+            sender: {
+              id: dm.sender?.id ?? dm.senderId,
+              name: dm.sender?.name ?? "User",
+              email: dm.sender?.email ?? "",
+              avatar: dm.sender?.avatar || null,
+            },
+            channelId: "dm",
+            isPinned: dm.isPinned ?? false,
+            isSystem: dm.isSystem ?? false,
+            createdAt: dm.createdAt,
+            attachments: dm.attachments ?? undefined,
+            mentions: dm.mentions ?? undefined,
+          }))
           : [];
 
         // Sort by createdAt to ensure chronological order
@@ -1072,7 +1076,7 @@ export default function Chat() {
       const data = await apiGet<any[]>(`/messages/search?${params}`);
       setSearchResults(data);
       setShowSearchResults(true);
-    } catch {}
+    } catch { }
   };
 
   // ── Render ──
