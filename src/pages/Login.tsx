@@ -122,11 +122,34 @@ export default function Login() {
         throw new Error("เกิดข้อผิดพลาดในการส่งอีเมล");
       }
 
-      toast({
-        title: "ส่งลิงก์รีเซ็ตรหัสผ่านแล้ว",
-        description:
-          "กรุณาตรวจสอบกล่องจดหมายของคุณ (ดู token ใน console ตอนพัฒนา)",
-      });
+      const data = await res.json();
+      
+      // Log token in development mode
+      if (data.token) {
+        console.log('\n========================================');
+        console.log('🔐 PASSWORD RESET TOKEN (Development)');
+        console.log('========================================');
+        console.log('Email:', forgotEmail);
+        console.log('Token:', data.token);
+        console.log('Reset URL:', `${window.location.origin}/reset-password?token=${data.token}`);
+        console.log('========================================\n');
+      }
+
+      // Show appropriate message
+      if (data.emailSent === false) {
+        toast({
+          variant: "destructive",
+          title: "ไม่สามารถส่งอีเมลได้",
+          description: data.token 
+            ? "ตรวจสอบ console สำหรับ token (โหมดพัฒนา)" 
+            : "กรุณาติดต่อผู้ดูแลระบบ",
+        });
+      } else {
+        toast({
+          title: "ส่งลิงก์รีเซ็ตรหัสผ่านแล้ว",
+          description: "กรุณาตรวจสอบกล่องจดหมายของคุณ",
+        });
+      }
       setShowForgotPwd(false);
       setForgotEmail("");
     } catch (err: any) {
