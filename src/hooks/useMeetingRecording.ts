@@ -207,40 +207,59 @@ export function useMeetingRecording({
           const authHeaders = await auth.getAuthHeaders();
           const { "Content-Type": _, ...uploadHeaders } = authHeaders as Record<string, string>;
 
-          const response = await fetch(
-            `${API_BASE}/api/recordings/upload/${meetingId || "quick-huddle"}`,
-            {
-              method: "POST",
-              headers: uploadHeaders,
-              body: formData,
-            }
-          );
+          // Create AbortController for timeout handling
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 120000); // 2 minutes timeout
 
-          if (response.ok) {
-            const result = await response.json();
-            const isPersonal = isQuick || result.drive?.folder === "Personal";
-            toast.success(
-              isPersonal ? "Recording saved to Personal Drive!" : "Recording saved to Shared Drive!",
+          try {
+            const response = await fetch(
+              `${API_BASE}/api/recordings/upload/${meetingId || "quick-huddle"}`,
               {
-                id: "recording-upload",
-                description: `Duration: ${Math.floor(recordingTimeRef.current / 60)}:${String(recordingTimeRef.current % 60).padStart(2, "0")}`,
-                action: {
-                  label: "View",
-                  onClick: () => {
-                    window.open(`/drive?teamId=${result.drive?.teamId || ""}`, "_blank");
-                  },
-                },
+                method: "POST",
+                headers: uploadHeaders,
+                body: formData,
+                signal: controller.signal,
               }
             );
-          } else {
-            const errorText = await response.text();
-            console.error("Upload failed:", errorText);
-            toast.error("Upload failed", {
-              id: "recording-upload",
-              description: errorText || "Server returned an error while uploading.",
-            });
-            // Fallback to local download
-            downloadLocally(blob, fileName);
+
+            clearTimeout(timeoutId);
+
+            if (response.ok) {
+              const result = await response.json();
+              const isPersonal = isQuick || result.drive?.folder === "Personal";
+              toast.success(
+                isPersonal ? "Recording saved to Personal Drive!" : "Recording saved to Shared Drive!",
+                {
+                  id: "recording-upload",
+                  description: `Duration: ${Math.floor(recordingTimeRef.current / 60)}:${String(recordingTimeRef.current % 60).padStart(2, "0")}`,
+                  action: {
+                    label: "View",
+                    onClick: () => {
+                      window.open(`/drive?teamId=${result.drive?.teamId || ""}`, "_blank");
+                    },
+                  },
+                }
+              );
+            } else {
+              const errorText = await response.text();
+              console.error("Upload failed:", errorText);
+              toast.error("Upload failed", {
+                id: "recording-upload",
+                description: errorText || "Server returned an error while uploading.",
+              });
+              // Fallback to local download
+              downloadLocally(blob, fileName);
+            }
+          } catch (fetchError: any) {
+            clearTimeout(timeoutId);
+            if (fetchError.name === 'AbortError') {
+              console.error("Upload timeout after 2 minutes");
+              toast.error("Upload timeout", {
+                id: "recording-upload",
+                description: "Server took too long to process. File saved locally.",
+              });
+            }
+            throw fetchError;
           }
         } catch (uploadError) {
           console.error("Upload error:", uploadError);
