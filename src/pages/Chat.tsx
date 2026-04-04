@@ -424,22 +424,32 @@ export default function Chat() {
     };
   }, [location.pathname, currentUser?.id]);
 
-  // Sync activeChannel with URL and initial open
+  // Sync activeChannel/activeDm with URL and initial open
   useEffect(() => {
-    if (location.pathname !== "/chat" || channels.length === 0 || loading || activeDm) return;
+    if (location.pathname !== "/chat" || loading) return;
 
     const urlChannel = searchParams.get("channel");
+    const urlDm = searchParams.get("dm");
 
-    setActiveChannel((prevChannel) => {
-      if (urlChannel && channels.some((c) => c.id === urlChannel)) {
-        return urlChannel;
-      } else if (!prevChannel) {
-        return channels[0]?.id || null;
-      } else if (prevChannel && !channels.some((c) => c.id === prevChannel)) {
-        return channels[0]?.id || null;
-      }
-      return prevChannel || null;
-    });
+    // Handle DM from URL
+    if (urlDm && !activeDm) {
+      selectDm(urlDm);
+      return;
+    }
+
+    // Handle channel from URL
+    if (!urlDm && !activeDm && channels.length > 0) {
+      setActiveChannel((prevChannel) => {
+        if (urlChannel && channels.some((c) => c.id === urlChannel)) {
+          return urlChannel;
+        } else if (!prevChannel) {
+          return channels[0]?.id || null;
+        } else if (prevChannel && !channels.some((c) => c.id === prevChannel)) {
+          return channels[0]?.id || null;
+        }
+        return prevChannel || null;
+      });
+    }
   }, [location.pathname, channels, searchParams, loading, activeDm]);
 
   // ── Load messages when channel changes ──

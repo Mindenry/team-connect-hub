@@ -49,6 +49,15 @@ export default function Tasks() {
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const [groupBy, setGroupBy] = useState("status");
 
+  // Read filters from URL query params
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const assigneeId = params.get("assigneeId");
+    const teamId = params.get("teamId");
+    if (assigneeId) setFilterAssignee(assigneeId);
+    if (teamId) setFilterTeam(teamId);
+  }, [location.search]);
+
   const [showCreateTask, setShowCreateTask] = useState(false);
   const [showTemplateDialog, setShowTemplateDialog] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<any>(null);

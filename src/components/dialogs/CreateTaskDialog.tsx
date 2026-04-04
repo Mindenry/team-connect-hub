@@ -81,7 +81,7 @@ export default function CreateTaskDialog({
   const [estimate, setEstimate] = useState<string>("");
 
   const [teams, setTeams] = useState<any[]>([]);
-  const [users, setUsers] = useState<any[]>([]);
+  const [teamMembers, setTeamMembers] = useState<any[]>([]); // Members of selected team
   const [templates, setTemplates] = useState<TaskTemplate[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -90,16 +90,35 @@ export default function CreateTaskDialog({
     if (open) {
       Promise.all([
         apiGet<any[]>("/teams").catch(() => []),
-        apiGet<any[]>("/users").catch(() => []),
         apiGet<TaskTemplate[]>("/tasks/templates").catch(() => []),
-      ]).then(([t, u, tmpl]) => {
+      ]).then(([t, tmpl]) => {
         // Filter out "Personal Recordings" - it's just a personal folder, not a real team
         setTeams(Array.isArray(t) ? t.filter((team: any) => team.name.toLowerCase() !== "personal recordings") : []);
-        setUsers(Array.isArray(u) ? u : []);
         setTemplates(Array.isArray(tmpl) ? tmpl : []);
       });
     }
   }, [open]);
+
+  // Fetch team members when team is selected
+  useEffect(() => {
+    if (teamId && teamId !== "none") {
+      apiGet<any[]>(`/teams/${teamId}/members`).then((res) => {
+        const members = Array.isArray(res) ? res.map((m: any) => ({
+          id: m.user?.id || m.userId,
+          name: m.user?.name || "Unknown",
+          email: m.user?.email || "",
+          avatar: m.user?.avatar,
+          role: m.role,
+        })) : [];
+        setTeamMembers(members);
+        // Clear assignees that are not in the new team
+        setAssigneeIds(prev => prev.filter(id => members.some((m: any) => m.id === id)));
+      }).catch(() => setTeamMembers([]));
+    } else {
+      setTeamMembers([]);
+      setAssigneeIds([]);
+    }
+  }, [teamId]);
 
   useEffect(() => {
     if (defaultTeamId) setTeamId(defaultTeamId);
@@ -320,15 +339,23 @@ export default function CreateTaskDialog({
                   <SelectValue placeholder="Add assignee..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {users.filter((u) => !assigneeIds.includes(u.id)).map((u) => (
-                    <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
-                  ))}
+                  {teamId && teamId !== "none" ? (
+                    teamMembers.filter((u) => !assigneeIds.includes(u.id)).length > 0 ? (
+                      teamMembers.filter((u) => !assigneeIds.includes(u.id)).map((u) => (
+                        <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
+                      ))
+                    ) : (
+                      <div className="px-2 py-1.5 text-xs text-muted-foreground">No members in this team</div>
+                    )
+                  ) : (
+                    <div className="px-2 py-1.5 text-xs text-muted-foreground">Select a team first</div>
+                  )}
                 </SelectContent>
               </Select>
               {assigneeIds.length > 0 && (
                 <div className="flex flex-wrap gap-1 mt-1.5">
                   {assigneeIds.map((id) => {
-                    const u = users.find((usr) => usr.id === id);
+                    const u = teamMembers.find((usr) => usr.id === id);
                     return (
                       <Badge key={id} variant="secondary" className="text-xs gap-1 pr-1 items-center">
                         <Avatar className="w-4 h-4">

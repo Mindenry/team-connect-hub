@@ -391,125 +391,72 @@ export default function Reports() {
                 </div>
               ) : (
                 <>
-                  {/* Tab: ภาพรวม */}
+                  {/* Tab: ภาพรวม - ตามขอบเขต 6.1 */}
                   <TabsContent value="overview" className="mt-4 space-y-4">
                     {personalReport && (
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                        <KpiCard title="งานที่เสร็จแล้ว" value={personalReport.tasksCompleted ?? 0} suffix="งาน" icon={CheckSquare} gradient="from-emerald-500 to-teal-500" shadowColor="shadow-emerald-500/20" />
-                        <KpiCard title="การประชุมที่เข้าร่วม" value={personalReport.meetingsAttended ?? 0} suffix="การประชุม" icon={Calendar} gradient="from-blue-500 to-cyan-500" shadowColor="shadow-blue-500/20" />
-                        <KpiCard title="ข้อความที่ส่ง" value={personalReport.messagesSent ?? 0} suffix="ข้อความ" icon={MessageSquare} gradient="from-violet-500 to-purple-500" shadowColor="shadow-violet-500/20" />
-                        <ProductivityScoreCard score={personalReport.productivityScore ?? 0} breakdown={personalReport.productivityBreakdown} />
-                      </div>
-                    )}
+                      <>
+                        {/* KPI หลักตามขอบเขต 6.1: งานที่ทำเสร็จ, การประชุมที่เข้าร่วม, ข้อความที่ส่งในแชท */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          <KpiCard title="งานที่เสร็จแล้ว" value={personalReport.tasksCompleted ?? 0} suffix="งาน" icon={CheckSquare} gradient="from-emerald-500 to-teal-500" shadowColor="shadow-emerald-500/20" />
+                          <KpiCard title="การประชุมที่เข้าร่วม" value={personalReport.meetingsAttended ?? 0} suffix="การประชุม" icon={Calendar} gradient="from-blue-500 to-cyan-500" shadowColor="shadow-blue-500/20" />
+                          <KpiCard title="ข้อความที่ส่ง" value={personalReport.messagesSent ?? 0} suffix="ข้อความ" icon={MessageSquare} gradient="from-violet-500 to-purple-500" shadowColor="shadow-violet-500/20" />
+                        </div>
 
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                      {taskReport && (
-                        <Card className="border-border/50 bg-card/80 backdrop-blur-sm lg:col-span-1">
+                        {/* Productivity Score - เป็นส่วนเสริมที่เหมาะสม */}
+                        <Card className="border-border/50 bg-card/80 backdrop-blur-sm">
                           <CardHeader className="pb-3">
                             <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                              <Target className="w-4 h-4 text-blue-500" />
-                              สถานะงานทั้งหมด
+                              <TrendingUp className="w-4 h-4 text-primary" />
+                              คะแนนประสิทธิภาพ
                             </CardTitle>
+                            <CardDescription className="text-xs">คำนวณจากงานที่ทำเสร็จ, การเข้าร่วมประชุม และการสื่อสาร</CardDescription>
                           </CardHeader>
-                          <CardContent className="space-y-4">
-                            <div className="text-center">
-                              <div className="text-3xl font-bold text-foreground">{taskReport.summary.totalTasks}</div>
-                              <div className="text-xs text-muted-foreground">งานทั้งหมด</div>
-                            </div>
-                            <div className="space-y-2.5">
-                              {Object.entries(taskReport.tasksByStatus || {
-                                done: taskReport.summary.completedTasks,
-                                in_progress: taskReport.summary.inProgressTasks,
-                                todo: Math.max(0, taskReport.summary.totalTasks - taskReport.summary.completedTasks - taskReport.summary.inProgressTasks),
-                              }).map(([status, count]) => (
-                                <StatusBarRow key={status} label={statusLabel[status] || status} count={count as number} total={taskReport.summary.totalTasks} color={statusColor[status] || "bg-slate-400"} />
-                              ))}
-                            </div>
-                          </CardContent>
-                        </Card>
-                      )}
-
-                      {performance && performance.taskCompletionRates.length > 0 && (
-                        <Card className="border-border/50 bg-card/80 backdrop-blur-sm lg:col-span-1">
-                          <CardHeader className="pb-3">
-                            <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                              <Trophy className="w-4 h-4 text-amber-500" />
-                              Top Performers
-                            </CardTitle>
-                          </CardHeader>
-                          <CardContent className="space-y-3">
-                            {performance.taskCompletionRates.slice().sort((a, b) => b.completionRate - a.completionRate).slice(0, 5).map((r, i) => (
-                              <div key={r.userId} className="flex items-center gap-3">
-                                <div className={cn("w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white", i === 0 ? "bg-amber-500" : i === 1 ? "bg-slate-400" : i === 2 ? "bg-orange-600" : "bg-muted-foreground/40")}>{i + 1}</div>
-                                <div className="flex-1 min-w-0">
-                                  <div className="text-xs font-medium truncate">{r.userName}</div>
-                                  <div className="flex items-center gap-2 mt-1">
-                                    <Progress value={r.completionRate} className="h-1.5 flex-1" />
-                                    <span className="text-[10px] text-muted-foreground font-medium w-10 text-right">{r.completionRate.toFixed(0)}%</span>
+                          <CardContent>
+                            <div className="flex items-center justify-center py-4">
+                              <div className="relative w-40 h-40">
+                                <ResponsiveContainer width="100%" height="100%">
+                                  <RechartsPieChart>
+                                    <Pie data={[{ name: 'คะแนน', value: personalReport.productivityScore ?? 0, color: CHART_COLORS.emerald }, { name: 'ที่เหลือ', value: Math.max(0, 100 - (personalReport.productivityScore ?? 0)), color: '#e5e7eb' }]} cx="50%" cy="50%" innerRadius={50} outerRadius={70} paddingAngle={2} dataKey="value">
+                                      <Cell fill={CHART_COLORS.emerald} />
+                                      <Cell fill="#e5e7eb" />
+                                    </Pie>
+                                  </RechartsPieChart>
+                                </ResponsiveContainer>
+                                <div className="absolute inset-0 flex items-center justify-center">
+                                  <div className="text-center">
+                                    <div className={cn("text-2xl font-bold", getProductivityColor(personalReport.productivityScore ?? 0))}>{personalReport.productivityScore ?? 0}</div>
+                                    <div className="text-[10px] text-muted-foreground">Score</div>
                                   </div>
                                 </div>
                               </div>
-                            ))}
-                          </CardContent>
-                        </Card>
-                      )}
-
-                      {meetingReport && (
-                        <Card className="border-border/50 bg-card/80 backdrop-blur-sm lg:col-span-1">
-                          <CardHeader className="pb-3">
-                            <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                              <Calendar className="w-4 h-4 text-blue-500" />
-                              สรุปการประชุม
-                            </CardTitle>
-                          </CardHeader>
-                          <CardContent className="space-y-4">
-                            <div className="grid grid-cols-2 gap-3">
-                              <MiniStat label="จำนวนประชุม" value={meetingReport.summary.totalMeetings} />
-                              <MiniStat label="ระยะเวลาเฉลี่ย" value={`${meetingReport.summary.avgDuration.toFixed(0)} นาที`} />
-                              <MiniStat label="ผู้เข้าร่วมรวม" value={meetingReport.summary.totalParticipants} />
-                              <MiniStat label="ผู้เข้าร่วม/ห้อง" value={meetingReport.summary.avgParticipants.toFixed(1)} />
                             </div>
-                            {Object.keys(meetingReport.meetingsByTeam).length > 0 && (
-                              <div>
-                                <div className="text-[10px] text-muted-foreground mb-2 font-medium uppercase tracking-wider">ประชุมตามทีม</div>
-                                <div className="space-y-1.5">
-                                  {Object.entries(meetingReport.meetingsByTeam).sort((a, b) => (b[1] as number) - (a[1] as number)).slice(0, 4).map(([team, count]) => (
-                                    <div key={team} className="flex items-center justify-between text-xs">
-                                      <span className="text-muted-foreground truncate mr-2">{team}</span>
-                                      <Badge variant="secondary" className="text-[10px] h-5 px-2">{count as number}</Badge>
-                                    </div>
-                                  ))}
+                            {personalReport.productivityBreakdown && (
+                              <div className="space-y-2 mt-4">
+                                <div className="flex items-center justify-between text-xs">
+                                  <span className="text-muted-foreground">Task Performance</span>
+                                  <span className="font-medium">{personalReport.productivityBreakdown.adjustedTaskPerformance}%</span>
+                                </div>
+                                <div className="flex items-center justify-between text-xs">
+                                  <span className="text-muted-foreground">Engagement</span>
+                                  <span className="font-medium">{personalReport.productivityBreakdown.meaningfulEngagement}%</span>
+                                </div>
+                                <div className="flex items-center justify-between text-xs">
+                                  <span className="text-muted-foreground">Communication</span>
+                                  <span className="font-medium">{personalReport.productivityBreakdown.communicationEffectiveness}%</span>
+                                </div>
+                                <div className="flex items-center justify-between text-xs">
+                                  <span className="text-muted-foreground">Consistency</span>
+                                  <span className="font-medium">{personalReport.productivityBreakdown.workConsistency}%</span>
                                 </div>
                               </div>
                             )}
                           </CardContent>
                         </Card>
-                      )}
-                    </div>
+                      </>
+                    )}
 
-                    {personalReport?.teamMetrics && personalReport.teamMetrics.filter(t => t.teamName.toLowerCase() !== 'personal recordings').length > 0 && (
-                      <Card className="border-border/50 bg-card/80 backdrop-blur-sm">
-                        <CardHeader className="pb-3">
-                          <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                            <Users className="w-4 h-4 text-primary" />
-                            สถิติทีมที่คุณอยู่
-                          </CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                            {personalReport.teamMetrics.filter(t => t.teamName.toLowerCase() !== 'personal recordings').map((t) => (
-                              <div key={t.teamName} className="p-3 rounded-xl bg-muted/30 border border-border/40">
-                                <div className="font-medium text-xs mb-2">{t.teamName}</div>
-                                <div className="flex gap-4 text-[11px] text-muted-foreground">
-                                  <div className="flex items-center gap-1"><CheckSquare className="w-3 h-3 text-emerald-500" /><span>{t.tasksCompleted ?? 0} งาน</span></div>
-                                  <div className="flex items-center gap-1"><Calendar className="w-3 h-3 text-blue-500" /><span>{t.meetingsAttended ?? 0} ประชุม</span></div>
-                                  <div className="flex items-center gap-1"><MessageSquare className="w-3 h-3 text-violet-500" /><span>{t.messagesSent ?? 0} แชท</span></div>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </CardContent>
-                      </Card>
+                    {!personalReport && (
+                      <EmptyState message="ยังไม่มีข้อมูลรายงานในช่วงเวลานี้" />
                     )}
                   </TabsContent>
 
