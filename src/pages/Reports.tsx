@@ -303,13 +303,9 @@ export default function Reports() {
         }
       };
 
-      try {
-        await tryServerExport();
-        toast({ title: "ส่งออกสำเร็จ", description: `ดาวน์โหลด ${format.toUpperCase()} เรียบร้อยแล้ว` });
-      } catch {
-        clientExport();
-        toast({ title: "ส่งออกสำเร็จ", description: `ดาวน์โหลด ${format.toUpperCase()} เรียบร้อยแล้ว (client-side)` });
-      }
+      // Use client-side export directly (uses updated reports.ts design)
+      clientExport();
+      toast({ title: "ส่งออกสำเร็จ", description: `ดาวน์โหลด ${format.toUpperCase()} เรียบร้อยแล้ว` });
     } catch (error: any) {
       console.error("Export failed", error);
       toast({ title: "เกิดข้อผิดพลาด", description: error?.message || "ส่งออกไฟล์ไม่สำเร็จ", variant: "destructive" });
