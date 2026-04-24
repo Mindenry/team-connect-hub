@@ -692,7 +692,7 @@ export default function Chat() {
         activeChannelRef.current = null;
       }
     };
-
+    
     socket.on("message:created", handleNewMessage);
     socket.on("message:updated", handleMessageUpdated);
     socket.on("dm:message", handleDmMessage);

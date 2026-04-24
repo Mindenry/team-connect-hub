@@ -1,10 +1,10 @@
-import { apiGet, apiFetch } from './api';
+import { apiGet, apiFetch } from "./api";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-export type DateRangeKey = 'week' | 'month' | 'quarter' | 'year';
-export type ExportFormat = 'csv' | 'json' | 'xlsx' | 'pdf';
-export type ReportType = 'overview' | 'personal' | 'team' | 'performance';
+export type DateRangeKey = "week" | "month" | "quarter" | "year";
+export type ExportFormat = "csv" | "json" | "xlsx" | "pdf";
+export type ReportType = "overview" | "personal" | "team" | "performance";
 
 export interface DateRange {
   start: Date;
@@ -13,6 +13,7 @@ export interface DateRange {
 
 export interface PersonalReportData {
   tasksCompleted: number;
+  tasksTotal: number;
   meetingsAttended: number;
   messagesSent: number;
   productivityScore: number;
@@ -79,7 +80,12 @@ export interface TeamProductivityReport {
   };
   members: {
     user: { id: string; name: string; email: string; avatar?: string };
-    tasks: { total: number; completed: number; inProgress: number; todo: number };
+    tasks: {
+      total: number;
+      completed: number;
+      inProgress: number;
+      todo: number;
+    };
     messagesSent: number;
     meetingsAttended: number;
     productivityScore: number;
@@ -91,74 +97,7 @@ export interface TeamProductivityReport {
   }[];
 }
 
-export interface MeetingReport {
-  summary: {
-    totalMeetings: number;
-    completedMeetings: number;
-    scheduledMeetings: number;
-    totalDuration: number;
-    totalParticipants: number;
-    avgParticipants: number;
-    avgDuration: number;
-  };
-  meetingsByTeam: Record<string, number>;
-  meetingsByStatus: Record<string, number>;
-  meetings: {
-    id: string;
-    title: string;
-    startTime: string;
-    endTime: string | null;
-    duration: number;
-    host: string;
-    hostId: string;
-    team?: string | null;
-    teamId?: string | null;
-    participants: number;
-    status: string;
-  }[];
-  trend?: {
-    date: string;
-    count: number;
-    duration: number;
-  }[];
-}
-
-export interface TaskReport {
-  summary: {
-    totalTasks: number;
-    overdueTasks: number;
-    completedTasks: number;
-    inProgressTasks: number;
-    todoTasks: number;
-    reviewTasks: number;
-    avgCompletionTime?: number;
-  };
-  tasksByStatus: Record<string, number>;
-  tasksByPriority: Record<string, number>;
-  tasksByAssignee?: {
-    userId: string;
-    userName: string;
-    total: number;
-    completed: number;
-  }[];
-  overdueTasks: {
-    id: string;
-    title: string;
-    dueDate: string | null;
-    assignee?: string | null;
-    assigneeId?: string | null;
-    team?: string | null;
-    teamId?: string | null;
-    priority: string;
-    status: string;
-    daysOverdue: number;
-  }[];
-  trend?: {
-    date: string;
-    created: number;
-    completed: number;
-  }[];
-}
+// MeetingReport and TaskReport removed - not in scope 6.1-6.4
 
 export interface TeamWorkloadReport {
   team: { id: string; name: string };
@@ -201,7 +140,7 @@ export interface PerformanceDashboard {
     totalTasks: number;
     completedTasks: number;
     completionRate: number;
-    trend?: 'up' | 'down' | 'stable';
+    trend?: "up" | "down" | "stable";
   }[];
   meetingAttendanceRates: {
     userId: string;
@@ -210,7 +149,7 @@ export interface PerformanceDashboard {
     totalMeetings: number;
     attendedMeetings: number;
     attendanceRate: number;
-    trend?: 'up' | 'down' | 'stable';
+    trend?: "up" | "down" | "stable";
   }[];
   collaborationActivity: {
     userId: string;
@@ -230,13 +169,7 @@ export interface PerformanceDashboard {
   }[];
 }
 
-export interface OverviewDashboard {
-  personal: PersonalReportData;
-  tasks: TaskReport;
-  meetings: MeetingReport;
-  performance: PerformanceDashboard;
-  generatedAt: string;
-}
+// OverviewDashboard removed - not used in scope 6.1-6.4
 
 export interface TeamOption {
   id: string;
@@ -251,16 +184,16 @@ export function getDateRange(range: DateRangeKey): DateRange {
   const start = new Date();
 
   switch (range) {
-    case 'week':
+    case "week":
       start.setDate(start.getDate() - 7);
       break;
-    case 'month':
+    case "month":
       start.setMonth(start.getMonth() - 1);
       break;
-    case 'quarter':
+    case "quarter":
       start.setMonth(start.getMonth() - 3);
       break;
-    case 'year':
+    case "year":
       start.setFullYear(start.getFullYear() - 1);
       break;
   }
@@ -270,10 +203,10 @@ export function getDateRange(range: DateRangeKey): DateRange {
 
 export function getDateRangeLabel(range: DateRangeKey): string {
   const labels: Record<DateRangeKey, string> = {
-    week: 'สัปดาห์ที่ผ่านมา',
-    month: 'เดือนที่ผ่านมา',
-    quarter: 'ไตรมาสที่ผ่านมา',
-    year: 'ปีที่ผ่านมา',
+    week: "สัปดาห์ที่ผ่านมา",
+    month: "เดือนที่ผ่านมา",
+    quarter: "ไตรมาสที่ผ่านมา",
+    year: "ปีที่ผ่านมา",
   };
   return labels[range];
 }
@@ -290,7 +223,7 @@ export function formatDateForApi(date: Date): string {
 
 export const reportsApi = {
   async getTeams(): Promise<TeamOption[]> {
-    const teams = await apiGet<any[]>('/teams').catch(() => []);
+    const teams = await apiGet<any[]>("/teams").catch(() => []);
     return (teams || []).map((t) => ({
       id: t.id,
       name: t.name,
@@ -298,73 +231,68 @@ export const reportsApi = {
     }));
   },
 
-  async getPersonalReport(range: DateRangeKey): Promise<PersonalReportData | null> {
-    return apiGet<PersonalReportData>(`/reports?range=${range}`).catch(() => null);
+  async getPersonalReport(
+    range: DateRangeKey,
+  ): Promise<PersonalReportData | null> {
+    return apiGet<PersonalReportData>(`/reports?range=${range}`).catch(
+      () => null,
+    );
   },
 
-  async getOverviewDashboard(dateRange: DateRange, teamId?: string): Promise<OverviewDashboard | null> {
-    const { start, end } = dateRange;
-    const params = new URLSearchParams({
-      startDate: formatDateForApi(start),
-      endDate: formatDateForApi(end),
-    });
-    if (teamId) params.append('teamId', teamId);
-    return apiGet<OverviewDashboard>(`/reports/overview?${params}`).catch(() => null);
-  },
+  // getOverviewDashboard removed - not in scope 6.1-6.4
 
-  async getTaskReport(dateRange: DateRange, teamId?: string): Promise<TaskReport | null> {
-    const { start, end } = dateRange;
-    const params = new URLSearchParams({
-      startDate: formatDateForApi(start),
-      endDate: formatDateForApi(end),
-    });
-    if (teamId) params.append('teamId', teamId);
-    return apiGet<TaskReport>(`/reports/tasks?${params}`).catch(() => null);
-  },
+  // getTaskReport removed - not in scope 6.1-6.4
 
-  async getMeetingReport(dateRange: DateRange, teamId?: string): Promise<MeetingReport | null> {
-    const { start, end } = dateRange;
-    const params = new URLSearchParams({
-      startDate: formatDateForApi(start),
-      endDate: formatDateForApi(end),
-    });
-    if (teamId) params.append('teamId', teamId);
-    return apiGet<MeetingReport>(`/reports/meetings?${params}`).catch(() => null);
-  },
+  // getMeetingReport removed - not in scope 6.1-6.4
 
-  async getTeamProductivityReport(teamId: string, dateRange: DateRange): Promise<TeamProductivityReport | null> {
+  async getTeamProductivityReport(
+    teamId: string,
+    dateRange: DateRange,
+  ): Promise<TeamProductivityReport | null> {
     const { start, end } = dateRange;
     const params = new URLSearchParams({
       teamId,
       startDate: formatDateForApi(start),
       endDate: formatDateForApi(end),
     });
-    return apiGet<TeamProductivityReport>(`/reports/team-productivity?${params}`).catch(() => null);
+    return apiGet<TeamProductivityReport>(
+      `/reports/team-productivity?${params}`,
+    ).catch(() => null);
   },
 
-  async getTeamWorkload(teamId: string, dateRange: DateRange): Promise<TeamWorkloadReport | null> {
+  async getTeamWorkload(
+    teamId: string,
+    dateRange: DateRange,
+  ): Promise<TeamWorkloadReport | null> {
     const { start, end } = dateRange;
     const params = new URLSearchParams({
       startDate: formatDateForApi(start),
       endDate: formatDateForApi(end),
     });
-    return apiGet<TeamWorkloadReport>(`/reports/teams/${teamId}/workload?${params}`).catch(() => null);
+    return apiGet<TeamWorkloadReport>(
+      `/reports/teams/${teamId}/workload?${params}`,
+    ).catch(() => null);
   },
 
-  async getPerformanceDashboard(dateRange: DateRange, teamId?: string): Promise<PerformanceDashboard | null> {
+  async getPerformanceDashboard(
+    dateRange: DateRange,
+    teamId?: string,
+  ): Promise<PerformanceDashboard | null> {
     const { start, end } = dateRange;
     const params = new URLSearchParams({
       startDate: formatDateForApi(start),
       endDate: formatDateForApi(end),
     });
-    if (teamId) params.append('teamId', teamId);
-    return apiGet<PerformanceDashboard>(`/reports/performance?${params}`).catch(() => null);
+    if (teamId) params.append("teamId", teamId);
+    return apiGet<PerformanceDashboard>(`/reports/performance?${params}`).catch(
+      () => null,
+    );
   },
 
   async exportReport(
     type: ReportType,
     format: ExportFormat,
-    options: { dateRange: DateRange; teamId?: string; range?: DateRangeKey }
+    options: { dateRange: DateRange; teamId?: string; range?: DateRangeKey },
   ): Promise<Blob> {
     const { start, end } = options.dateRange;
     const params = new URLSearchParams({
@@ -373,47 +301,47 @@ export const reportsApi = {
       startDate: formatDateForApi(start),
       endDate: formatDateForApi(end),
     });
-    if (options.teamId) params.append('teamId', options.teamId);
-    if (options.range) params.append('range', options.range);
+    if (options.teamId) params.append("teamId", options.teamId);
+    if (options.range) params.append("range", options.range);
 
     const res = await apiFetch(`/reports/export?${params}`);
-    if (!res.ok) throw new Error('Export failed');
+    if (!res.ok) throw new Error("Export failed");
     return res.blob();
   },
 };
 
 // ─── Export Utilities ────────────────────────────────────────────────────────
 
-import * as XLSX from 'xlsx';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
+import * as XLSX from "xlsx";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
 // ─── Design Tokens ───────────────────────────────────────────────────────────
 
 const BRAND = {
   // Primary palette
-  navy:       [15,  23,  42]  as [number, number, number],   // #0F172A — headings, text
-  blue:       [37,  99,  235] as [number, number, number],   // #2563EB — primary accent
-  blueLight:  [96,  165, 250] as [number, number, number],   // #60A5FA — secondary accent
-  bluePale:   [219, 234, 254] as [number, number, number],   // #DBEAFE — tint backgrounds
+  navy: [15, 23, 42] as [number, number, number], // #0F172A — headings, text
+  blue: [37, 99, 235] as [number, number, number], // #2563EB — primary accent
+  blueLight: [96, 165, 250] as [number, number, number], // #60A5FA — secondary accent
+  bluePale: [219, 234, 254] as [number, number, number], // #DBEAFE — tint backgrounds
 
   // Status colours
-  green:      [16,  185, 129] as [number, number, number],   // #10B981
-  greenPale:  [209, 250, 229] as [number, number, number],
-  amber:      [245, 158, 11]  as [number, number, number],   // #F59E0B
-  amberPale:  [254, 243, 199] as [number, number, number],
-  red:        [239, 68,  68]  as [number, number, number],   // #EF4444
-  redPale:    [254, 226, 226] as [number, number, number],
-  purple:     [139, 92,  246] as [number, number, number],   // #8B5CF6
+  green: [16, 185, 129] as [number, number, number], // #10B981
+  greenPale: [209, 250, 229] as [number, number, number],
+  amber: [245, 158, 11] as [number, number, number], // #F59E0B
+  amberPale: [254, 243, 199] as [number, number, number],
+  red: [239, 68, 68] as [number, number, number], // #EF4444
+  redPale: [254, 226, 226] as [number, number, number],
+  purple: [139, 92, 246] as [number, number, number], // #8B5CF6
 
   // Neutrals
-  slate900:   [15,  23,  42]  as [number, number, number],
-  slate700:   [51,  65,  85]  as [number, number, number],
-  slate500:   [100, 116, 139] as [number, number, number],
-  slate300:   [203, 213, 225] as [number, number, number],
-  slate100:   [241, 245, 249] as [number, number, number],
-  slate50:    [248, 250, 252] as [number, number, number],
-  white:      [255, 255, 255] as [number, number, number],
+  slate900: [15, 23, 42] as [number, number, number],
+  slate700: [51, 65, 85] as [number, number, number],
+  slate500: [100, 116, 139] as [number, number, number],
+  slate300: [203, 213, 225] as [number, number, number],
+  slate100: [241, 245, 249] as [number, number, number],
+  slate50: [248, 250, 252] as [number, number, number],
+  white: [255, 255, 255] as [number, number, number],
 };
 
 // ─── PDF Layout Helpers ───────────────────────────────────────────────────────
@@ -441,36 +369,50 @@ function drawPageBackground(ctx: PdfContext): void {
   const { doc, pageW, pageH } = ctx;
   // Subtle left accent strip
   doc.setFillColor(...BRAND.blue);
-  doc.rect(0, 0, 3, pageH, 'F');
+  doc.rect(0, 0, 3, pageH, "F");
   // Very light page tint
   doc.setFillColor(250, 251, 255);
-  doc.rect(3, 0, pageW - 3, pageH, 'F');
+  doc.rect(3, 0, pageW - 3, pageH, "F");
 }
 
-function drawSectionHeading(ctx: PdfContext, title: string, icon?: string): void {
+function drawSectionHeading(
+  ctx: PdfContext,
+  title: string,
+  icon?: string,
+): void {
   ensureSpace(ctx, 18);
   const { doc, margin, contentW, y } = ctx;
 
   // Pill background
   doc.setFillColor(...BRAND.bluePale);
-  doc.roundedRect(margin, y, contentW, 10, 2, 2, 'F');
+  doc.roundedRect(margin, y, contentW, 10, 2, 2, "F");
 
   // Left accent bar on pill
   doc.setFillColor(...BRAND.blue);
-  doc.roundedRect(margin, y, 3, 10, 1, 1, 'F');
+  doc.roundedRect(margin, y, 3, 10, 1, 1, "F");
 
   // Title text
-  doc.setFont('helvetica', 'bold');
+  doc.setFont("helvetica", "bold");
   doc.setFontSize(9);
   doc.setTextColor(...BRAND.blue);
-  doc.text((icon ? icon + '  ' : '') + title.toUpperCase(), margin + 8, y + 6.8);
+  doc.text(
+    (icon ? icon + "  " : "") + title.toUpperCase(),
+    margin + 8,
+    y + 6.8,
+  );
 
   ctx.y += 14;
 }
 
 function drawKpiRow(
   ctx: PdfContext,
-  kpis: { label: string; value: string | number; sub?: string; color?: [number, number, number]; paleColor?: [number, number, number] }[]
+  kpis: {
+    label: string;
+    value: string | number;
+    sub?: string;
+    color?: [number, number, number];
+    paleColor?: [number, number, number];
+  }[],
 ): void {
   ensureSpace(ctx, 30);
   const { doc, margin, contentW, y } = ctx;
@@ -480,42 +422,42 @@ function drawKpiRow(
   kpis.forEach((kpi, i) => {
     const x = margin + i * (cardW + 4);
     const accent = kpi.color || BRAND.blue;
-    const pale   = kpi.paleColor || BRAND.bluePale;
+    const pale = kpi.paleColor || BRAND.bluePale;
 
     // Card shadow (fake — shifted rect)
     doc.setFillColor(200, 210, 230);
-    doc.roundedRect(x + 0.8, y + 0.8, cardW, 26, 3, 3, 'F');
+    doc.roundedRect(x + 0.8, y + 0.8, cardW, 26, 3, 3, "F");
 
     // Card body
     doc.setFillColor(...BRAND.white);
-    doc.roundedRect(x, y, cardW, 26, 3, 3, 'F');
+    doc.roundedRect(x, y, cardW, 26, 3, 3, "F");
 
     // Top colour strip
     doc.setFillColor(...accent);
-    doc.roundedRect(x, y, cardW, 4, 3, 3, 'F');
-    doc.rect(x, y + 2, cardW, 2, 'F'); // flatten bottom of strip
+    doc.roundedRect(x, y, cardW, 4, 3, 3, "F");
+    doc.rect(x, y + 2, cardW, 2, "F"); // flatten bottom of strip
 
     // Dot
     doc.setFillColor(...pale);
-    doc.circle(x + cardW - 9, y + 13, 5, 'F');
+    doc.circle(x + cardW - 9, y + 13, 5, "F");
     doc.setFillColor(...accent);
-    doc.circle(x + cardW - 9, y + 13, 2.5, 'F');
+    doc.circle(x + cardW - 9, y + 13, 2.5, "F");
 
     // Value
-    doc.setFont('helvetica', 'bold');
+    doc.setFont("helvetica", "bold");
     doc.setFontSize(14);
     doc.setTextColor(...BRAND.navy);
     doc.text(String(kpi.value), x + 5, y + 16);
 
     // Label
-    doc.setFont('helvetica', 'normal');
+    doc.setFont("helvetica", "normal");
     doc.setFontSize(7);
     doc.setTextColor(...BRAND.slate500);
     doc.text(kpi.label, x + 5, y + 22);
 
     // Sub text
     if (kpi.sub) {
-      doc.setFont('helvetica', 'italic');
+      doc.setFont("helvetica", "italic");
       doc.setFontSize(6.5);
       doc.setTextColor(...BRAND.slate500);
       doc.text(kpi.sub, x + 5, y + 26.5);
@@ -528,42 +470,42 @@ function drawKpiRow(
 function drawHorizontalBar(
   ctx: PdfContext,
   label: string,
-  value: number,   // 0–100
+  value: number, // 0–100
   displayValue: string,
   color: [number, number, number],
-  weight?: string
+  weight?: string,
 ): void {
   ensureSpace(ctx, 14);
   const { doc, margin, contentW, y } = ctx;
   const trackW = contentW - 48;
 
   // Label
-  doc.setFont('helvetica', 'normal');
+  doc.setFont("helvetica", "normal");
   doc.setFontSize(8);
   doc.setTextColor(...BRAND.slate700);
   doc.text(label, margin, y + 4);
 
   // Weight badge
   if (weight) {
-    doc.setFont('helvetica', 'bold');
+    doc.setFont("helvetica", "bold");
     doc.setFontSize(6.5);
     doc.setTextColor(...color);
-    doc.text(weight, margin + trackW + 4 + 12, y + 4, { align: 'right' });
+    doc.text(weight, margin + trackW + 4 + 12, y + 4, { align: "right" });
   }
 
   // Track background
   doc.setFillColor(...BRAND.slate100);
-  doc.roundedRect(margin, y + 6, trackW, 5, 2, 2, 'F');
+  doc.roundedRect(margin, y + 6, trackW, 5, 2, 2, "F");
 
   // Filled bar
   const fillW = Math.max(0, (value / 100) * trackW);
   if (fillW > 0) {
     doc.setFillColor(...color);
-    doc.roundedRect(margin, y + 6, fillW, 5, 2, 2, 'F');
+    doc.roundedRect(margin, y + 6, fillW, 5, 2, 2, "F");
   }
 
   // Score label
-  doc.setFont('helvetica', 'bold');
+  doc.setFont("helvetica", "bold");
   doc.setFontSize(8.5);
   doc.setTextColor(...BRAND.navy);
   doc.text(displayValue, margin + trackW + 4, y + 10.5);
@@ -579,57 +521,60 @@ function drawDivider(ctx: PdfContext, spaceAbove = 4, spaceBelow = 4): void {
   ctx.y += spaceBelow;
 }
 
-function drawStatusBadge(
-  doc: jsPDF,
-  text: string,
-  x: number,
-  y: number
-): void {
+function drawStatusBadge(doc: jsPDF, text: string, x: number, y: number): void {
   const t = text.toLowerCase();
-  const color: [number, number, number] =
-    t.includes('complet') ? BRAND.green :
-    t.includes('progress') ? BRAND.blue :
-    t.includes('overdue') || t.includes('cancel') ? BRAND.red :
-    t.includes('todo') || t.includes('pending') ? BRAND.amber :
-    BRAND.slate500;
+  const color: [number, number, number] = t.includes("complet")
+    ? BRAND.green
+    : t.includes("progress")
+      ? BRAND.blue
+      : t.includes("overdue") || t.includes("cancel")
+        ? BRAND.red
+        : t.includes("todo") || t.includes("pending")
+          ? BRAND.amber
+          : BRAND.slate500;
 
-  const pale: [number, number, number] =
-    t.includes('complet') ? BRAND.greenPale :
-    t.includes('progress') ? BRAND.bluePale :
-    t.includes('overdue') || t.includes('cancel') ? BRAND.redPale :
-    t.includes('todo') || t.includes('pending') ? BRAND.amberPale :
-    BRAND.slate100;
+  const pale: [number, number, number] = t.includes("complet")
+    ? BRAND.greenPale
+    : t.includes("progress")
+      ? BRAND.bluePale
+      : t.includes("overdue") || t.includes("cancel")
+        ? BRAND.redPale
+        : t.includes("todo") || t.includes("pending")
+          ? BRAND.amberPale
+          : BRAND.slate100;
 
   doc.setFillColor(...pale);
-  doc.roundedRect(x - 1, y - 3.5, 20, 5, 1.5, 1.5, 'F');
-  doc.setFont('helvetica', 'bold');
+  doc.roundedRect(x - 1, y - 3.5, 20, 5, 1.5, 1.5, "F");
+  doc.setFont("helvetica", "bold");
   doc.setFontSize(6.5);
   doc.setTextColor(...color);
-  doc.text(text.charAt(0).toUpperCase() + text.slice(1), x, y, { align: 'left' });
+  doc.text(text.charAt(0).toUpperCase() + text.slice(1), x, y, {
+    align: "left",
+  });
 }
 
 // ─── Cover Page ───────────────────────────────────────────────────────────────
 
 function drawCoverPage(
   ctx: PdfContext,
-  opts: { title: string; subtitle: string; period: string; reportType: string }
+  opts: { title: string; subtitle: string; period: string; reportType: string },
 ): void {
   const { doc, pageW, pageH } = ctx;
 
   // Full navy background
   doc.setFillColor(...BRAND.navy);
-  doc.rect(0, 0, pageW, pageH, 'F');
+  doc.rect(0, 0, pageW, pageH, "F");
 
   // Geometric accent shapes
   doc.setFillColor(37, 99, 235, 0.25); // translucent blue
   doc.setFillColor(30, 58, 138);
-  doc.ellipse(pageW - 20, 30, 55, 55, 'F');
+  doc.ellipse(pageW - 20, 30, 55, 55, "F");
   doc.setFillColor(23, 37, 84);
-  doc.ellipse(pageW - 5, 50, 35, 35, 'F');
+  doc.ellipse(pageW - 5, 50, 35, 35, "F");
   doc.setFillColor(30, 58, 138);
-  doc.ellipse(20, pageH - 30, 40, 40, 'F');
+  doc.ellipse(20, pageH - 30, 40, 40, "F");
   doc.setFillColor(23, 37, 84);
-  doc.ellipse(5, pageH - 10, 22, 22, 'F');
+  doc.ellipse(5, pageH - 10, 22, 22, "F");
 
   // Thin horizontal rule at 45%
   const ruleY = pageH * 0.45;
@@ -639,27 +584,29 @@ function drawCoverPage(
 
   // Brand mark — left coloured bar + wordmark
   doc.setFillColor(...BRAND.blue);
-  doc.rect(14, 24, 4, 20, 'F');
-  doc.setFont('helvetica', 'bold');
+  doc.rect(14, 24, 4, 20, "F");
+  doc.setFont("helvetica", "bold");
   doc.setFontSize(22);
   doc.setTextColor(...BRAND.white);
-  doc.text('Team Connect', 22, 38);
+  doc.text("Team Connect", 22, 38);
 
-  doc.setFont('helvetica', 'normal');
+  doc.setFont("helvetica", "normal");
   doc.setFontSize(9);
   doc.setTextColor(...BRAND.blueLight);
-  doc.text('Productivity & Analytics Platform', 22, 46);
+  doc.text("Productivity & Analytics Platform", 22, 46);
 
   // Report type badge
   doc.setFillColor(...BRAND.blue);
-  doc.roundedRect(14, ruleY + 14, 42, 8, 2, 2, 'F');
-  doc.setFont('helvetica', 'bold');
+  doc.roundedRect(14, ruleY + 14, 42, 8, 2, 2, "F");
+  doc.setFont("helvetica", "bold");
   doc.setFontSize(7);
   doc.setTextColor(...BRAND.white);
-  doc.text(opts.reportType.toUpperCase() + ' REPORT', 35, ruleY + 19.5, { align: 'center' });
+  doc.text(opts.reportType.toUpperCase() + " REPORT", 35, ruleY + 19.5, {
+    align: "center",
+  });
 
   // Main title
-  doc.setFont('helvetica', 'bold');
+  doc.setFont("helvetica", "bold");
   doc.setFontSize(26);
   doc.setTextColor(...BRAND.white);
   const titleLines = doc.splitTextToSize(opts.title, pageW - 28) as string[];
@@ -670,7 +617,7 @@ function drawCoverPage(
   });
 
   // Subtitle
-  doc.setFont('helvetica', 'normal');
+  doc.setFont("helvetica", "normal");
   doc.setFontSize(11);
   doc.setTextColor(...BRAND.blueLight);
   doc.text(opts.subtitle, 14, titleY + 4);
@@ -679,23 +626,23 @@ function drawCoverPage(
   titleY += 18;
   doc.setFillColor(255, 255, 255, 0.12);
   doc.setFillColor(30, 58, 138);
-  doc.roundedRect(14, titleY, 80, 10, 2, 2, 'F');
-  doc.setFont('helvetica', 'normal');
+  doc.roundedRect(14, titleY, 80, 10, 2, 2, "F");
+  doc.setFont("helvetica", "normal");
   doc.setFontSize(8);
   doc.setTextColor(...BRAND.blueLight);
-  doc.text('Reporting Period:', 18, titleY + 6.5);
-  doc.setFont('helvetica', 'bold');
+  doc.text("Reporting Period:", 18, titleY + 6.5);
+  doc.setFont("helvetica", "bold");
   doc.setTextColor(...BRAND.white);
   doc.text(opts.period, 50, titleY + 6.5);
 
   // Generation timestamp (bottom)
   const now = new Date();
-  const genStr = `Generated on ${now.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })} at ${now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`;
-  doc.setFont('helvetica', 'normal');
+  const genStr = `Generated on ${now.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })} at ${now.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`;
+  doc.setFont("helvetica", "normal");
   doc.setFontSize(7.5);
   doc.setTextColor(...BRAND.slate500);
-  doc.text(genStr, pageW - 14, pageH - 12, { align: 'right' });
-  doc.text('CONFIDENTIAL — FOR INTERNAL USE ONLY', 14, pageH - 12);
+  doc.text(genStr, pageW - 14, pageH - 12, { align: "right" });
+  doc.text("CONFIDENTIAL — FOR INTERNAL USE ONLY", 14, pageH - 12);
 }
 
 // ─── Header/Footer ────────────────────────────────────────────────────────────
@@ -705,23 +652,23 @@ function drawHeader(ctx: PdfContext, reportTitle: string): void {
 
   // Left strip (already drawn in background, but reinforce)
   doc.setFillColor(...BRAND.blue);
-  doc.rect(0, 0, 3, 18, 'F');
+  doc.rect(0, 0, 3, 18, "F");
 
   // White header bar
   doc.setFillColor(...BRAND.white);
-  doc.rect(3, 0, pageW - 3, 18, 'F');
+  doc.rect(3, 0, pageW - 3, 18, "F");
 
   // Brand name
-  doc.setFont('helvetica', 'bold');
+  doc.setFont("helvetica", "bold");
   doc.setFontSize(9);
   doc.setTextColor(...BRAND.blue);
-  doc.text('Team Connect', margin, 11);
+  doc.text("Team Connect", margin, 11);
 
   // Report title (centre)
-  doc.setFont('helvetica', 'normal');
+  doc.setFont("helvetica", "normal");
   doc.setFontSize(8);
   doc.setTextColor(...BRAND.slate500);
-  doc.text(reportTitle, pageW / 2, 11, { align: 'center' });
+  doc.text(reportTitle, pageW / 2, 11, { align: "center" });
 
   // Thin underline
   doc.setDrawColor(...BRAND.slate300);
@@ -729,20 +676,32 @@ function drawHeader(ctx: PdfContext, reportTitle: string): void {
   doc.line(margin, 18, pageW - margin, 18);
 }
 
-function drawFooters(doc: jsPDF, pageW: number, pageH: number, margin: number): void {
+function drawFooters(
+  doc: jsPDF,
+  pageW: number,
+  pageH: number,
+  margin: number,
+): void {
   const total = doc.getNumberOfPages();
-  for (let i = 2; i <= total; i++) {   // skip cover (page 1)
+  for (let i = 2; i <= total; i++) {
+    // skip cover (page 1)
     doc.setPage(i);
 
     doc.setDrawColor(...BRAND.slate300);
     doc.setLineWidth(0.2);
     doc.line(margin, pageH - 14, pageW - margin, pageH - 14);
 
-    doc.setFont('helvetica', 'normal');
+    doc.setFont("helvetica", "normal");
     doc.setFontSize(7);
     doc.setTextColor(...BRAND.slate500);
-    doc.text('Team Connect  •  Confidential — Internal Use Only', margin, pageH - 8);
-    doc.text(`Page ${i - 1} of ${total - 1}`, pageW - margin, pageH - 8, { align: 'right' });
+    doc.text(
+      "Team Connect  •  Confidential — Internal Use Only",
+      margin,
+      pageH - 8,
+    );
+    doc.text(`Page ${i - 1} of ${total - 1}`, pageW - margin, pageH - 8, {
+      align: "right",
+    });
   }
 }
 
@@ -750,10 +709,14 @@ function drawFooters(doc: jsPDF, pageW: number, pageH: number, margin: number): 
 
 // Helper to flatten value for CSV
 function flattenValue(v: any): string {
-  if (v === null || v === undefined) return '';
-  if (typeof v === 'object') {
+  if (v === null || v === undefined) return "";
+  if (typeof v === "object") {
     if (Array.isArray(v)) {
-      return v.map(item => typeof item === 'object' ? JSON.stringify(item) : String(item)).join('; ');
+      return v
+        .map((item) =>
+          typeof item === "object" ? JSON.stringify(item) : String(item),
+        )
+        .join("; ");
     }
     return JSON.stringify(v);
   }
@@ -767,8 +730,8 @@ export const exportUtils = {
 
     // Group data by category for better structure
     const grouped = new Map<string, Record<string, any>[]>();
-    data.forEach(row => {
-      const cat = row.category || 'Data';
+    data.forEach((row) => {
+      const cat = row.category || "Data";
       if (!grouped.has(cat)) grouped.set(cat, []);
       grouped.get(cat)!.push(row);
     });
@@ -777,9 +740,9 @@ export const exportUtils = {
 
     // Add header
     lines.push(`# Team Connect Report Export`);
-    lines.push(`# Generated: ${new Date().toLocaleString('en-GB')}`);
+    lines.push(`# Generated: ${new Date().toLocaleString("en-GB")}`);
     lines.push(`# Total Records: ${data.length}`);
-    lines.push('');
+    lines.push("");
 
     // Process each category group
     grouped.forEach((rows, category) => {
@@ -787,40 +750,53 @@ export const exportUtils = {
       lines.push(`### ${category.toUpperCase()} ###`);
 
       // Get headers for this group (exclude 'category' from display)
-      const headers = Array.from(new Set(rows.flatMap(r => Object.keys(r).filter(k => k !== 'category'))));
+      const headers = Array.from(
+        new Set(
+          rows.flatMap((r) => Object.keys(r).filter((k) => k !== "category")),
+        ),
+      );
 
       // Header row
-      lines.push(headers.map(h => `"${formatHeader(h)}"`).join(','));
+      lines.push(headers.map((h) => `"${formatHeader(h)}"`).join(","));
 
       // Data rows
-      rows.forEach(row => {
-        const values = headers.map(h => {
+      rows.forEach((row) => {
+        const values = headers.map((h) => {
           const v = row[h];
           const s = flattenValue(v);
-          return s.includes(',') || s.includes('"') || s.includes('\n') || s.includes(';')
+          return s.includes(",") ||
+            s.includes('"') ||
+            s.includes("\n") ||
+            s.includes(";")
             ? `"${s.replace(/"/g, '""')}"`
             : s;
         });
-        lines.push(values.join(','));
+        lines.push(values.join(","));
       });
 
-      lines.push(''); // Empty line between categories
+      lines.push(""); // Empty line between categories
     });
 
-    const blob = new Blob(['\ufeff' + lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const blob = new Blob(["\ufeff" + lines.join("\n")], {
+      type: "text/csv;charset=utf-8;",
+    });
     downloadBlob(blob, `${filename}.csv`);
   },
 
   // ── Excel (single sheet) ─────────────────────────────────────────────────
-  toExcel(data: Record<string, any>[], filename: string, sheetName = 'Report'): void {
+  toExcel(
+    data: Record<string, any>[],
+    filename: string,
+    sheetName = "Report",
+  ): void {
     if (!data.length) return;
 
     const wb = XLSX.utils.book_new();
 
     // Group data by category for better structure
     const grouped = new Map<string, Record<string, any>[]>();
-    data.forEach(row => {
-      const cat = row.category || 'Data';
+    data.forEach((row) => {
+      const cat = row.category || "Data";
       if (!grouped.has(cat)) grouped.set(cat, []);
       grouped.get(cat)!.push(row);
     });
@@ -829,8 +805,8 @@ export const exportUtils = {
     const sheetData: any[][] = [];
 
     // Title row
-    sheetData.push(['Team Connect Report Export']);
-    sheetData.push([`Generated: ${new Date().toLocaleString('en-GB')}`]);
+    sheetData.push(["Team Connect Report Export"]);
+    sheetData.push([`Generated: ${new Date().toLocaleString("en-GB")}`]);
     sheetData.push([`Total Records: ${data.length}`]);
     sheetData.push([]); // Empty row
 
@@ -840,18 +816,22 @@ export const exportUtils = {
       sheetData.push([`=== ${category.toUpperCase()} ===`]);
 
       // Get headers for this group
-      const headers = Array.from(new Set(rows.flatMap(r => Object.keys(r).filter(k => k !== 'category'))));
+      const headers = Array.from(
+        new Set(
+          rows.flatMap((r) => Object.keys(r).filter((k) => k !== "category")),
+        ),
+      );
 
       // Header row with formatted names
-      sheetData.push(headers.map(h => formatHeader(h)));
+      sheetData.push(headers.map((h) => formatHeader(h)));
 
       // Data rows
-      rows.forEach(row => {
-        const values = headers.map(h => {
+      rows.forEach((row) => {
+        const values = headers.map((h) => {
           const v = row[h];
-          if (v === null || v === undefined) return '';
-          if (typeof v === 'object') {
-            if (Array.isArray(v)) return v.join('; ');
+          if (v === null || v === undefined) return "";
+          if (typeof v === "object") {
+            if (Array.isArray(v)) return v.join("; ");
             return JSON.stringify(v);
           }
           return v;
@@ -866,16 +846,25 @@ export const exportUtils = {
 
     // Set column widths based on content
     const colWidths: number[] = [];
-    sheetData.forEach(row => {
+    sheetData.forEach((row) => {
       row.forEach((cell: any, colIdx: number) => {
-        const len = String(cell ?? '').length;
-        colWidths[colIdx] = Math.max(colWidths[colIdx] || 10, Math.min(50, len + 2));
+        const len = String(cell ?? "").length;
+        colWidths[colIdx] = Math.max(
+          colWidths[colIdx] || 10,
+          Math.min(50, len + 2),
+        );
       });
     });
-    ws['!cols'] = colWidths.map(w => ({ wch: w }));
+    ws["!cols"] = colWidths.map((w) => ({ wch: w }));
 
     // Add metadata for Excel to recognize it as a formatted table
-    ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: sheetData.length - 1, c: Math.max(...colWidths.map((_, i) => i)) } });
+    ws["!ref"] = XLSX.utils.encode_range({
+      s: { r: 0, c: 0 },
+      e: {
+        r: sheetData.length - 1,
+        c: Math.max(...colWidths.map((_, i) => i)),
+      },
+    });
 
     XLSX.utils.book_append_sheet(wb, ws, sheetName.substring(0, 31));
     XLSX.writeFile(wb, `${filename}.xlsx`);
@@ -886,20 +875,22 @@ export const exportUtils = {
     const payload = {
       meta: {
         exportedAt: new Date().toISOString(),
-        generator: 'Team Connect Report Export',
-        version: '2.0',
+        generator: "Team Connect Report Export",
+        version: "2.0",
         filename,
       },
       data,
     };
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const blob = new Blob([JSON.stringify(payload, null, 2)], {
+      type: "application/json",
+    });
     downloadBlob(blob, `${filename}.json`);
   },
 
   // ── Excel Multi-sheet ────────────────────────────────────────────────────
   toExcelMultiSheet(
     sheets: { name: string; data: Record<string, any>[] }[],
-    filename: string
+    filename: string,
   ): void {
     const wb = XLSX.utils.book_new();
 
@@ -908,8 +899,8 @@ export const exportUtils = {
 
       // Group data by category
       const grouped = new Map<string, Record<string, any>[]>();
-      data.forEach(row => {
-        const cat = row.category || 'Data';
+      data.forEach((row) => {
+        const cat = row.category || "Data";
         if (!grouped.has(cat)) grouped.set(cat, []);
         grouped.get(cat)!.push(row);
       });
@@ -918,20 +909,24 @@ export const exportUtils = {
 
       // Title
       sheetData.push([`${name} - Team Connect`]);
-      sheetData.push([`Generated: ${new Date().toLocaleString('en-GB')}`]);
+      sheetData.push([`Generated: ${new Date().toLocaleString("en-GB")}`]);
       sheetData.push([]);
 
       grouped.forEach((rows, category) => {
         sheetData.push([`=== ${category.toUpperCase()} ===`]);
-        const headers = Array.from(new Set(rows.flatMap(r => Object.keys(r).filter(k => k !== 'category'))));
-        sheetData.push(headers.map(h => formatHeader(h)));
+        const headers = Array.from(
+          new Set(
+            rows.flatMap((r) => Object.keys(r).filter((k) => k !== "category")),
+          ),
+        );
+        sheetData.push(headers.map((h) => formatHeader(h)));
 
-        rows.forEach(row => {
-          const values = headers.map(h => {
+        rows.forEach((row) => {
+          const values = headers.map((h) => {
             const v = row[h];
-            if (v === null || v === undefined) return '';
-            if (typeof v === 'object') {
-              if (Array.isArray(v)) return v.join('; ');
+            if (v === null || v === undefined) return "";
+            if (typeof v === "object") {
+              if (Array.isArray(v)) return v.join("; ");
               return JSON.stringify(v);
             }
             return v;
@@ -944,13 +939,16 @@ export const exportUtils = {
       const ws = XLSX.utils.aoa_to_sheet(sheetData);
 
       const colWidths: number[] = [];
-      sheetData.forEach(row => {
+      sheetData.forEach((row) => {
         row.forEach((cell: any, colIdx: number) => {
-          const len = String(cell ?? '').length;
-          colWidths[colIdx] = Math.max(colWidths[colIdx] || 10, Math.min(50, len + 2));
+          const len = String(cell ?? "").length;
+          colWidths[colIdx] = Math.max(
+            colWidths[colIdx] || 10,
+            Math.min(50, len + 2),
+          );
         });
       });
-      ws['!cols'] = colWidths.map(w => ({ wch: w }));
+      ws["!cols"] = colWidths.map((w) => ({ wch: w }));
 
       XLSX.utils.book_append_sheet(wb, ws, name.substring(0, 31));
     });
@@ -966,16 +964,16 @@ export const exportUtils = {
       title?: string;
       subtitle?: string;
       columns?: { header: string; dataKey: string }[];
-      orientation?: 'portrait' | 'landscape';
+      orientation?: "portrait" | "landscape";
       reportType?: ReportType;
       reportData?: PersonalReportData;
       period?: string;
-    } = {}
+    } = {},
   ): void {
     const doc = new jsPDF({
-      orientation: options.orientation || 'portrait',
-      unit: 'mm',
-      format: 'a4',
+      orientation: options.orientation || "portrait",
+      unit: "mm",
+      format: "a4",
     });
 
     const pageW = doc.internal.pageSize.getWidth();
@@ -994,17 +992,23 @@ export const exportUtils = {
     // ── Page 1: Cover ──────────────────────────────────────────────────────
 
     const now = new Date();
-    const periodLabel = options.period || options.subtitle || now.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+    const periodLabel =
+      options.period ||
+      options.subtitle ||
+      now.toLocaleDateString("en-GB", { month: "long", year: "numeric" });
     const reportTypeName =
-      options.reportType === 'personal'     ? 'Personal Productivity' :
-      options.reportType === 'team'         ? 'Team Productivity'     :
-      options.reportType === 'performance'  ? 'Performance Analytics' :
-                                              'Overview';
+      options.reportType === "personal"
+        ? "Personal Productivity"
+        : options.reportType === "team"
+          ? "Team Productivity"
+          : options.reportType === "performance"
+            ? "Performance Analytics"
+            : "Overview";
 
     drawCoverPage(ctx, {
-      title:      options.title || 'Productivity Report',
-      subtitle:   options.subtitle || 'Detailed Analytics & Insights',
-      period:     periodLabel,
+      title: options.title || "Productivity Report",
+      subtitle: options.subtitle || "Detailed Analytics & Insights",
+      period: periodLabel,
       reportType: reportTypeName,
     });
 
@@ -1012,42 +1016,48 @@ export const exportUtils = {
 
     doc.addPage();
     drawPageBackground(ctx);
-    drawHeader(ctx, options.title || 'Productivity Report');
+    drawHeader(ctx, options.title || "Productivity Report");
     ctx.y = 26;
 
     // ── KPI cards ─────────────────────────────────────────────────────────
 
     const rd = options.reportData;
-    const summaryRow = data.find(d => d.category === 'Summary' || d.category === 'Personal Report');
+    const summaryRow = data.find(
+      (d) => d.category === "Summary" || d.category === "Personal Report",
+    );
 
     if (rd || summaryRow) {
-      drawSectionHeading(ctx, 'Key Performance Indicators');
+      drawSectionHeading(ctx, "Key Performance Indicators");
 
       drawKpiRow(ctx, [
         {
-          label:     'Tasks Completed',
-          value:     rd?.tasksCompleted ?? summaryRow?.completed ?? summaryRow?.completedTasks ?? 0,
-          sub:       `Rate: ${rd?.taskCompletionRate ?? 0}%`,
-          color:     BRAND.green,
+          label: "Tasks Completed",
+          value:
+            rd?.tasksCompleted ??
+            summaryRow?.completed ??
+            summaryRow?.completedTasks ??
+            0,
+          sub: `Rate: ${rd?.taskCompletionRate ?? 0}%`,
+          color: BRAND.green,
           paleColor: BRAND.greenPale,
         },
         {
-          label:     'Meetings Attended',
-          value:     rd?.meetingsAttended ?? summaryRow?.meetingsAttended ?? 0,
-          color:     BRAND.blue,
+          label: "Meetings Attended",
+          value: rd?.meetingsAttended ?? summaryRow?.meetingsAttended ?? 0,
+          color: BRAND.blue,
           paleColor: BRAND.bluePale,
         },
         {
-          label:     'Messages Sent',
-          value:     rd?.messagesSent ?? summaryRow?.messagesSent ?? 0,
-          color:     BRAND.purple,
+          label: "Messages Sent",
+          value: rd?.messagesSent ?? summaryRow?.messagesSent ?? 0,
+          color: BRAND.purple,
           paleColor: [237, 233, 254] as [number, number, number],
         },
         {
-          label:     'Productivity Score',
-          value:     `${rd?.productivityScore ?? summaryRow?.productivityScore ?? 0}%`,
-          sub:       rd?.activeDays ? `${rd.activeDays} active days` : undefined,
-          color:     BRAND.amber,
+          label: "Productivity Score",
+          value: `${rd?.productivityScore ?? summaryRow?.productivityScore ?? 0}%`,
+          sub: rd?.activeDays ? `${rd.activeDays} active days` : undefined,
+          color: BRAND.amber,
           paleColor: BRAND.amberPale,
         },
       ]);
@@ -1057,76 +1067,87 @@ export const exportUtils = {
 
     if (rd?.productivityBreakdown) {
       const bd = rd.productivityBreakdown;
-      drawSectionHeading(ctx, 'Performance Breakdown');
+      drawSectionHeading(ctx, "Performance Breakdown");
 
       // Methodology note
-      doc.setFont('helvetica', 'italic');
+      doc.setFont("helvetica", "italic");
       doc.setFontSize(7);
       doc.setTextColor(...BRAND.slate500);
       doc.text(
-        'Methodology: Balanced Scorecard (Kaplan & Norton, 1996) with Task Difficulty Adjustment',
-        margin, ctx.y
+        "Methodology: Balanced Scorecard (Kaplan & Norton, 1996) with Task Difficulty Adjustment",
+        margin,
+        ctx.y,
       );
       ctx.y += 7;
 
-      drawHorizontalBar(ctx,
-        'Adjusted Task Performance',
+      drawHorizontalBar(
+        ctx,
+        "Adjusted Task Performance",
         bd.adjustedTaskPerformance,
         `${bd.adjustedTaskPerformance}%`,
         BRAND.green,
-        `${bd.weights?.adjustedTaskPerformance ?? 45}% weight`
+        `${bd.weights?.adjustedTaskPerformance ?? 45}% weight`,
       );
-      drawHorizontalBar(ctx,
-        'Meaningful Engagement',
+      drawHorizontalBar(
+        ctx,
+        "Meaningful Engagement",
         bd.meaningfulEngagement,
         `${bd.meaningfulEngagement}%`,
         BRAND.blue,
-        `${bd.weights?.meaningfulEngagement ?? 20}% weight`
+        `${bd.weights?.meaningfulEngagement ?? 20}% weight`,
       );
-      drawHorizontalBar(ctx,
-        'Communication Effectiveness',
+      drawHorizontalBar(
+        ctx,
+        "Communication Effectiveness",
         bd.communicationEffectiveness,
         `${bd.communicationEffectiveness}%`,
         BRAND.purple,
-        `${bd.weights?.communicationEffectiveness ?? 20}% weight`
+        `${bd.weights?.communicationEffectiveness ?? 20}% weight`,
       );
-      drawHorizontalBar(ctx,
-        'Work Consistency',
+      drawHorizontalBar(
+        ctx,
+        "Work Consistency",
         bd.workConsistency,
         `${bd.workConsistency}%`,
         BRAND.amber,
-        `${bd.weights?.workConsistency ?? 15}% weight`
+        `${bd.weights?.workConsistency ?? 15}% weight`,
       );
 
       ctx.y += 4;
 
       // Meta row
-      doc.setFont('helvetica', 'normal');
+      doc.setFont("helvetica", "normal");
       doc.setFontSize(7.5);
       doc.setTextColor(...BRAND.slate500);
       doc.text(
         `Active Days: ${bd.activeDays} / ${bd.periodDays}   •   Difficulty Factor: ×${bd.difficultyFactor}`,
-        margin, ctx.y
+        margin,
+        ctx.y,
       );
       ctx.y += 8;
 
       if (bd.antiGamingApplied) {
         doc.setFillColor(...BRAND.amberPale);
-        doc.roundedRect(margin, ctx.y, ctx.contentW, 9, 2, 2, 'F');
-        doc.setFont('helvetica', 'bold');
+        doc.roundedRect(margin, ctx.y, ctx.contentW, 9, 2, 2, "F");
+        doc.setFont("helvetica", "bold");
         doc.setFontSize(7.5);
         doc.setTextColor(...BRAND.amber);
-        doc.text('⚠  Anti-Gaming Rule Applied: Score capped at 50% due to low task completion rate', margin + 4, ctx.y + 5.5);
+        doc.text(
+          "⚠  Anti-Gaming Rule Applied: Score capped at 50% due to low task completion rate",
+          margin + 4,
+          ctx.y + 5.5,
+        );
         ctx.y += 14;
       }
     }
 
     // ── Team Contributions ────────────────────────────────────────────────
 
-    const teamMetrics = (rd?.teamMetrics || data.filter(d => d.category === 'Team'));
+    const teamMetrics =
+      rd?.teamMetrics || data.filter((d) => d.category === "Team");
     if (teamMetrics && teamMetrics.length > 0) {
       drawDivider(ctx);
-      drawSectionHeading(ctx, 'Team Contributions');
+      drawSectionHeading(ctx, "Team Contributions");
 
       teamMetrics.forEach((t: any, i: number) => {
         ensureSpace(ctx, 20);
@@ -1135,28 +1156,28 @@ export const exportUtils = {
         // Alternating row tint
         if (i % 2 === 0) {
           doc.setFillColor(...BRAND.slate50);
-          doc.roundedRect(margin, y, ctx.contentW, 15, 2, 2, 'F');
+          doc.roundedRect(margin, y, ctx.contentW, 15, 2, 2, "F");
         }
 
         // Team name
-        doc.setFont('helvetica', 'bold');
+        doc.setFont("helvetica", "bold");
         doc.setFontSize(8.5);
         doc.setTextColor(...BRAND.navy);
         doc.text(t.teamName || `Team ${i + 1}`, margin + 4, y + 6);
 
         // Stats inline
         const stats = [
-          { label: 'Tasks', val: t.tasksCompleted ?? t.tasks ?? 0 },
-          { label: 'Meetings', val: t.meetingsAttended ?? t.meetings ?? 0 },
-          { label: 'Messages', val: t.messagesSent ?? t.messages ?? 0 },
+          { label: "Tasks", val: t.tasksCompleted ?? t.tasks ?? 0 },
+          { label: "Meetings", val: t.meetingsAttended ?? t.meetings ?? 0 },
+          { label: "Messages", val: t.messagesSent ?? t.messages ?? 0 },
         ];
         stats.forEach((s, si) => {
           const sx = margin + 60 + si * 42;
-          doc.setFont('helvetica', 'bold');
+          doc.setFont("helvetica", "bold");
           doc.setFontSize(8.5);
           doc.setTextColor(...BRAND.navy);
           doc.text(String(s.val), sx, y + 6);
-          doc.setFont('helvetica', 'normal');
+          doc.setFont("helvetica", "normal");
           doc.setFontSize(6.5);
           doc.setTextColor(...BRAND.slate500);
           doc.text(s.label, sx, y + 12);
@@ -1169,58 +1190,91 @@ export const exportUtils = {
     // ── Detailed Data Table ───────────────────────────────────────────────
 
     const tableData = data.filter(
-      d => d.category !== 'Summary' && d.category !== 'Personal Report' && d.category !== 'Team'
+      (d) =>
+        d.category !== "Summary" &&
+        d.category !== "Personal Report" &&
+        d.category !== "Team",
     );
 
     if (tableData.length > 0) {
       ensureSpace(ctx, 20);
       drawDivider(ctx);
-      drawSectionHeading(ctx, 'Detailed Data');
+      drawSectionHeading(ctx, "Detailed Data");
 
-      const columns = options.columns ||
-        Object.keys(tableData[0]).map(k => ({ header: formatHeader(k), dataKey: k }));
+      const columns =
+        options.columns ||
+        Object.keys(tableData[0]).map((k) => ({
+          header: formatHeader(k),
+          dataKey: k,
+        }));
 
       // Category column gets a badge; status column gets coloured text
-      const statusColIdx = columns.findIndex(c => c.dataKey.toLowerCase().includes('status'));
-      const catColIdx    = columns.findIndex(c => c.dataKey.toLowerCase() === 'category');
+      const statusColIdx = columns.findIndex((c) =>
+        c.dataKey.toLowerCase().includes("status"),
+      );
+      const catColIdx = columns.findIndex(
+        (c) => c.dataKey.toLowerCase() === "category",
+      );
 
       autoTable(doc, {
-        head: [columns.map(c => c.header)],
-        body: tableData.map(row => columns.map(c => String(row[c.dataKey] ?? ''))),
+        head: [columns.map((c) => c.header)],
+        body: tableData.map((row) =>
+          columns.map((c) => String(row[c.dataKey] ?? "")),
+        ),
         startY: ctx.y,
         margin: { left: margin, right: margin },
         styles: {
           fontSize: 7.5,
           cellPadding: { top: 3, bottom: 3, left: 4, right: 4 },
-          font: 'helvetica',
+          font: "helvetica",
           lineColor: BRAND.slate300,
           lineWidth: 0.1,
-          valign: 'middle',
+          valign: "middle",
         },
         headStyles: {
           fillColor: BRAND.navy,
           textColor: BRAND.white,
-          fontStyle: 'bold',
+          fontStyle: "bold",
           fontSize: 7.5,
-          halign: 'left',
+          halign: "left",
           cellPadding: { top: 4, bottom: 4, left: 4, right: 4 },
         },
         alternateRowStyles: {
           fillColor: BRAND.slate50,
         },
         columnStyles: {
-          ...(catColIdx >= 0 ? {
-            [catColIdx]: { fontStyle: 'bold', textColor: BRAND.blue, cellWidth: 32 },
-          } : {}),
-          ...(statusColIdx >= 0 ? {
-            [statusColIdx]: { fontStyle: 'bold' },
-          } : {}),
+          ...(catColIdx >= 0
+            ? {
+                [catColIdx]: {
+                  fontStyle: "bold",
+                  textColor: BRAND.blue,
+                  cellWidth: 32,
+                },
+              }
+            : {}),
+          ...(statusColIdx >= 0
+            ? {
+                [statusColIdx]: { fontStyle: "bold" },
+              }
+            : {}),
         },
         didDrawCell: (hookData) => {
           // Colour status cells
-          if (statusColIdx >= 0 && hookData.column.index === statusColIdx && hookData.section === 'body') {
-            const raw = String(tableData[hookData.row.index]?.[columns[statusColIdx].dataKey] ?? '');
-            drawStatusBadge(doc, raw, hookData.cell.x + 4, hookData.cell.y + hookData.cell.height / 2 + 1.5);
+          if (
+            statusColIdx >= 0 &&
+            hookData.column.index === statusColIdx &&
+            hookData.section === "body"
+          ) {
+            const raw = String(
+              tableData[hookData.row.index]?.[columns[statusColIdx].dataKey] ??
+                "",
+            );
+            drawStatusBadge(
+              doc,
+              raw,
+              hookData.cell.x + 4,
+              hookData.cell.y + hookData.cell.height / 2 + 1.5,
+            );
           }
         },
         tableLineColor: BRAND.slate300,
@@ -1241,7 +1295,7 @@ export const exportUtils = {
 
 function downloadBlob(blob: Blob, filename: string): void {
   const url = window.URL.createObjectURL(blob);
-  const a = document.createElement('a');
+  const a = document.createElement("a");
   a.href = url;
   a.download = filename;
   document.body.appendChild(a);
@@ -1252,85 +1306,27 @@ function downloadBlob(blob: Blob, filename: string): void {
 
 function formatHeader(key: string): string {
   return key
-    .replace(/([A-Z])/g, ' $1')
-    .replace(/^./, s => s.toUpperCase())
+    .replace(/([A-Z])/g, " $1")
+    .replace(/^./, (s) => s.toUpperCase())
     .trim();
 }
 
 // ─── Data Transformation Utilities ──────────────────────────────────────────
 
 export const reportTransformers = {
-  taskReportToRows(report: TaskReport): Record<string, any>[] {
-    const rows: Record<string, any>[] = [];
-    const summary = report?.summary;
+  // taskReportToRows removed - not in scope 6.1-6.4
+  // meetingReportToRows removed - not in scope 6.1-6.4
 
-    if (summary) {
-      rows.push({
-        category: 'Summary',
-        totalTasks: summary.totalTasks ?? 0,
-        completed: summary.completedTasks ?? 0,
-        inProgress: summary.inProgressTasks ?? 0,
-        todo: summary.todoTasks ?? 0,
-        overdue: summary.overdueTasks ?? 0,
-      });
-    }
-
-    (report?.overdueTasks || []).forEach(t => {
-      rows.push({
-        category: 'Overdue Task',
-        title: t.title || '—',
-        assignee: t.assignee || 'Unassigned',
-        team: t.team || '—',
-        priority: t.priority || '—',
-        dueDate: t.dueDate ? new Date(t.dueDate).toLocaleDateString('th-TH') : '—',
-        daysOverdue: t.daysOverdue ?? 0,
-        status: t.status || '—',
-      });
-    });
-
-    return rows;
-  },
-
-  meetingReportToRows(report: MeetingReport): Record<string, any>[] {
-    const rows: Record<string, any>[] = [];
-    const summary = report?.summary;
-
-    if (summary) {
-      rows.push({
-        category: 'Summary',
-        totalMeetings: summary.totalMeetings ?? 0,
-        completed: summary.completedMeetings ?? 0,
-        scheduled: summary.scheduledMeetings ?? 0,
-        totalDuration: `${summary.totalDuration ?? 0} min`,
-        avgDuration: `${summary.avgDuration?.toFixed(1) ?? 0} min`,
-        avgParticipants: summary.avgParticipants?.toFixed(1) ?? '0',
-      });
-    }
-
-    (report?.meetings || []).forEach(m => {
-      rows.push({
-        category: 'Meeting',
-        title: m.title || '—',
-        host: m.host || '—',
-        team: m.team || '—',
-        startTime: m.startTime ? new Date(m.startTime).toLocaleString('th-TH') : '—',
-        duration: `${m.duration ?? 0} min`,
-        participants: m.participants ?? 0,
-        status: m.status || '—',
-      });
-    });
-
-    return rows;
-  },
-
-  teamProductivityToRows(report: TeamProductivityReport): Record<string, any>[] {
+  teamProductivityToRows(
+    report: TeamProductivityReport,
+  ): Record<string, any>[] {
     const rows: Record<string, any>[] = [];
     const summary = report?.summary;
     const team = report?.team;
 
     if (team && summary) {
       rows.push({
-        category: 'Team Summary',
+        category: "Team Summary",
         teamName: team.name,
         members: summary.members ?? 0,
         totalTasks: summary.tasks?.total ?? 0,
@@ -1340,17 +1336,17 @@ export const reportTransformers = {
       });
     }
 
-    (report?.members || []).forEach(m => {
+    (report?.members || []).forEach((m) => {
       rows.push({
-        category: 'Member',
-        name: m.user?.name || '—',
-        email: m.user?.email || '—',
+        category: "Member",
+        name: m.user?.name || "—",
+        email: m.user?.email || "—",
         totalTasks: m.tasks?.total ?? 0,
         completedTasks: m.tasks?.completed ?? 0,
         inProgress: m.tasks?.inProgress ?? 0,
         messagesSent: m.messagesSent ?? 0,
         meetingsAttended: m.meetingsAttended ?? 0,
-        productivityScore: m.productivityScore?.toFixed(1) || '—',
+        productivityScore: m.productivityScore?.toFixed(1) || "—",
       });
     });
 
@@ -1363,34 +1359,34 @@ export const reportTransformers = {
 
     if (summary) {
       rows.push({
-        category: 'Summary',
+        category: "Summary",
         avgCompletionRate: `${summary.avgTaskCompletionRate?.toFixed(1) ?? 0}%`,
         avgAttendanceRate: `${summary.avgMeetingAttendanceRate?.toFixed(1) ?? 0}%`,
         totalInteractions: summary.totalInteractions ?? 0,
-        topPerformer: summary.topPerformer?.userName || '—',
+        topPerformer: summary.topPerformer?.userName || "—",
       });
     }
 
-    (dashboard?.taskCompletionRates || []).forEach(r => {
+    (dashboard?.taskCompletionRates || []).forEach((r) => {
       rows.push({
-        category: 'Task Completion',
+        category: "Task Completion",
         userName: r.userName,
         totalTasks: r.totalTasks ?? 0,
         completedTasks: r.completedTasks ?? 0,
         completionRate: `${r.completionRate?.toFixed(1) ?? 0}%`,
-        trend: r.trend || '—',
+        trend: r.trend || "—",
       });
     });
 
-    (dashboard?.collaborationActivity || []).forEach(a => {
+    (dashboard?.collaborationActivity || []).forEach((a) => {
       rows.push({
-        category: 'Collaboration',
+        category: "Collaboration",
         userName: a.userName,
         completedTasks: a.completedTasks ?? 0,
         meetingsAttended: a.attendedMeetings ?? 0,
         messagesSent: a.messagesSent ?? 0,
         totalInteractions: a.totalInteractions ?? 0,
-        activityScore: a.activityScore?.toFixed(1) || '—',
+        activityScore: a.activityScore?.toFixed(1) || "—",
       });
     });
 
@@ -1398,9 +1394,9 @@ export const reportTransformers = {
   },
 
   workloadToRows(report: TeamWorkloadReport): Record<string, any>[] {
-    return (report?.workload || []).map(w => ({
-      userName: w.userName || '—',
-      userEmail: w.userEmail || '—',
+    return (report?.workload || []).map((w) => ({
+      userName: w.userName || "—",
+      userEmail: w.userEmail || "—",
       totalTasks: w.totalTasks ?? 0,
       completed: w.completed ?? 0,
       inProgress: w.inProgress ?? 0,
