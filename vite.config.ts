@@ -5,6 +5,10 @@ import { componentTagger } from "lovable-tagger";
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
+  // `--mode demo` flips the app into fully mocked, no-backend mode.
+  define: {
+    __TC_DEMO_MODE__: JSON.stringify(mode === "demo"),
+  },
   server: {
     host: "::",
     port: 8080,
