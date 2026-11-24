@@ -5,10 +5,10 @@ import {
   Calendar,
   Clock,
   Users,
-  FileText,
   Loader2,
   Zap,
   Repeat,
+  CalendarClock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,7 +20,6 @@ import {
   AnimatedDialog as Dialog,
   AnimatedDialogContent as DialogContent,
   AnimatedDialogDescription as DialogDescription,
-  AnimatedDialogFooter as DialogFooter,
   AnimatedDialogHeader as DialogHeader,
   AnimatedDialogTitle as DialogTitle,
 } from "@/components/shared/AnimatedDialog";
@@ -44,6 +43,39 @@ interface MemberAvailability {
     endTime?: string | null;
   }[];
 }
+
+const pad = (value: number) => String(value).padStart(2, "0");
+
+const toDateInputValue = (date: Date) =>
+  `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+
+const toTimeInputValue = (date: Date) => `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+
+const nextMeetingSlot = () => {
+  const slot = new Date();
+  slot.setSeconds(0, 0);
+  if (slot.getMinutes() < 30) {
+    slot.setMinutes(30);
+  } else {
+    slot.setHours(slot.getHours() + 1, 0, 0, 0);
+  }
+  if (slot.getHours() < 8) slot.setHours(9, 0, 0, 0);
+  if (slot.getHours() >= 21) {
+    slot.setDate(slot.getDate() + 1);
+    slot.setHours(10, 0, 0, 0);
+  }
+  return slot;
+};
+
+const formatMeetingDay = (date: Date) =>
+  date.toLocaleDateString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  });
+
+const formatMeetingTime = (date: Date) =>
+  date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
 
 export default function CreateMeetingDialog({ open, onOpenChange }: CreateMeetingDialogProps) {
   const navigate = useNavigate();
@@ -74,6 +106,11 @@ export default function CreateMeetingDialog({ open, onOpenChange }: CreateMeetin
         })
         .catch(() => setTeams([]));
       setAvailability(null);
+      if (!date || !time) {
+        const slot = nextMeetingSlot();
+        if (!date) setDate(toDateInputValue(slot));
+        if (!time) setTime(toTimeInputValue(slot));
+      }
     }
   }, [open]);
 
@@ -167,6 +204,21 @@ export default function CreateMeetingDialog({ open, onOpenChange }: CreateMeetin
     setAvailability(null);
   };
 
+  const applyDatePreset = (offset: number) => {
+    const slot = nextMeetingSlot();
+    const target = new Date();
+    target.setDate(target.getDate() + offset);
+    setDate(toDateInputValue(offset === 0 ? slot : target));
+    if (offset === 0) {
+      setTime(toTimeInputValue(slot));
+    } else if (!time) {
+      setTime("10:00");
+    }
+    setAvailability(null);
+  };
+
+  const selectedTeamName = teams.find((team) => team.id === teamId)?.name;
+
   const handleCreate = async () => {
     if (!title.trim()) {
       setError("Please enter a meeting title");
@@ -252,7 +304,7 @@ export default function CreateMeetingDialog({ open, onOpenChange }: CreateMeetin
           </div>
 
           {/* ── Scrollable Body ── */}
-          <div className="flex-1 min-h-0 overflow-y-auto px-6 py-5 space-y-5 scrollbar-thin">
+          <div className="flex-1 min-h-0 overflow-y-auto px-6 py-5 space-y-4 scrollbar-thin">
             {/* Meeting Type Toggle */}
             <div className="grid grid-cols-2 gap-2 p-1 rounded-xl bg-muted/50 dark:bg-muted/30 border border-border/50">
               <button
@@ -297,11 +349,59 @@ export default function CreateMeetingDialog({ open, onOpenChange }: CreateMeetin
               <>
                 {/* Date & Time */}
                 <div className="meeting-section space-y-3">
-                  <div className="flex items-center gap-2 mb-1">
-                    <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center">
-                      <Clock className="w-3.5 h-3.5 text-primary" />
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center">
+                        <Clock className="w-3.5 h-3.5 text-primary" />
+                      </div>
+                      <span className="text-sm font-semibold text-foreground">Date & Time</span>
                     </div>
-                    <span className="text-sm font-semibold text-foreground">Date & Time</span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 gap-1.5 rounded-lg px-2 text-[11px] text-muted-foreground hover:text-foreground"
+                      onClick={handleCheckAvailability}
+                      disabled={checkingAvailability || !teamId || !scheduledStartAndEnd}
+                      title={
+                        !teamId || !scheduledStartAndEnd
+                          ? "Select a team, date and time first"
+                          : "Check who is free at this time"
+                      }
+                    >
+                      {checkingAvailability ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <Users className="h-3 w-3" />
+                      )}
+                      {checkingAvailability ? "Checking..." : "Check availability"}
+                    </Button>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {[
+                      { label: "Today", offset: 0 },
+                      { label: "Tomorrow", offset: 1 },
+                      { label: "Next week", offset: 7 },
+                    ].map((preset) => {
+                      const presetDate = new Date();
+                      presetDate.setDate(presetDate.getDate() + preset.offset);
+                      const value = toDateInputValue(presetDate);
+                      const isActive = date === value;
+                      return (
+                        <button
+                          key={preset.label}
+                          type="button"
+                          onClick={() => applyDatePreset(preset.offset)}
+                          className={`rounded-md border px-2 py-1 text-[11px] font-medium transition-colors ${
+                            isActive
+                              ? "border-primary/30 bg-primary/10 text-primary"
+                              : "border-border/60 bg-background/60 text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                          }`}
+                        >
+                          {preset.label}
+                        </button>
+                      );
+                    })}
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1.5">
@@ -338,29 +438,6 @@ export default function CreateMeetingDialog({ open, onOpenChange }: CreateMeetin
                         <SelectItem value="120">2 hours</SelectItem>
                       </SelectContent>
                     </Select>
-                  </div>
-                  {/* Availability Check */}
-                  <div className="flex items-center justify-between pt-2 border-t border-border/40">
-                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                      <Users className="w-3.5 h-3.5" />
-                      <span>Check team availability</span>
-                    </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-7 px-3 text-xs rounded-lg"
-                      onClick={handleCheckAvailability}
-                      disabled={checkingAvailability || !teamId}
-                    >
-                      {checkingAvailability ? (
-                        <>
-                          <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-                          Checking...
-                        </>
-                      ) : (
-                        "Check"
-                      )}
-                    </Button>
                   </div>
                   {/* Availability Results */}
                   {availability && (
@@ -425,85 +502,6 @@ export default function CreateMeetingDialog({ open, onOpenChange }: CreateMeetin
                   )}
                 </div>
 
-                {/* Recurring Meeting */}
-                <div className="meeting-section space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="w-7 h-7 rounded-lg bg-violet-500/10 flex items-center justify-center">
-                        <Repeat className="w-3.5 h-3.5 text-violet-500" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-semibold text-foreground">Recurring Meeting</p>
-                        <p className="text-[11px] text-muted-foreground">Repeat on a schedule</p>
-                      </div>
-                    </div>
-                    <Switch checked={isRecurring} onCheckedChange={setIsRecurring} />
-                  </div>
-                  {isRecurring && (
-                    <div className="space-y-3 pt-2 border-t border-border/40">
-                      <div className="space-y-1.5">
-                        <Label className="text-xs font-medium text-muted-foreground">Repeat Pattern</Label>
-                        <Select value={recurringPattern} onValueChange={(v) => { setRecurringPattern(v); setRecurringDays([]); }}>
-                          <SelectTrigger className="meeting-input h-9 text-sm rounded-lg">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="daily">Daily</SelectItem>
-                            <SelectItem value="weekly">Weekly</SelectItem>
-                            <SelectItem value="monthly">Monthly</SelectItem>
-                            <SelectItem value="yearly">Yearly</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      {recurringPattern === "weekly" && (
-                        <div className="space-y-1.5">
-                          <Label className="text-xs font-medium text-muted-foreground">Days of Week</Label>
-                          <div className="flex flex-wrap gap-1.5">
-                            {[
-                              { value: 0, label: "S" },
-                              { value: 1, label: "M" },
-                              { value: 2, label: "T" },
-                              { value: 3, label: "W" },
-                              { value: 4, label: "T" },
-                              { value: 5, label: "F" },
-                              { value: 6, label: "S" },
-                            ].map((day) => (
-                              <button
-                                key={day.value}
-                                type="button"
-                                onClick={() => {
-                                  setRecurringDays((prev) =>
-                                    prev.includes(day.value)
-                                      ? prev.filter((d) => d !== day.value)
-                                      : [...prev, day.value]
-                                  );
-                                }}
-                                className={`w-9 h-9 text-xs font-semibold rounded-lg border transition-all duration-200 ${
-                                  recurringDays.includes(day.value)
-                                    ? "bg-primary text-primary-foreground border-primary shadow-sm shadow-primary/25"
-                                    : "bg-background border-border/60 text-muted-foreground hover:text-foreground hover:border-border hover:bg-muted/50"
-                                }`}
-                              >
-                                {day.label}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                      <div className="space-y-1.5">
-                        <Label className="text-xs font-medium text-muted-foreground">End Date (optional)</Label>
-                        <Input
-                          type="date"
-                          className="meeting-input h-9 text-sm rounded-lg"
-                          value={recurringEndDate}
-                          onChange={(e) => setRecurringEndDate(e.target.value)}
-                          min={date}
-                        />
-                        <p className="text-[10px] text-muted-foreground">Leave empty to repeat indefinitely</p>
-                      </div>
-                    </div>
-                  )}
-                </div>
               </>
             )}
 
@@ -534,6 +532,87 @@ export default function CreateMeetingDialog({ open, onOpenChange }: CreateMeetin
               />
             </div>
 
+            {meetingType === "scheduled" && (
+              <div className="meeting-section space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-lg bg-violet-500/10 flex items-center justify-center">
+                      <Repeat className="w-3.5 h-3.5 text-violet-500" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-foreground">Recurring Meeting</p>
+                      <p className="text-[11px] text-muted-foreground">Repeat on a schedule</p>
+                    </div>
+                  </div>
+                  <Switch checked={isRecurring} onCheckedChange={setIsRecurring} />
+                </div>
+                {isRecurring && (
+                  <div className="space-y-3 pt-2 border-t border-border/40">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-medium text-muted-foreground">Repeat Pattern</Label>
+                      <Select value={recurringPattern} onValueChange={(v) => { setRecurringPattern(v); setRecurringDays([]); }}>
+                        <SelectTrigger className="meeting-input h-9 text-sm rounded-lg">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="daily">Daily</SelectItem>
+                          <SelectItem value="weekly">Weekly</SelectItem>
+                          <SelectItem value="monthly">Monthly</SelectItem>
+                          <SelectItem value="yearly">Yearly</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {recurringPattern === "weekly" && (
+                      <div className="space-y-1.5">
+                        <Label className="text-xs font-medium text-muted-foreground">Days of Week</Label>
+                        <div className="flex flex-wrap gap-1.5">
+                          {[
+                            { value: 0, label: "S" },
+                            { value: 1, label: "M" },
+                            { value: 2, label: "T" },
+                            { value: 3, label: "W" },
+                            { value: 4, label: "T" },
+                            { value: 5, label: "F" },
+                            { value: 6, label: "S" },
+                          ].map((day) => (
+                            <button
+                              key={day.value}
+                              type="button"
+                              onClick={() => {
+                                setRecurringDays((prev) =>
+                                  prev.includes(day.value)
+                                    ? prev.filter((d) => d !== day.value)
+                                    : [...prev, day.value]
+                                );
+                              }}
+                              className={`w-9 h-9 text-xs font-semibold rounded-lg border transition-all duration-200 ${
+                                recurringDays.includes(day.value)
+                                  ? "bg-primary text-primary-foreground border-primary shadow-sm shadow-primary/25"
+                                  : "bg-background border-border/60 text-muted-foreground hover:text-foreground hover:border-border hover:bg-muted/50"
+                              }`}
+                            >
+                              {day.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-medium text-muted-foreground">End Date (optional)</Label>
+                      <Input
+                        type="date"
+                        className="meeting-input h-9 text-sm rounded-lg"
+                        value={recurringEndDate}
+                        onChange={(e) => setRecurringEndDate(e.target.value)}
+                        min={date}
+                      />
+                      <p className="text-[10px] text-muted-foreground">Leave empty to repeat indefinitely</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
           </div>
 
           {/* ── Error ── */}
@@ -544,37 +623,61 @@ export default function CreateMeetingDialog({ open, onOpenChange }: CreateMeetin
           )}
 
           {/* ── Footer ── */}
-          <DialogFooter className="px-6 py-4 shrink-0 border-t border-border/40 bg-muted/20 dark:bg-muted/10">
-            <Button
-              variant="ghost"
-              onClick={handleReset}
-              className="px-5 rounded-lg text-sm"
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleCreate}
-              disabled={loading}
-              className="meeting-btn-create px-6 rounded-lg text-sm h-10"
-            >
-              {loading ? (
+          <div className="flex shrink-0 flex-col gap-2 border-t border-border/40 bg-muted/20 px-6 py-4 dark:bg-muted/10 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex min-w-0 items-center gap-2 text-[11px] text-muted-foreground">
+              {meetingType === "scheduled" && scheduledStartAndEnd ? (
                 <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Creating...
+                  <CalendarClock className="h-3.5 w-3.5 shrink-0 text-primary" />
+                  <span className="truncate whitespace-nowrap">
+                    <span className="font-medium text-foreground">
+                      {formatMeetingDay(scheduledStartAndEnd.start)}
+                    </span>{" "}
+                    {formatMeetingTime(scheduledStartAndEnd.start)}–
+                    {formatMeetingTime(scheduledStartAndEnd.end)}
+                    {selectedTeamName ? ` · ${selectedTeamName}` : ""}
+                  </span>
                 </>
               ) : meetingType === "instant" ? (
                 <>
-                  <Zap className="w-4 h-4 mr-2" />
-                  Start Meeting
+                  <Zap className="h-3.5 w-3.5 shrink-0 text-primary" />
+                  <span className="truncate whitespace-nowrap">Starts now · 60 minutes</span>
                 </>
               ) : (
-                <>
-                  <Calendar className="w-4 h-4 mr-2" />
-                  Schedule Meeting
-                </>
+                <span className="truncate">Choose a date and time to continue.</span>
               )}
-            </Button>
-          </DialogFooter>
+            </div>
+            <div className="flex shrink-0 items-center justify-end gap-2">
+              <Button
+                variant="ghost"
+                onClick={handleReset}
+                className="px-5 rounded-lg text-sm"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleCreate}
+                disabled={loading}
+                className="meeting-btn-create px-6 rounded-lg text-sm h-10"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Creating...
+                  </>
+                ) : meetingType === "instant" ? (
+                  <>
+                    <Zap className="w-4 h-4 mr-2" />
+                    Start Meeting
+                  </>
+                ) : (
+                  <>
+                    <Calendar className="w-4 h-4 mr-2" />
+                    Schedule Meeting
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       )}
     </Dialog>
