@@ -18,13 +18,17 @@ import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   AnimatedDialog as Dialog,
-  AnimatedDialogContent as DialogContent,
   AnimatedDialogDescription as DialogDescription,
-  AnimatedDialogHeader as DialogHeader,
   AnimatedDialogTitle as DialogTitle,
 } from "@/components/shared/AnimatedDialog";
+import {
+  CommandDialogContent,
+  commandInputClass,
+  commandSelectContentClass,
+} from "@/components/shared/CommandDialog";
 import { auth } from "@/lib/auth";
-import { apiGet, apiPost, API_BASE } from "@/lib/api";
+import { apiGet, apiPost } from "@/lib/api";
+import { cn } from "@/lib/utils";
 
 
 interface CreateMeetingDialogProps {
@@ -284,61 +288,63 @@ export default function CreateMeetingDialog({ open, onOpenChange }: CreateMeetin
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       {open && (
-        <DialogContent className="max-w-[520px] max-h-[92vh] flex flex-col p-0 gap-0 overflow-hidden rounded-2xl border-border/40 shadow-2xl">
-          {/* ── Gradient Header ── */}
-          <div className="meeting-dialog-header px-6 py-5 shrink-0 relative overflow-hidden">
-            <div className="absolute inset-0 bg-gradient-to-r from-black/10 to-transparent" />
-            <div className="relative flex items-center gap-3">
-              <div className="w-11 h-11 rounded-xl bg-white/15 backdrop-blur-sm flex items-center justify-center ring-1 ring-white/20 shadow-lg">
-                <Video className="w-5 h-5 text-white" />
+        <CommandDialogContent accent="indigo" className="max-w-[600px]">
+          {/* ── Header ── */}
+          <div className="px-6 pb-4 pt-6">
+            <div className="flex items-start gap-3">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-indigo-400/10 text-indigo-300 ring-1 ring-indigo-400/20">
+                <Video className="h-5 w-5" />
               </div>
-              <div>
-                <DialogTitle className="text-lg font-bold text-white tracking-tight">
-                  Create Meeting
+              <div className="min-w-0">
+                <DialogTitle className="text-xl font-semibold tracking-tight text-white">
+                  Schedule a meeting
                 </DialogTitle>
-                <DialogDescription className="text-white/70 text-xs mt-0.5">
-                  Schedule a new meeting or start one instantly
+                <DialogDescription className="mt-1 text-xs leading-relaxed text-slate-400">
+                  Pick a time and invite your team, or start one instantly.
                 </DialogDescription>
               </div>
             </div>
           </div>
 
           {/* ── Scrollable Body ── */}
-          <div className="flex-1 min-h-0 overflow-y-auto px-6 py-5 space-y-4 scrollbar-thin">
+          <div className="max-h-[68vh] space-y-4 overflow-y-auto px-6 pb-5 [scrollbar-color:rgba(148,163,184,0.35)_transparent]">
             {/* Meeting Type Toggle */}
-            <div className="grid grid-cols-2 gap-2 p-1 rounded-xl bg-muted/50 dark:bg-muted/30 border border-border/50">
+            <div className="grid grid-cols-2 gap-2 rounded-2xl bg-white/[0.04] p-1">
               <button
                 type="button"
                 onClick={() => setMeetingType("instant")}
-                className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg text-sm font-semibold transition-all duration-200 ${
+                className={`flex items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold transition-all duration-200 ${
                   meetingType === "instant"
-                    ? "bg-primary text-primary-foreground shadow-md shadow-primary/25"
-                    : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+                    ? "bg-gradient-to-r from-blue-500 to-indigo-500 text-white shadow-[0_8px_24px_-8px_rgba(59,130,246,0.6)]"
+                    : "text-slate-400 hover:bg-white/[0.05] hover:text-white"
                 }`}
               >
-                <Zap className="w-4 h-4" />
+                <Zap className="h-4 w-4" />
                 Instant
               </button>
               <button
                 type="button"
                 onClick={() => setMeetingType("scheduled")}
-                className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg text-sm font-semibold transition-all duration-200 ${
+                className={`flex items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold transition-all duration-200 ${
                   meetingType === "scheduled"
-                    ? "bg-primary text-primary-foreground shadow-md shadow-primary/25"
-                    : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+                    ? "bg-gradient-to-r from-blue-500 to-indigo-500 text-white shadow-[0_8px_24px_-8px_rgba(59,130,246,0.6)]"
+                    : "text-slate-400 hover:bg-white/[0.05] hover:text-white"
                 }`}
               >
-                <Calendar className="w-4 h-4" />
+                <Calendar className="h-4 w-4" />
                 Scheduled
               </button>
             </div>
 
             {/* Meeting Title */}
             <div className="space-y-2">
-              <Label className="text-sm font-semibold text-foreground">Meeting Title</Label>
+              <Label className="text-[11px] font-medium text-slate-400">Meeting title</Label>
               <Input
                 placeholder="e.g., Sprint Planning, Weekly Sync"
-                className="meeting-input h-10 rounded-lg"
+                className={cn(
+                  commandInputClass,
+                  "h-10 focus-visible:ring-indigo-400/30",
+                )}
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
               />
@@ -348,19 +354,19 @@ export default function CreateMeetingDialog({ open, onOpenChange }: CreateMeetin
             {meetingType === "scheduled" && (
               <>
                 {/* Date & Time */}
-                <div className="meeting-section space-y-3">
+                <div className="space-y-3 rounded-2xl bg-white/[0.03] p-4">
                   <div className="flex items-center justify-between gap-2 mb-1">
                     <div className="flex items-center gap-2">
-                      <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center">
-                        <Clock className="w-3.5 h-3.5 text-primary" />
+                      <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-400/10">
+                        <Clock className="h-3.5 w-3.5 text-indigo-300" />
                       </div>
-                      <span className="text-sm font-semibold text-foreground">Date & Time</span>
+                      <span className="text-sm font-semibold text-white">Date & Time</span>
                     </div>
                     <Button
                       type="button"
                       variant="ghost"
                       size="sm"
-                      className="h-7 gap-1.5 rounded-lg px-2 text-[11px] text-muted-foreground hover:text-foreground"
+                      className="h-7 gap-1.5 rounded-lg px-2 text-[11px] text-slate-400 hover:bg-white/[0.06] hover:text-white"
                       onClick={handleCheckAvailability}
                       disabled={checkingAvailability || !teamId || !scheduledStartAndEnd}
                       title={
@@ -392,10 +398,10 @@ export default function CreateMeetingDialog({ open, onOpenChange }: CreateMeetin
                           key={preset.label}
                           type="button"
                           onClick={() => applyDatePreset(preset.offset)}
-                          className={`rounded-md border px-2 py-1 text-[11px] font-medium transition-colors ${
+                          className={`rounded-md px-2 py-1 text-[11px] font-medium transition-colors ${
                             isActive
-                              ? "border-primary/30 bg-primary/10 text-primary"
-                              : "border-border/60 bg-background/60 text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                              ? "bg-indigo-400/10 text-indigo-300 ring-1 ring-indigo-400/25"
+                              : "bg-white/[0.04] text-slate-400 hover:bg-white/[0.07] hover:text-white"
                           }`}
                         >
                           {preset.label}
@@ -405,31 +411,37 @@ export default function CreateMeetingDialog({ open, onOpenChange }: CreateMeetin
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1.5">
-                      <Label className="text-xs font-medium text-muted-foreground">Date</Label>
+                      <Label className="text-[11px] font-medium text-slate-500">Date</Label>
                       <Input
                         type="date"
-                        className="meeting-input h-9 rounded-lg text-sm"
+                        className={cn(
+                          commandInputClass,
+                          "h-9 text-sm focus-visible:ring-indigo-400/30",
+                        )}
                         value={date}
                         onChange={(e) => setDate(e.target.value)}
                       />
                     </div>
                     <div className="space-y-1.5">
-                      <Label className="text-xs font-medium text-muted-foreground">Time</Label>
+                      <Label className="text-[11px] font-medium text-slate-500">Time</Label>
                       <Input
                         type="time"
-                        className="meeting-input h-9 rounded-lg text-sm"
+                        className={cn(
+                          commandInputClass,
+                          "h-9 text-sm focus-visible:ring-indigo-400/30",
+                        )}
                         value={time}
                         onChange={(e) => setTime(e.target.value)}
                       />
                     </div>
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-xs font-medium text-muted-foreground">Duration</Label>
+                    <Label className="text-[11px] font-medium text-slate-500">Duration</Label>
                     <Select value={duration} onValueChange={setDuration}>
-                      <SelectTrigger className="meeting-input h-9 rounded-lg text-sm">
+                      <SelectTrigger className="h-9 rounded-lg border-0 bg-white/[0.05] text-sm text-slate-200 focus:ring-2 focus:ring-indigo-400/30">
                         <SelectValue />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent className={commandSelectContentClass}>
                         <SelectItem value="15">15 minutes</SelectItem>
                         <SelectItem value="30">30 minutes</SelectItem>
                         <SelectItem value="45">45 minutes</SelectItem>
@@ -441,22 +453,22 @@ export default function CreateMeetingDialog({ open, onOpenChange }: CreateMeetin
                   </div>
                   {/* Availability Results */}
                   {availability && (
-                    <div className="rounded-lg border border-border/50 bg-background/50 dark:bg-[hsl(222,35%,10%)] overflow-hidden">
-                      <div className="grid grid-cols-2 divide-x divide-border/40">
+                    <div className="overflow-hidden rounded-xl bg-white/[0.03]">
+                      <div className="grid grid-cols-2 divide-x divide-white/[0.06]">
                         <div className="p-2.5">
                           <div className="flex items-center gap-1.5 mb-2">
-                            <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                            <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">Available</span>
+                            <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                            <span className="text-[11px] font-semibold text-emerald-400">Available</span>
                           </div>
                           <div className="space-y-0.5 max-h-20 overflow-y-auto">
                             {availability.filter((m) => !m.isBusy).length === 0 && (
-                              <p className="text-[11px] text-muted-foreground">No one free</p>
+                              <p className="text-[11px] text-slate-500">No one free</p>
                             )}
                             {availability
                               .filter((m) => !m.isBusy)
                               .slice(0, 6)
                               .map((m) => (
-                                <p key={m.userId} className="text-[11px] text-foreground">
+                                <p key={m.userId} className="text-[11px] text-slate-200">
                                   {m.name}
                                 </p>
                               ))}
@@ -464,21 +476,21 @@ export default function CreateMeetingDialog({ open, onOpenChange }: CreateMeetin
                         </div>
                         <div className="p-2.5">
                           <div className="flex items-center gap-1.5 mb-2">
-                            <span className="w-2 h-2 rounded-full bg-red-500" />
-                            <span className="text-[11px] font-semibold text-red-600 dark:text-red-400">Busy</span>
+                            <span className="w-2 h-2 rounded-full bg-red-400" />
+                            <span className="text-[11px] font-semibold text-red-400">Busy</span>
                           </div>
                           <div className="space-y-0.5 max-h-20 overflow-y-auto">
                             {availability.filter((m) => m.isBusy).length === 0 && (
-                              <p className="text-[11px] text-muted-foreground">No conflicts</p>
+                              <p className="text-[11px] text-slate-500">No conflicts</p>
                             )}
                             {availability
                               .filter((m) => m.isBusy)
                               .slice(0, 6)
                               .map((m) => (
                                 <div key={m.userId} className="text-[11px]">
-                                  <p className="text-foreground">{m.name}</p>
+                                  <p className="text-slate-200">{m.name}</p>
                                   {m.conflicts[0] && (
-                                    <p className="text-[10px] text-muted-foreground">
+                                    <p className="text-[10px] text-slate-500">
                                       {m.conflicts[0].title} ·{" "}
                                       {new Date(m.conflicts[0].startTime).toLocaleTimeString([], {
                                         hour: "2-digit",
@@ -507,12 +519,12 @@ export default function CreateMeetingDialog({ open, onOpenChange }: CreateMeetin
 
             {/* Team */}
             <div className="space-y-2">
-              <Label className="text-sm font-semibold text-foreground">Team</Label>
+              <Label className="text-[11px] font-medium text-slate-400">Team</Label>
               <Select value={teamId || "none"} onValueChange={(v) => setTeamId(v === "none" ? "" : v)}>
-                <SelectTrigger className="meeting-input h-10 rounded-lg">
+                <SelectTrigger className="h-10 rounded-lg border-0 bg-white/[0.05] text-sm text-slate-200 focus:ring-2 focus:ring-indigo-400/30 data-[placeholder]:text-slate-500">
                   <SelectValue placeholder="Select a team" />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className={commandSelectContentClass}>
                   <SelectItem value="none">No team</SelectItem>
                   {teams.map((team) => (
                     <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>
@@ -523,38 +535,45 @@ export default function CreateMeetingDialog({ open, onOpenChange }: CreateMeetin
 
             {/* Agenda / Description */}
             <div className="space-y-2">
-              <Label className="text-sm font-semibold text-foreground">Agenda / Description <span className="text-xs font-normal text-muted-foreground">(optional)</span></Label>
+              <Label className="text-[11px] font-medium text-slate-400">Agenda / Description <span className="font-normal text-slate-600">(optional)</span></Label>
               <Textarea
                 placeholder="Add meeting agenda or details..."
-                className="meeting-input min-h-[80px] rounded-lg text-sm resize-none"
+                className={cn(
+                  commandInputClass,
+                  "h-auto min-h-[80px] resize-none py-3 text-sm focus-visible:ring-indigo-400/30",
+                )}
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
               />
             </div>
 
             {meetingType === "scheduled" && (
-              <div className="meeting-section space-y-3">
+              <div className="space-y-3 rounded-2xl bg-white/[0.03] p-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <div className="w-7 h-7 rounded-lg bg-violet-500/10 flex items-center justify-center">
-                      <Repeat className="w-3.5 h-3.5 text-violet-500" />
+                    <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-400/10">
+                      <Repeat className="h-3.5 w-3.5 text-indigo-300" />
                     </div>
                     <div>
-                      <p className="text-sm font-semibold text-foreground">Recurring Meeting</p>
-                      <p className="text-[11px] text-muted-foreground">Repeat on a schedule</p>
+                      <p className="text-sm font-semibold text-white">Recurring Meeting</p>
+                      <p className="text-[11px] text-slate-500">Repeat on a schedule</p>
                     </div>
                   </div>
-                  <Switch checked={isRecurring} onCheckedChange={setIsRecurring} />
+                  <Switch
+                    checked={isRecurring}
+                    onCheckedChange={setIsRecurring}
+                    className="data-[state=unchecked]:bg-white/15"
+                  />
                 </div>
                 {isRecurring && (
-                  <div className="space-y-3 pt-2 border-t border-border/40">
+                  <div className="space-y-3 border-t border-white/[0.06] pt-3">
                     <div className="space-y-1.5">
-                      <Label className="text-xs font-medium text-muted-foreground">Repeat Pattern</Label>
+                      <Label className="text-[11px] font-medium text-slate-500">Repeat Pattern</Label>
                       <Select value={recurringPattern} onValueChange={(v) => { setRecurringPattern(v); setRecurringDays([]); }}>
-                        <SelectTrigger className="meeting-input h-9 text-sm rounded-lg">
+                        <SelectTrigger className="h-9 rounded-lg border-0 bg-white/[0.05] text-sm text-slate-200 focus:ring-2 focus:ring-indigo-400/30">
                           <SelectValue />
                         </SelectTrigger>
-                        <SelectContent>
+                        <SelectContent className={commandSelectContentClass}>
                           <SelectItem value="daily">Daily</SelectItem>
                           <SelectItem value="weekly">Weekly</SelectItem>
                           <SelectItem value="monthly">Monthly</SelectItem>
@@ -564,7 +583,7 @@ export default function CreateMeetingDialog({ open, onOpenChange }: CreateMeetin
                     </div>
                     {recurringPattern === "weekly" && (
                       <div className="space-y-1.5">
-                        <Label className="text-xs font-medium text-muted-foreground">Days of Week</Label>
+                        <Label className="text-[11px] font-medium text-slate-500">Days of Week</Label>
                         <div className="flex flex-wrap gap-1.5">
                           {[
                             { value: 0, label: "S" },
@@ -585,10 +604,10 @@ export default function CreateMeetingDialog({ open, onOpenChange }: CreateMeetin
                                     : [...prev, day.value]
                                 );
                               }}
-                              className={`w-9 h-9 text-xs font-semibold rounded-lg border transition-all duration-200 ${
+                              className={`h-9 w-9 rounded-lg text-xs font-semibold transition-all duration-200 ${
                                 recurringDays.includes(day.value)
-                                  ? "bg-primary text-primary-foreground border-primary shadow-sm shadow-primary/25"
-                                  : "bg-background border-border/60 text-muted-foreground hover:text-foreground hover:border-border hover:bg-muted/50"
+                                  ? "bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-[0_6px_18px_-6px_rgba(59,130,246,0.7)]"
+                                  : "bg-white/[0.04] text-slate-400 hover:bg-white/[0.08] hover:text-white"
                               }`}
                             >
                               {day.label}
@@ -598,15 +617,18 @@ export default function CreateMeetingDialog({ open, onOpenChange }: CreateMeetin
                       </div>
                     )}
                     <div className="space-y-1.5">
-                      <Label className="text-xs font-medium text-muted-foreground">End Date (optional)</Label>
+                      <Label className="text-[11px] font-medium text-slate-500">End Date (optional)</Label>
                       <Input
                         type="date"
-                        className="meeting-input h-9 text-sm rounded-lg"
+                        className={cn(
+                          commandInputClass,
+                          "h-9 text-sm focus-visible:ring-indigo-400/30",
+                        )}
                         value={recurringEndDate}
                         onChange={(e) => setRecurringEndDate(e.target.value)}
                         min={date}
                       />
-                      <p className="text-[10px] text-muted-foreground">Leave empty to repeat indefinitely</p>
+                      <p className="text-[10px] text-slate-600">Leave empty to repeat indefinitely</p>
                     </div>
                   </div>
                 )}
@@ -617,19 +639,19 @@ export default function CreateMeetingDialog({ open, onOpenChange }: CreateMeetin
 
           {/* ── Error ── */}
           {error && (
-            <div className="mx-6 mb-2 text-sm text-red-600 dark:text-red-400 bg-red-500/10 border border-red-500/20 p-3 rounded-lg font-medium">
+            <div className="mx-6 mb-2 rounded-xl bg-red-500/10 px-3 py-2 text-xs text-red-300 ring-1 ring-red-500/20">
               {error}
             </div>
           )}
 
           {/* ── Footer ── */}
-          <div className="flex shrink-0 flex-col gap-2 border-t border-border/40 bg-muted/20 px-6 py-4 dark:bg-muted/10 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex min-w-0 items-center gap-2 text-[11px] text-muted-foreground">
+          <div className="flex shrink-0 flex-col gap-2 bg-white/[0.02] px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex min-w-0 items-center gap-2 text-[11px] text-slate-400">
               {meetingType === "scheduled" && scheduledStartAndEnd ? (
                 <>
-                  <CalendarClock className="h-3.5 w-3.5 shrink-0 text-primary" />
+                  <CalendarClock className="h-3.5 w-3.5 shrink-0 text-indigo-300" />
                   <span className="truncate whitespace-nowrap">
-                    <span className="font-medium text-foreground">
+                    <span className="font-medium text-white">
                       {formatMeetingDay(scheduledStartAndEnd.start)}
                     </span>{" "}
                     {formatMeetingTime(scheduledStartAndEnd.start)}–
@@ -639,7 +661,7 @@ export default function CreateMeetingDialog({ open, onOpenChange }: CreateMeetin
                 </>
               ) : meetingType === "instant" ? (
                 <>
-                  <Zap className="h-3.5 w-3.5 shrink-0 text-primary" />
+                  <Zap className="h-3.5 w-3.5 shrink-0 text-indigo-300" />
                   <span className="truncate whitespace-nowrap">Starts now · 60 minutes</span>
                 </>
               ) : (
@@ -650,35 +672,35 @@ export default function CreateMeetingDialog({ open, onOpenChange }: CreateMeetin
               <Button
                 variant="ghost"
                 onClick={handleReset}
-                className="px-5 rounded-lg text-sm"
+                className="h-10 rounded-xl px-4 text-sm text-slate-300 hover:bg-white/[0.06] hover:text-white"
               >
                 Cancel
               </Button>
               <Button
                 onClick={handleCreate}
                 disabled={loading}
-                className="meeting-btn-create px-6 rounded-lg text-sm h-10"
+                className="h-10 gap-2 rounded-xl bg-gradient-to-r from-blue-500 to-indigo-600 px-5 text-sm font-semibold text-white shadow-[0_12px_36px_-12px_rgba(59,130,246,0.7)] transition-all hover:brightness-110 active:scale-[0.98] disabled:opacity-40"
               >
                 {loading ? (
                   <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    <Loader2 className="h-4 w-4 animate-spin" />
                     Creating...
                   </>
                 ) : meetingType === "instant" ? (
                   <>
-                    <Zap className="w-4 h-4 mr-2" />
+                    <Zap className="h-4 w-4" />
                     Start Meeting
                   </>
                 ) : (
                   <>
-                    <Calendar className="w-4 h-4 mr-2" />
+                    <Calendar className="h-4 w-4" />
                     Schedule Meeting
                   </>
                 )}
               </Button>
             </div>
           </div>
-        </DialogContent>
+        </CommandDialogContent>
       )}
     </Dialog>
   );
