@@ -6,3 +6,4 @@ export { TaskCard } from "./TaskCard";
 export { TeamPulseCard } from "./TeamPulseCard";
 export { ActiveRoomsCard } from "./ActiveRoomsCard";
 export { StandupCard } from "./StandupCard";
+export { default as QuickActions } from "./QuickActions";

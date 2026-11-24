@@ -7,13 +7,12 @@ import {
   MessageSquare,
   CheckSquare,
   Users,
-  Hash,
   Sparkles,
   LayoutDashboard,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { TooltipProvider, Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { TooltipProvider } from "@/components/ui/tooltip";
 
 import CreateMeetingDialog from "@/components/dialogs/CreateMeetingDialog";
 import CreateTaskDialog from "@/components/dialogs/CreateTaskDialog";
@@ -34,6 +33,7 @@ import {
   ActiveRoomsCard,
   containerVariants,
   itemVariants,
+  QuickActions,
 } from "@/components/dashboard";
 import type { MeetingItem, TaskItem, MemberItem, DashboardStats, KpiCardConfig } from "@/components/dashboard";
 
@@ -42,6 +42,7 @@ export default function Dashboard() {
   const [showCreateMeeting, setShowCreateMeeting] = useState(false);
   const [showCreateTask, setShowCreateTask] = useState(false);
   const [showJoinByCode, setShowJoinByCode] = useState(false);
+  const [creatingHuddle, setCreatingHuddle] = useState(false);
 
   const [todayMeetings, setTodayMeetings] = useState<MeetingItem[]>([]);
   const [recentTasks, setRecentTasks] = useState<TaskItem[]>([]);
@@ -213,7 +214,6 @@ export default function Dashboard() {
 
   useEffect(() => {
     loadData();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser?.id]);
 
   // Real-time WebSocket listeners for Dashboard
@@ -417,6 +417,8 @@ export default function Dashboard() {
   };
 
   const createQuickHuddle = async () => {
+    if (creatingHuddle) return;
+    setCreatingHuddle(true);
     try {
       const meeting = await apiPost<any>("/meetings/quick-huddle", {});
       toast.success("Quick Huddle created", {
@@ -428,6 +430,8 @@ export default function Dashboard() {
       toast.error("Failed to create Quick Huddle", {
         description: err.message || "Please try again",
       });
+    } finally {
+      setCreatingHuddle(false);
     }
   };
 
@@ -530,7 +534,8 @@ export default function Dashboard() {
                     <LayoutDashboard className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary" />
                   </div>
                   <h1 className="text-lg sm:text-xl md:text-2xl font-bold tracking-tight text-foreground truncate">
-                    {greeting}, <span className="bg-gradient-to-r from-primary to-blue-600 bg-clip-text text-transparent">{currentUser?.name || "User"}</span>
+                    {greeting},{" "}
+                    <span className="font-bold text-primary">{currentUser?.name || "User"}</span>
                   </h1>
                 </div>
                 <div className="flex flex-wrap items-center gap-1.5 sm:gap-2.5 text-[10px] sm:text-xs text-muted-foreground ml-[35px] sm:ml-[42px]">
@@ -562,47 +567,13 @@ export default function Dashboard() {
                 </div>
               </div>
 
-              <div className="flex flex-wrap gap-1.5 sm:gap-2 lg:flex-nowrap mt-2 sm:mt-0">
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button variant="outline" size="sm" onClick={() => setShowJoinByCode(true)} className="h-9 gap-1.5 text-xs bg-background/50 hover:bg-background hover:border-primary/50 transition-all group">
-                      <Hash className="h-3.5 w-3.5 group-hover:rotate-12 transition-transform" />
-                      <span className="hidden sm:inline">Join by Code</span>
-                      <span className="sm:hidden">Join</span>
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>เข้าร่วมการประชุมด้วยรหัส</TooltipContent>
-                </Tooltip>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button variant="outline" size="sm" onClick={() => setShowCreateTask(true)} className="h-9 gap-1.5 text-xs bg-background/50 hover:bg-background hover:border-amber-500/50 transition-all group">
-                      <CheckSquare className="h-3.5 w-3.5 group-hover:scale-110 transition-transform" />
-                      <span className="hidden sm:inline">New Task</span>
-                      <span className="sm:hidden">Task</span>
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>สร้างงานใหม่</TooltipContent>
-                </Tooltip>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button variant="outline" size="sm" onClick={() => setShowCreateMeeting(true)} className="h-9 gap-1.5 text-xs bg-background/50 hover:bg-background hover:border-blue-500/50 transition-all group">
-                      <Calendar className="h-3.5 w-3.5 group-hover:scale-110 transition-transform" />
-                      <span className="hidden sm:inline">Schedule</span>
-                      <span className="sm:hidden">Meet</span>
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>กำหนดการประชุม</TooltipContent>
-                </Tooltip>
-                <Button
-                  size="sm"
-                  className="h-9 gap-1.5 text-xs bg-gradient-to-r from-primary to-blue-600 hover:from-primary/90 hover:to-blue-500 shadow-md hover:shadow-lg transition-all group"
-                  onClick={createQuickHuddle}
-                >
-                  <Video className="h-3.5 w-3.5 group-hover:scale-110 transition-transform" />
-                  <span className="hidden sm:inline">Start Meeting</span>
-                  <span className="sm:hidden">Start</span>
-                </Button>
-              </div>
+              <QuickActions
+                onJoinByCode={() => setShowJoinByCode(true)}
+                onNewTask={() => setShowCreateTask(true)}
+                onSchedule={() => setShowCreateMeeting(true)}
+                onStartMeeting={createQuickHuddle}
+                startingMeeting={creatingHuddle}
+              />
             </div>
           </motion.div>
 
