@@ -24,15 +24,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   AnimatedDialog as Dialog,
-  AnimatedDialogContent as DialogContent,
   AnimatedDialogDescription as DialogDescription,
   AnimatedDialogTitle as DialogTitle,
 } from "@/components/shared/AnimatedDialog";
+import {
+  CommandDialogContent,
+  commandInputClass,
+  commandSelectContentClass,
+} from "@/components/shared/CommandDialog";
 import { auth } from "@/lib/auth";
 import { apiGet, apiPost } from "@/lib/api";
 import { toast } from "sonner";
@@ -65,6 +68,20 @@ const dueDatePresets = [
   { label: "Tomorrow", days: 1 },
   { label: "+7 days", days: 7 },
 ];
+
+const priorityDarkClass: Record<string, string> = {
+  urgent: "bg-red-500/15 text-red-300 ring-1 ring-red-400/25",
+  high: "bg-orange-500/15 text-orange-300 ring-1 ring-orange-400/25",
+  medium: "bg-sky-500/15 text-sky-300 ring-1 ring-sky-400/25",
+  low: "bg-slate-500/15 text-slate-300 ring-1 ring-slate-400/20",
+};
+
+const statusDarkClass: Record<string, string> = {
+  todo: "bg-slate-500/15 text-slate-300 ring-1 ring-slate-400/20",
+  in_progress: "bg-blue-500/15 text-blue-300 ring-1 ring-blue-400/25",
+  review: "bg-violet-500/15 text-violet-300 ring-1 ring-violet-400/25",
+  done: "bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-400/25",
+};
 
 export default function CreateTaskDialog({
   open,
@@ -274,8 +291,9 @@ export default function CreateTaskDialog({
         onOpenChange(value);
       }}
     >
-      <DialogContent
-        className="w-[calc(100%-1rem)] max-w-[760px] gap-0 overflow-hidden rounded-2xl border-border/40 p-0 shadow-2xl sm:w-full"
+      <CommandDialogContent
+        accent="amber"
+        className="max-w-[780px]"
         onKeyDown={(event) => {
           if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
             event.preventDefault();
@@ -283,26 +301,26 @@ export default function CreateTaskDialog({
           }
         }}
       >
-        <div className="relative shrink-0 border-b border-border/50 bg-gradient-to-r from-amber-500/[0.08] via-orange-500/[0.04] to-transparent px-6 py-5">
+        <div className="px-6 pb-4 pt-6">
           <div className="flex items-start gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-amber-500/20 bg-amber-500/10 text-amber-600 dark:text-amber-400">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-amber-400/10 text-amber-300 ring-1 ring-amber-400/20">
               <ClipboardList className="h-5 w-5" />
             </div>
             <div className="min-w-0">
-              <DialogTitle className="text-lg font-semibold tracking-tight">
+              <DialogTitle className="text-xl font-semibold tracking-tight text-white">
                 New task
               </DialogTitle>
-              <DialogDescription className="mt-0.5 text-xs text-muted-foreground">
+              <DialogDescription className="mt-1 text-xs leading-relaxed text-slate-400">
                 Add work to a team board. You can edit the details later.
               </DialogDescription>
             </div>
           </div>
         </div>
 
-        <div className="max-h-[70vh] overflow-y-auto px-6 py-5 scrollbar-thin">
+        <div className="max-h-[68vh] overflow-y-auto px-6 pb-5 [scrollbar-color:rgba(148,163,184,0.35)_transparent]">
           {templates.length > 0 && (
             <div className="flex items-center gap-2">
-              <span className="shrink-0 text-[11px] font-medium text-muted-foreground">
+              <span className="shrink-0 text-[11px] font-medium text-slate-500">
                 Start from
               </span>
               <div className="flex min-w-0 flex-1 gap-1.5 overflow-x-auto pb-0.5">
@@ -310,10 +328,10 @@ export default function CreateTaskDialog({
                   type="button"
                   onClick={() => handleTemplateSelect("")}
                   className={cn(
-                    "shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30",
+                    "shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/40",
                     templateId === ""
-                      ? "border-primary/30 bg-primary/10 text-primary"
-                      : "border-border/60 bg-background/60 text-muted-foreground hover:bg-muted/50 hover:text-foreground",
+                      ? "bg-amber-400/10 text-amber-300 ring-1 ring-amber-400/25"
+                      : "bg-white/[0.04] text-slate-400 hover:bg-white/[0.07] hover:text-white",
                   )}
                 >
                   Blank
@@ -324,10 +342,10 @@ export default function CreateTaskDialog({
                     type="button"
                     onClick={() => handleTemplateSelect(template.id)}
                     className={cn(
-                      "shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30",
+                      "shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/40",
                       templateId === template.id
-                        ? "border-primary/30 bg-primary/10 text-primary"
-                        : "border-border/60 bg-background/60 text-muted-foreground hover:bg-muted/50 hover:text-foreground",
+                        ? "bg-amber-400/10 text-amber-300 ring-1 ring-amber-400/25"
+                        : "bg-white/[0.04] text-slate-400 hover:bg-white/[0.07] hover:text-white",
                     )}
                   >
                     {template.name}
@@ -340,8 +358,8 @@ export default function CreateTaskDialog({
           <div className="mt-4 grid gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(270px,0.85fr)]">
             <div className="space-y-5">
               <div className="space-y-1.5">
-                <Label htmlFor="task-title" className="text-xs font-medium text-foreground">
-                  Title <span className="text-destructive">*</span>
+                <Label htmlFor="task-title" className="text-[11px] font-medium text-slate-400">
+                  Title <span className="text-amber-400">*</span>
                 </Label>
                 <Input
                   id="task-title"
@@ -351,13 +369,16 @@ export default function CreateTaskDialog({
                     setError(null);
                   }}
                   placeholder="What needs to be done?"
-                  className="h-11 rounded-xl text-[15px] font-medium"
+                  className={cn(
+                    commandInputClass,
+                    "h-11 text-[15px] font-medium focus-visible:ring-amber-400/30",
+                  )}
                   autoFocus
                 />
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="task-description" className="text-xs font-medium text-foreground">
+                <Label htmlFor="task-description" className="text-[11px] font-medium text-slate-400">
                   Description
                 </Label>
                 <Textarea
@@ -365,16 +386,19 @@ export default function CreateTaskDialog({
                   value={description}
                   onChange={(event) => setDescription(event.target.value)}
                   placeholder="Add context, acceptance criteria, or links."
-                  className="min-h-[200px] resize-none rounded-xl text-sm"
+                  className={cn(
+                    commandInputClass,
+                    "h-auto min-h-[200px] resize-none py-3 text-sm focus-visible:ring-amber-400/30",
+                  )}
                 />
               </div>
 
               <div className="space-y-1.5">
                 <Label
                   htmlFor="task-tag-input"
-                  className="flex items-center gap-1.5 text-xs font-medium text-foreground"
+                  className="flex items-center gap-1.5 text-[11px] font-medium text-slate-400"
                 >
-                  <Tag className="h-3.5 w-3.5 text-muted-foreground" />
+                  <Tag className="h-3.5 w-3.5 text-slate-500" />
                   Tags
                 </Label>
                 <div className="flex gap-2">
@@ -383,7 +407,10 @@ export default function CreateTaskDialog({
                     value={tagInput}
                     onChange={(event) => setTagInput(event.target.value)}
                     placeholder="Add a tag and press Enter"
-                    className="h-9 flex-1 rounded-lg text-sm"
+                    className={cn(
+                      commandInputClass,
+                      "h-9 flex-1 text-sm focus-visible:ring-amber-400/30",
+                    )}
                     onKeyDown={(event) => {
                       if (event.key === "Enter") {
                         event.preventDefault();
@@ -394,8 +421,8 @@ export default function CreateTaskDialog({
                   <Button
                     type="button"
                     size="sm"
-                    variant="outline"
-                    className="h-9 rounded-lg px-3"
+                    variant="ghost"
+                    className="h-9 rounded-lg bg-white/[0.04] px-3 text-slate-300 hover:bg-white/[0.08] hover:text-white"
                     onClick={addTag}
                     aria-label="Add tag"
                   >
@@ -405,21 +432,20 @@ export default function CreateTaskDialog({
                 {tags.length > 0 && (
                   <div className="flex flex-wrap gap-1.5 pt-0.5">
                     {tags.map((tag) => (
-                      <Badge
+                      <span
                         key={tag}
-                        variant="secondary"
-                        className="gap-1 rounded-md px-2 py-0.5 text-[11px] font-normal"
+                        className="inline-flex items-center gap-1 rounded-lg bg-white/[0.06] px-2 py-0.5 text-[11px] text-slate-300"
                       >
                         {tag}
                         <button
                           type="button"
                           onClick={() => removeTag(tag)}
                           aria-label={`Remove ${tag} tag`}
-                          className="rounded-sm text-muted-foreground transition-colors hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                          className="rounded-sm text-slate-500 transition-colors hover:text-red-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/40"
                         >
                           <X className="h-3 w-3" />
                         </button>
-                      </Badge>
+                      </span>
                     ))}
                   </div>
                 )}
@@ -429,7 +455,7 @@ export default function CreateTaskDialog({
                 <button
                   type="button"
                   onClick={() => setShowAdvanced((value) => !value)}
-                  className="flex w-full items-center justify-between rounded-xl border border-border/60 bg-background/60 px-3 py-2.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                  className="flex w-full items-center justify-between rounded-xl bg-white/[0.03] px-3 py-2.5 text-xs font-medium text-slate-400 transition-colors hover:bg-white/[0.06] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/40"
                   aria-expanded={showAdvanced}
                 >
                   <span className="flex items-center gap-2">
@@ -456,7 +482,7 @@ export default function CreateTaskDialog({
                       <div className="space-y-4 pt-3">
                         <div className="grid grid-cols-2 gap-3">
                           <div className="space-y-1.5">
-                            <Label className="text-[11px] text-muted-foreground">
+                            <Label className="text-[11px] text-slate-500">
                               Story points
                             </Label>
                             <Input
@@ -465,11 +491,14 @@ export default function CreateTaskDialog({
                               value={storyPoints}
                               onChange={(event) => setStoryPoints(event.target.value)}
                               placeholder="0"
-                              className="h-9 rounded-lg text-sm"
+                              className={cn(
+                                commandInputClass,
+                                "h-9 text-sm focus-visible:ring-amber-400/30",
+                              )}
                             />
                           </div>
                           <div className="space-y-1.5">
-                            <Label className="text-[11px] text-muted-foreground">
+                            <Label className="text-[11px] text-slate-500">
                               Estimate (hours)
                             </Label>
                             <Input
@@ -479,37 +508,44 @@ export default function CreateTaskDialog({
                               value={estimate}
                               onChange={(event) => setEstimate(event.target.value)}
                               placeholder="0"
-                              className="h-9 rounded-lg text-sm"
+                              className={cn(
+                                commandInputClass,
+                                "h-9 text-sm focus-visible:ring-amber-400/30",
+                              )}
                             />
                           </div>
                         </div>
 
-                        <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
+                        <div className="rounded-xl bg-white/[0.03] p-3">
                           <div className="flex items-center justify-between gap-3">
                             <div className="flex items-center gap-2">
-                              <Repeat className="h-3.5 w-3.5 text-violet-500" />
+                              <Repeat className="h-3.5 w-3.5 text-violet-400" />
                               <div>
-                                <p className="text-xs font-medium text-foreground">
+                                <p className="text-xs font-medium text-white">
                                   Recurring task
                                 </p>
-                                <p className="text-[10px] text-muted-foreground">
+                                <p className="text-[10px] text-slate-500">
                                   Repeat on a schedule
                                 </p>
                               </div>
                             </div>
-                            <Switch checked={isRecurring} onCheckedChange={setIsRecurring} />
+                            <Switch
+                              checked={isRecurring}
+                              onCheckedChange={setIsRecurring}
+                              className="data-[state=unchecked]:bg-white/15"
+                            />
                           </div>
 
                           {isRecurring && (
-                            <div className="mt-3 grid grid-cols-3 gap-2 border-t border-border/50 pt-3">
+                            <div className="mt-3 grid grid-cols-3 gap-2 border-t border-white/[0.06] pt-3">
                               <Select
                                 value={recurringPattern}
                                 onValueChange={setRecurringPattern}
                               >
-                                <SelectTrigger className="h-9 rounded-lg text-xs">
+                                <SelectTrigger className="h-9 rounded-lg border-0 bg-white/[0.05] text-xs text-slate-200 focus:ring-2 focus:ring-amber-400/30">
                                   <SelectValue />
                                 </SelectTrigger>
-                                <SelectContent>
+                                <SelectContent className={commandSelectContentClass}>
                                   <SelectItem value="daily">Daily</SelectItem>
                                   <SelectItem value="weekly">Weekly</SelectItem>
                                   <SelectItem value="monthly">Monthly</SelectItem>
@@ -522,14 +558,20 @@ export default function CreateTaskDialog({
                                 onChange={(event) =>
                                   setRecurringInterval(parseInt(event.target.value) || 1)
                                 }
-                                className="h-9 rounded-lg text-xs"
+                                className={cn(
+                                  commandInputClass,
+                                  "h-9 text-xs focus-visible:ring-amber-400/30",
+                                )}
                                 placeholder="Interval"
                               />
                               <Input
                                 type="date"
                                 value={recurringEndDate}
                                 onChange={(event) => setRecurringEndDate(event.target.value)}
-                                className="h-9 rounded-lg text-xs"
+                                className={cn(
+                                  commandInputClass,
+                                  "h-9 text-xs focus-visible:ring-amber-400/30",
+                                )}
                                 aria-label="Recurring end date"
                               />
                             </div>
@@ -542,9 +584,9 @@ export default function CreateTaskDialog({
               </div>
             </div>
 
-            <aside className="space-y-4 self-start rounded-xl border border-border/60 bg-muted/20 p-4">
+            <aside className="space-y-4 self-start rounded-2xl bg-white/[0.03] p-4">
               <div>
-                <Label className="text-[11px] font-medium text-muted-foreground">Priority</Label>
+                <Label className="text-[11px] font-medium text-slate-500">Priority</Label>
                 <div className="mt-1.5 grid grid-cols-2 gap-1.5">
                   {priorities.map((value) => {
                     const config = PRIORITY_CONFIG[value];
@@ -554,10 +596,10 @@ export default function CreateTaskDialog({
                         type="button"
                         onClick={() => setPriority(value)}
                         className={cn(
-                          "flex h-8 items-center gap-1.5 rounded-lg border px-2 text-[11px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30",
+                          "flex h-8 items-center gap-1.5 rounded-lg px-2 text-[11px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/40",
                           priority === value
-                            ? config.color
-                            : "border-border/60 bg-background/60 text-muted-foreground hover:bg-muted/50 hover:text-foreground",
+                            ? priorityDarkClass[value]
+                            : "bg-white/[0.03] text-slate-400 hover:bg-white/[0.06] hover:text-slate-200",
                         )}
                       >
                         <span className={cn("h-1.5 w-1.5 rounded-full", config.dotColor)} />
@@ -569,7 +611,7 @@ export default function CreateTaskDialog({
               </div>
 
               <div>
-                <Label className="text-[11px] font-medium text-muted-foreground">Status</Label>
+                <Label className="text-[11px] font-medium text-slate-500">Status</Label>
                 <div className="mt-1.5 grid grid-cols-2 gap-1.5">
                   {ALL_STATUSES.map((value) => {
                     const config = STATUS_CONFIG[value];
@@ -579,10 +621,10 @@ export default function CreateTaskDialog({
                         type="button"
                         onClick={() => setStatus(value)}
                         className={cn(
-                          "flex h-8 items-center gap-1.5 rounded-lg border px-2 text-[11px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30",
+                          "flex h-8 items-center gap-1.5 rounded-lg px-2 text-[11px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/40",
                           status === value
-                            ? cn(config.bgColor, config.color)
-                            : "border-border/60 bg-background/60 text-muted-foreground hover:bg-muted/50 hover:text-foreground",
+                            ? statusDarkClass[value]
+                            : "bg-white/[0.03] text-slate-400 hover:bg-white/[0.06] hover:text-slate-200",
                         )}
                       >
                         <span className={cn("h-1.5 w-1.5 rounded-full", config.dotColor)} />
@@ -593,20 +635,23 @@ export default function CreateTaskDialog({
                 </div>
               </div>
 
-              <div className="h-px bg-border/50" />
+              <div className="h-px bg-white/[0.06]" />
 
               <div className="space-y-1.5">
-                <Label htmlFor="task-team" className="text-[11px] font-medium text-muted-foreground">
+                <Label htmlFor="task-team" className="text-[11px] font-medium text-slate-500">
                   Team
                 </Label>
                 <Select
                   value={teamId || "none"}
                   onValueChange={(value) => setTeamId(value === "none" ? "" : value)}
                 >
-                  <SelectTrigger id="task-team" className="h-9 rounded-lg text-xs">
+                  <SelectTrigger
+                    id="task-team"
+                    className="h-9 rounded-lg border-0 bg-white/[0.05] text-xs text-slate-200 focus:ring-2 focus:ring-amber-400/30 data-[placeholder]:text-slate-500"
+                  >
                     <SelectValue placeholder="Select a team" />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className={commandSelectContentClass}>
                     <SelectItem value="none">No team</SelectItem>
                     {teams.map((team) => (
                       <SelectItem key={team.id} value={team.id}>
@@ -618,7 +663,7 @@ export default function CreateTaskDialog({
               </div>
 
               <div className="space-y-1.5">
-                <Label className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
+                <Label className="flex items-center gap-1.5 text-[11px] font-medium text-slate-500">
                   <Users className="h-3 w-3" />
                   Assignees
                 </Label>
@@ -631,7 +676,7 @@ export default function CreateTaskDialog({
                   }}
                   disabled={!teamId || teamId === "none"}
                 >
-                  <SelectTrigger className="h-9 rounded-lg text-xs">
+                  <SelectTrigger className="h-9 rounded-lg border-0 bg-white/[0.05] text-xs text-slate-200 focus:ring-2 focus:ring-amber-400/30 data-[placeholder]:text-slate-500">
                     <SelectValue
                       placeholder={
                         teamId && teamId !== "none"
@@ -640,14 +685,14 @@ export default function CreateTaskDialog({
                       }
                     />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className={commandSelectContentClass}>
                     {assignableMembers.length > 0 ? (
                       assignableMembers.map((member) => (
                         <SelectItem key={member.id} value={member.id}>
                           <span className="flex items-center gap-2">
                             <Avatar className="h-4 w-4">
                               <AvatarImage src={member.avatar} />
-                              <AvatarFallback className="text-[8px]">
+                              <AvatarFallback className="bg-white/10 text-[8px] text-slate-200">
                                 {member.name
                                   .split(" ")
                                   .map((part: string) => part[0])
@@ -661,7 +706,7 @@ export default function CreateTaskDialog({
                         </SelectItem>
                       ))
                     ) : (
-                      <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                      <div className="px-2 py-1.5 text-xs text-slate-500">
                         {teamId && teamId !== "none"
                           ? "No more members to add"
                           : "Select a team first"}
@@ -675,14 +720,13 @@ export default function CreateTaskDialog({
                     {assigneeIds.map((id) => {
                       const member = teamMembers.find((item) => item.id === id);
                       return (
-                        <Badge
+                        <span
                           key={id}
-                          variant="secondary"
-                          className="max-w-full gap-1 rounded-md py-0.5 pl-0.5 pr-1 text-[10px] font-normal"
+                          className="inline-flex max-w-full items-center gap-1 rounded-lg bg-white/[0.06] py-0.5 pl-0.5 pr-1 text-[10px] text-slate-300"
                         >
                           <Avatar className="h-4 w-4">
                             <AvatarImage src={member?.avatar} />
-                            <AvatarFallback className="text-[8px]">
+                            <AvatarFallback className="bg-white/10 text-[8px] text-slate-200">
                               {(member?.name || "?")
                                 .split(" ")
                                 .map((part: string) => part[0])
@@ -696,11 +740,11 @@ export default function CreateTaskDialog({
                             type="button"
                             onClick={() => setAssigneeIds(assigneeIds.filter((item) => item !== id))}
                             aria-label={`Remove ${member?.name || "assignee"}`}
-                            className="ml-0.5 text-muted-foreground transition-colors hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                            className="ml-0.5 text-slate-500 transition-colors hover:text-red-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/40"
                           >
                             <X className="h-3 w-3" />
                           </button>
-                        </Badge>
+                        </span>
                       );
                     })}
                   </div>
@@ -710,7 +754,7 @@ export default function CreateTaskDialog({
               <div className="space-y-1.5">
                 <Label
                   htmlFor="task-due-date"
-                  className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground"
+                  className="flex items-center gap-1.5 text-[11px] font-medium text-slate-500"
                 >
                   <CalendarIcon className="h-3 w-3" />
                   Due date
@@ -720,7 +764,10 @@ export default function CreateTaskDialog({
                   type="datetime-local"
                   value={dueDate}
                   onChange={(event) => setDueDate(event.target.value)}
-                  className="h-9 rounded-lg text-xs"
+                  className={cn(
+                    commandInputClass,
+                    "h-9 text-xs focus-visible:ring-amber-400/30",
+                  )}
                 />
                 <div className="flex flex-wrap items-center gap-1">
                   {dueDatePresets.map((preset) => (
@@ -728,7 +775,7 @@ export default function CreateTaskDialog({
                       key={preset.label}
                       type="button"
                       onClick={() => applyDuePreset(preset.days)}
-                      className="rounded-md border border-border/50 px-1.5 py-0.5 text-[10px] text-muted-foreground transition-colors hover:border-border hover:bg-muted/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                      className="rounded-md bg-white/[0.04] px-1.5 py-0.5 text-[10px] text-slate-400 transition-colors hover:bg-white/[0.08] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/40"
                     >
                       {preset.label}
                     </button>
@@ -737,7 +784,7 @@ export default function CreateTaskDialog({
                     <button
                       type="button"
                       onClick={() => setDueDate("")}
-                      className="rounded-md px-1.5 py-0.5 text-[10px] text-muted-foreground transition-colors hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                      className="rounded-md px-1.5 py-0.5 text-[10px] text-slate-500 transition-colors hover:text-red-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/40"
                     >
                       Clear
                     </button>
@@ -750,15 +797,15 @@ export default function CreateTaskDialog({
           {error && (
             <div
               role="alert"
-              className="mt-4 rounded-lg border border-destructive/25 bg-destructive/10 px-3 py-2 text-xs text-destructive"
+              className="mt-4 rounded-xl bg-red-500/10 px-3 py-2 text-xs text-red-300 ring-1 ring-red-500/20"
             >
               {error}
             </div>
           )}
         </div>
 
-        <div className="flex flex-col gap-3 border-t border-border/50 bg-muted/20 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-[11px] text-muted-foreground">Ctrl/⌘ + Enter to create</p>
+        <div className="flex flex-col gap-3 bg-white/[0.02] px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-[11px] text-slate-500">Ctrl/⌘ + Enter to create</p>
           <div className="flex items-center justify-end gap-2">
             <Button
               type="button"
@@ -768,7 +815,7 @@ export default function CreateTaskDialog({
                 onOpenChange(false);
               }}
               disabled={submitting}
-              className="h-10 rounded-xl px-4 text-sm"
+              className="h-10 rounded-xl px-4 text-sm text-slate-300 hover:bg-white/[0.06] hover:text-white"
             >
               Cancel
             </Button>
@@ -776,7 +823,7 @@ export default function CreateTaskDialog({
               type="button"
               onClick={handleSubmit}
               disabled={submitting || !title.trim()}
-              className="h-10 gap-2 rounded-xl px-5 text-sm shadow-sm"
+              className="h-10 gap-2 rounded-xl bg-gradient-to-r from-amber-400 to-orange-500 px-5 text-sm font-semibold text-slate-950 shadow-[0_12px_36px_-12px_rgba(251,146,60,0.7)] transition-all hover:brightness-110 active:scale-[0.98] disabled:opacity-40"
             >
               {submitting ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -787,7 +834,7 @@ export default function CreateTaskDialog({
             </Button>
           </div>
         </div>
-      </DialogContent>
+      </CommandDialogContent>
     </Dialog>
   );
 }

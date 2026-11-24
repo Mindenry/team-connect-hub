@@ -25,6 +25,11 @@ The login screen also has a one-click demo button.
 - Wiki, announcements, reminders and notifications
 - Reports with charts and CSV, Excel, JSON and PDF export
 
+The dashboard keeps the main actions in one compact bar: join a meeting by code,
+create a task, or schedule a meeting.
+
+![New task dialog](docs/new-task.jpg)
+
 ## Demo mode
 
 Everything is served from `src/lib/demo`:
