@@ -1,62 +1,71 @@
 # Team Connect
 
-Team collaboration app built with React, TypeScript and Vite. It covers meetings, chat, tasks, teams, a shared drive, a knowledge base and reporting.
+[![Netlify status](https://api.netlify.com/api/v1/badges/a7852ea9-1716-450d-9d00-24b7c2141d55/deploy-status)](https://app.netlify.com/projects/team-connect-demo/deploys)
+[![Live demo](https://img.shields.io/badge/live_demo-open-2563eb)](https://team-connect-demo.netlify.app)
 
-This repository is configured as a front-end demo. The whole app runs against an in-browser mock API, so it can be hosted as a static site with no database or backend.
+Team Connect is a team workspace for meetings, chat, tasks, files and reporting.
+This repository contains the React frontend, configured to run as a demo with an
+in-browser mock API. It needs no database or backend and deploys as a static site.
 
-Live demo: https://team-connect-demo.netlify.app
+**Demo:** https://team-connect-demo.netlify.app
+**Login:** `demo@siamdigital.co.th` / `demo1234`
 
-Demo account:
+The login screen also has a one-click demo button.
 
-- Email: `demo@siamdigital.co.th`
-- Password: `demo1234`
-
-The login page also has a **เข้าสู่เดโมทันที** button that signs in with the demo account directly.
+![Team Connect dashboard](docs/dashboard.jpg)
 
 ## Features
 
 - Dashboard with today's meetings, open tasks, online teammates and live rooms
-- Meetings list, join lobby and a simulated meeting room with chat, hand raise, screen share and recording timer
+- Meetings, join lobby and a simulated meeting room with chat, hand raise and screen sharing
 - Channels and direct messages with threads, reactions, pinned messages and search
-- Tasks with kanban, list and calendar views, plus subtasks, comments, attachments and issue links
-- Teams, directory, invites, roles and permissions, organization settings and audit log
+- Tasks with kanban, list and calendar views, plus subtasks, comments, attachments and links
+- Teams, directory, invitations, roles and permissions, organization settings and audit log
 - Shared drive with folders, uploads, file versions and per-file access
 - Wiki, announcements, reminders and notifications
 - Reports with charts and CSV, Excel, JSON and PDF export
 
+## Demo mode
+
+Everything is served from `src/lib/demo`:
+
+- a mock REST API for the endpoints the UI calls
+- seeded workspace data
+- a simulated Socket.IO connection for presence and live updates
+- localStorage persistence under `teamconnect_demo_db_v1`
+
+The DEMO badge in the bottom-right corner resets the sample data. Each visitor
+gets their own copy; nothing is sent to a server.
+
+The meeting room is simulated on purpose. Participant tiles are sample data and
+the camera preview uses the local webcam only when permission is granted.
+
+![Meeting room](docs/meeting-room.jpg)
+
 ## Running locally
+
+Node.js 20 or newer.
 
 ```bash
 npm install
 npm run dev:demo
 ```
 
-Open http://localhost:8080.
+The app runs at http://localhost:8080.
 
-To connect a real backend instead, run `npm run dev` and point `VITE_API_URL` at the API.
+To connect the NestJS API instead, run `npm run dev` with `VITE_API_URL` set. The
+backend lives at [Mindenry/backend-meeting](https://github.com/Mindenry/backend-meeting).
 
-## Demo data
-
-The mock layer is in `src/lib/demo`. It implements the endpoints the UI uses and persists data in `localStorage` under `teamconnect_demo_db_v1`. The DEMO badge in the bottom-right corner resets the sample data.
-
-The meeting room is simulated on purpose. It uses the local webcam when permission is granted and does not send media anywhere.
-
-## Build
+## Build and deploy
 
 ```bash
-npm run build
+npm run build       # demo build used by Netlify
+npm run build:real  # build against VITE_API_URL
+npm run preview
 ```
 
-This produces a demo build in `dist`. Use `npm run build:real` when building against a real API.
-
-## Deploy
-
-`netlify.toml` already contains the SPA redirect, security headers and demo flag. Import the repository in Netlify with:
-
-- Build command: `npm run build`
-- Publish directory: `dist`
-
-Or deploy from the CLI:
+Netlify deploys from `main` on every push. The included `netlify.toml` sets the
+build command, SPA redirect, security headers and demo flag. For a manual deploy:
 
 ```bash
 npm run build
@@ -65,14 +74,15 @@ npx netlify deploy --prod --dir=dist
 
 ## Notes
 
-- Uploaded files are stored as data URLs. Very large files stay in memory only and are lost on refresh.
-- Report exports run in the browser, so no export service is required.
-- Each visitor gets a separate copy of the demo data.
+- Uploaded files are stored as data URLs. Very large files stay in memory and are lost on refresh.
+- Report exports run in the browser, so no export service is needed.
+- The demo data is per browser, not shared between visitors.
 
 ## Project structure
 
 ```text
-src/lib/demo/     mock API, seed data, localStorage and socket simulation
+src/lib/demo/     mock API, seed data, persistence and socket simulation
 src/pages/        application pages, including DemoMeetingRoom.tsx
 src/components/   shared UI components
+docs/             screenshots
 ```
