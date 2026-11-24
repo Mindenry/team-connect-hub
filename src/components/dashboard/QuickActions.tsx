@@ -12,7 +12,10 @@ interface QuickActionsProps {
 }
 
 const secondaryActionClass =
-  "group inline-flex h-9 items-center gap-2 rounded-xl px-2.5 text-xs font-medium text-muted-foreground outline-none transition-[background-color,color,transform] duration-150 focus-visible:ring-2 focus-visible:ring-primary/30 active:scale-[0.98]";
+  "group inline-flex h-9 items-center gap-2 rounded-xl px-2 text-xs font-medium text-slate-300 outline-none transition-[background-color,color,transform] duration-150 hover:bg-white/[0.06] hover:text-white focus-visible:ring-2 focus-visible:ring-white/20 active:scale-[0.98]";
+
+const iconTileClass =
+  "flex h-6 w-6 items-center justify-center rounded-lg transition-colors";
 
 export default function QuickActions({
   onJoinByCode,
@@ -23,19 +26,18 @@ export default function QuickActions({
 }: QuickActionsProps) {
   return (
     <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:flex-nowrap">
-      <div className="flex items-center gap-0.5 rounded-2xl border border-border/60 bg-card/70 p-0.5">
+      <div className="flex items-center gap-0.5 rounded-2xl bg-[#0B1220] p-1 shadow-[0_14px_40px_-16px_rgba(2,6,23,0.7)]">
         <Tooltip>
           <TooltipTrigger asChild>
             <button
               type="button"
               onClick={onJoinByCode}
               aria-label="Join a meeting by code"
-              className={cn(
-                secondaryActionClass,
-                "hover:bg-sky-500/10 hover:text-sky-700 dark:hover:text-sky-300",
-              )}
+              className={secondaryActionClass}
             >
-              <Hash className="h-3.5 w-3.5 text-sky-500 transition-transform duration-150 group-hover:rotate-6" />
+              <span className={cn(iconTileClass, "bg-sky-500/15 text-sky-400 group-hover:bg-sky-500/20")}>
+                <Hash className="h-3.5 w-3.5" />
+              </span>
               <span className="hidden sm:inline">Join by code</span>
             </button>
           </TooltipTrigger>
@@ -48,12 +50,11 @@ export default function QuickActions({
               type="button"
               onClick={onNewTask}
               aria-label="Create a new task"
-              className={cn(
-                secondaryActionClass,
-                "hover:bg-amber-500/10 hover:text-amber-700 dark:hover:text-amber-300",
-              )}
+              className={secondaryActionClass}
             >
-              <CheckSquare className="h-3.5 w-3.5 text-amber-500 transition-transform duration-150 group-hover:-rotate-3" />
+              <span className={cn(iconTileClass, "bg-amber-500/15 text-amber-400 group-hover:bg-amber-500/20")}>
+                <CheckSquare className="h-3.5 w-3.5" />
+              </span>
               <span className="hidden sm:inline">New task</span>
             </button>
           </TooltipTrigger>
@@ -66,12 +67,11 @@ export default function QuickActions({
               type="button"
               onClick={onSchedule}
               aria-label="Schedule a meeting"
-              className={cn(
-                secondaryActionClass,
-                "hover:bg-violet-500/10 hover:text-violet-700 dark:hover:text-violet-300",
-              )}
+              className={secondaryActionClass}
             >
-              <Calendar className="h-3.5 w-3.5 text-violet-500 transition-transform duration-150 group-hover:-translate-y-0.5" />
+              <span className={cn(iconTileClass, "bg-indigo-500/15 text-indigo-400 group-hover:bg-indigo-500/20")}>
+                <Calendar className="h-3.5 w-3.5" />
+              </span>
               <span className="hidden sm:inline">Schedule</span>
             </button>
           </TooltipTrigger>
@@ -84,7 +84,7 @@ export default function QuickActions({
         size="sm"
         onClick={onStartMeeting}
         disabled={startingMeeting}
-        className="h-10 gap-2 rounded-xl bg-gradient-to-r from-primary to-blue-600 px-4 text-xs font-semibold shadow-md shadow-primary/20 transition-all duration-200 hover:from-primary/95 hover:to-blue-500 hover:shadow-lg hover:shadow-primary/25 active:scale-[0.98]"
+        className="h-11 gap-2 rounded-xl bg-gradient-to-r from-sky-400 via-blue-500 to-blue-600 px-4 text-xs font-semibold text-white shadow-[0_12px_40px_-12px_rgba(56,189,248,0.65)] transition-all duration-200 hover:brightness-110 active:scale-[0.98]"
       >
         {startingMeeting ? (
           <Loader2 className="h-4 w-4 animate-spin" />
