@@ -11,6 +11,7 @@ import { auth } from "@/lib/auth";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PresenceProvider } from "@/contexts/PresenceContext";
 import MeetingPiP from "@/components/meeting/MeetingPiP";
+import DemoBanner from "@/components/demo/DemoBanner";
 
 // Lazy load pages for code splitting
 const Dashboard = lazy(() => import("./pages/Dashboard"));
@@ -165,6 +166,7 @@ const App = () => (
               </Routes>
             </Suspense>
             <MeetingPiP />
+            <DemoBanner />
           </BrowserRouter>
         </PresenceProvider>
       </TooltipProvider>

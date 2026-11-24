@@ -1,5 +1,6 @@
 import { io, Socket } from "socket.io-client";
 import { auth } from "./auth";
+import { DEMO_MODE } from "./demo/config";
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
 
@@ -8,6 +9,9 @@ class NotificationsSocket {
   private listeners: Map<string, Set<Function>> = new Map();
 
   connect() {
+    // In demo mode notifications are delivered through the mock API/socket.
+    if (DEMO_MODE) return;
+
     if (this.socket?.connected) {
       return;
     }
@@ -85,18 +89,21 @@ class NotificationsSocket {
   }
 
   markAsRead(notificationId: string) {
+    if (DEMO_MODE) return;
     if (this.socket?.connected) {
       this.socket.emit("mark-read", { notificationId });
     }
   }
 
   getUnreadCount() {
+    if (DEMO_MODE) return;
     if (this.socket?.connected) {
       this.socket.emit("get-unread-count");
     }
   }
 
   isConnected(): boolean {
+    if (DEMO_MODE) return true;
     return this.socket?.connected ?? false;
   }
 }

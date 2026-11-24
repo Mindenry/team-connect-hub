@@ -1,10 +1,18 @@
 import { io, Socket } from "socket.io-client";
+import { DEMO_MODE } from "./demo/config";
+import { DemoIoSocket } from "./demo/socket";
 
 const API_BASE = import.meta.env.VITE_API_URL || (typeof window !== 'undefined' ? window.location.origin : "http://localhost:3000");
 
 let socket: Socket | null = null;
+let demoSocket: DemoIoSocket | null = null;
 
 export const getSocket = (): Socket => {
+  if (DEMO_MODE) {
+    if (!demoSocket) demoSocket = new DemoIoSocket();
+    return demoSocket as unknown as Socket;
+  }
+
   if (!socket) {
     const token = localStorage.getItem("collabhub_token");
 
@@ -51,6 +59,7 @@ export const getSocket = (): Socket => {
 
 /** Update socket auth token (call after REST token refresh) */
 export const updateSocketAuth = () => {
+  if (DEMO_MODE) return;
   if (socket) {
     const freshToken = localStorage.getItem("collabhub_token");
     if (freshToken) {
@@ -60,6 +69,10 @@ export const updateSocketAuth = () => {
 };
 
 export const disconnectSocket = () => {
+  if (demoSocket) {
+    demoSocket.disconnect();
+    demoSocket = null;
+  }
   if (socket) {
     socket.disconnect();
     socket = null;

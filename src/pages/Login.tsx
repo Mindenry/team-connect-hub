@@ -1,10 +1,12 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { Eye, EyeOff, Mail, ArrowRight, Lock } from "lucide-react";
+import { Eye, EyeOff, Mail, ArrowRight, Lock, Sparkles, Zap } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { auth } from "@/lib/auth";
+import { DEMO_ACCOUNT, DEMO_MODE } from "@/lib/demo/config";
+import { getDemoAuthUser } from "@/lib/demo/install";
 import {
   Dialog,
   DialogContent,
@@ -20,8 +22,8 @@ export default function Login() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [showPassword, setShowPassword] = useState(false);
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [email, setEmail] = useState(DEMO_MODE ? DEMO_ACCOUNT.email : "");
+  const [password, setPassword] = useState(DEMO_MODE ? DEMO_ACCOUNT.password : "");
   const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -106,8 +108,15 @@ export default function Login() {
     }
   };
 
-  const handleForgotPassword = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleDemoLogin = () => {
+    setLoading(true);
+    setError(null);
+    const user = getDemoAuthUser();
+    auth.setAuth(user, "demo-access-token", "demo-refresh-token");
+    navigate("/", { replace: true });
+  };
+
+  const handleForgotPassword = async (e: React.FormEvent) => {    e.preventDefault();
     if (!forgotEmail) return;
 
     setForgotLoading(true);
@@ -595,6 +604,45 @@ export default function Login() {
                 Sign in to your workspace to continue
               </p>
             </div>
+
+            {/* Demo quick sign-in */}
+            {DEMO_MODE && (
+              <motion.div
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.45, delay: 0.15 }}
+                className="mb-5 rounded-2xl border border-blue-400/25 bg-gradient-to-br from-blue-500/15 via-indigo-500/10 to-transparent p-4"
+              >
+                <div className="flex items-start gap-3">
+                  <div className="w-9 h-9 shrink-0 rounded-xl bg-blue-500/20 border border-blue-400/25 flex items-center justify-center">
+                    <Sparkles className="w-4 h-4 text-blue-300" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-white">โหมดทดลอง (Demo)</p>
+                    <p className="text-[11px] leading-relaxed text-slate-400 mt-0.5">
+                      ข้อมูลตัวอย่างทั้งหมดอยู่ในเบราว์เซอร์ของคุณ — ไม่มีการเชื่อมต่อฐานข้อมูลหรือเซิร์ฟเวอร์
+                    </p>
+                  </div>
+                </div>
+                <button
+                  id="login-demo-btn"
+                  type="button"
+                  onClick={handleDemoLogin}
+                  disabled={loading}
+                  className="mt-3 w-full h-10 rounded-xl text-sm font-semibold text-white flex items-center justify-center gap-2 transition-all duration-200 disabled:opacity-60"
+                  style={{
+                    background: "linear-gradient(135deg, #2563eb, #7c3aed)",
+                    boxShadow: "0 4px 15px rgba(37,99,235,0.25)",
+                  }}
+                >
+                  <Zap className="w-4 h-4" />
+                  เข้าสู่เดโมทันที
+                </button>
+                <p className="text-[10px] text-slate-500 mt-2 text-center">
+                  หรือกด Sign In ด้านล่างด้วยบัญชีที่กรอกไว้ให้แล้ว
+                </p>
+              </motion.div>
+            )}
 
             {/* Login Form */}
             <form onSubmit={handleLogin} className="space-y-5">

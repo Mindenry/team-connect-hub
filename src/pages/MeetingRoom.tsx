@@ -11,6 +11,8 @@ import { Track, VideoPresets } from "livekit-client";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { apiGet, API_BASE, normalizeAttachmentUrl } from "@/lib/api";
+import { DEMO_MODE } from "@/lib/demo/config";
+import DemoMeetingRoom from "@/pages/DemoMeetingRoom";
 import { Video as VideoIcon, Monitor, X, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { auth } from "@/lib/auth";
@@ -549,6 +551,11 @@ function MeetingRoomUI({ meetingId: propMeetingId }: any) {
 }
 
 export default function MeetingRoom() {
+  // Demo deployments use a fully simulated meeting room (no LiveKit server).
+  if (DEMO_MODE) {
+    return <DemoMeetingRoom />;
+  }
+
   const { id } = useParams();
   const navigate = useNavigate();
   const [token, setToken] = useState("");
